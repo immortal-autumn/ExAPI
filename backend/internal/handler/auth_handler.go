@@ -3,6 +3,8 @@ package handler
 import (
 	"context"
 	"log/slog"
+	"net"
+	"os"
 	"strings"
 	"sync"
 
@@ -213,6 +215,72 @@ func (h *AuthHandler) SendVerifyCode(c *gin.Context) {
 		Message:   "Verification code sent successfully",
 		Countdown: result.Countdown,
 	})
+}
+
+// LocalAdminLogin issues a normal admin token pair without email/password only when
+// SUB2API_LOCAL_ADMIN_BYPASS is explicitly enabled and the request is made via a
+// local browser host (127.0.0.1, ::1, or localhost). This is intended for
+// SSH-tunnel/local-host administration, not public nginx access.
+// POST /api/v1/auth/local-admin
+func (h *AuthHandler) LocalAdminLogin(c *gin.Context) {
+	if !localAdminBypassEnabled() {
+		response.NotFound(c, "Not found")
+		return
+	}
+	if !isLocalAdminBypassRequest(c) {
+		response.Forbidden(c, "Local admin bypass is only available from localhost")
+		return
+	}
+	if h == nil || h.userService == nil {
+		response.InternalError(c, "User service is unavailable")
+		return
+	}
+	admin, err := h.userService.GetFirstAdmin(c.Request.Context())
+	if err != nil {
+		response.InternalError(c, "No admin user found")
+		return
+	}
+	if err := ensureLoginUserActive(admin); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	h.authService.RecordSuccessfulLogin(c.Request.Context(), admin.ID)
+	h.respondWithTokenPair(c, admin)
+}
+
+func localAdminBypassEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("SUB2API_LOCAL_ADMIN_BYPASS"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func isLocalAdminBypassRequest(c *gin.Context) bool {
+	if c == nil || c.Request == nil {
+		return false
+	}
+	host := c.Request.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.ToLower(strings.Trim(host, "[] "))
+	if host != "localhost" && host != "127.0.0.1" && host != "::1" {
+		return false
+	}
+
+	remoteHost, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+	if err != nil {
+		remoteHost = c.Request.RemoteAddr
+	}
+	ip := net.ParseIP(strings.Trim(remoteHost, "[] "))
+	if ip == nil {
+		return false
+	}
+	// Direct host-port requests into Docker commonly appear from the bridge gateway
+	// (private RFC1918) rather than literal 127.0.0.1 inside the container.
+	return ip.IsLoopback() || ip.IsPrivate()
 }
 
 // Login handles user login

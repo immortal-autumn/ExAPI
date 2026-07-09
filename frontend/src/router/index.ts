@@ -715,6 +715,14 @@ const BACKEND_MODE_CALLBACK_PATHS = [
 ]
 const BACKEND_MODE_PENDING_AUTH_PATHS = ['/register', '/email-verify']
 
+function isLocalAdminBypassBrowserHost(): boolean {
+  if (typeof window === 'undefined') {
+    return false
+  }
+  const host = window.location.hostname.toLowerCase()
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1'
+}
+
 function isBackendModePublicRouteAllowed(path: string, hasPendingAuthSession: boolean): boolean {
   if (BACKEND_MODE_ALLOWED_PATHS.some((allowedPath) => path === allowedPath || path.startsWith(allowedPath))) {
     return true
@@ -796,12 +804,23 @@ router.beforeEach(async (to, _from, next) => {
 
   // Route requires authentication
   if (!authStore.isAuthenticated) {
-    // Not authenticated, redirect to login
-    next({
-      path: '/login',
-      query: { redirect: to.fullPath } // Save intended destination
-    })
-    return
+    if (requiresAdmin && isLocalAdminBypassBrowserHost()) {
+      try {
+        await authStore.localAdminLogin()
+      } catch {
+        // Fall through to normal login redirect when backend bypass is disabled
+        // or the request is not accepted as local.
+      }
+    }
+
+    if (!authStore.isAuthenticated) {
+      // Not authenticated, redirect to login
+      next({
+        path: '/login',
+        query: { redirect: to.fullPath } // Save intended destination
+      })
+      return
+    }
   }
 
   // Check admin requirement

@@ -257,6 +257,22 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+
+  /**
+   * Local admin login for localhost-only administration. Backend must explicitly
+   * enable it; failures are intentionally silent to keep normal auth behavior.
+   */
+  async function localAdminLogin(): Promise<User> {
+    try {
+      const response = await authAPI.localAdminLogin()
+      setAuthFromResponse(response)
+      return user.value!
+    } catch (error) {
+      clearAuth({ preservePendingAuthSession: pendingAuthSession.value !== null })
+      throw error
+    }
+  }
+
   /**
    * Complete login with 2FA code
    * @param tempToken - Temporary token from initial login
@@ -486,6 +502,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     // Actions
     login,
+    localAdminLogin,
     login2FA,
     register,
     setToken,

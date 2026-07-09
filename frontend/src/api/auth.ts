@@ -106,6 +106,26 @@ export async function login(credentials: LoginRequest): Promise<LoginResponse> {
   return data
 }
 
+
+/**
+ * Local admin login. Works only when the backend explicitly enables the
+ * localhost-only bypass and the browser is visiting 127.0.0.1/localhost.
+ */
+export async function localAdminLogin(): Promise<AuthResponse> {
+  const { data } = await apiClient.post<AuthResponse>('/auth/local-admin')
+
+  setAuthToken(data.access_token)
+  if (data.refresh_token) {
+    setRefreshToken(data.refresh_token)
+  }
+  if (data.expires_in) {
+    setTokenExpiresAt(data.expires_in)
+  }
+  localStorage.setItem('auth_user', JSON.stringify(data.user))
+
+  return data
+}
+
 /**
  * Complete login with 2FA code
  * @param request - Temp token and TOTP code
@@ -659,6 +679,7 @@ export async function exchangePendingOAuthCompletion(
 
 export const authAPI = {
   login,
+  localAdminLogin,
   login2FA,
   isTotp2FARequired,
   register,
