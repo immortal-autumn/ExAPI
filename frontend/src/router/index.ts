@@ -720,7 +720,7 @@ function isLocalAdminBypassBrowserHost(): boolean {
     return false
   }
   const host = window.location.hostname.toLowerCase()
-  return host === 'localhost' || host === '127.0.0.1' || host === '::1'
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '100.97.17.1'
 }
 
 function isBackendModePublicRouteAllowed(path: string, hasPendingAuthSession: boolean): boolean {

@@ -28,6 +28,7 @@ func TestLocalAdminBypassEnabled(t *testing.T) {
 
 func TestIsLocalAdminBypassRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	t.Setenv("SUB2API_LOCAL_ADMIN_BYPASS_CIDRS", "100.97.17.0/24")
 
 	tests := []struct {
 		name       string
@@ -38,6 +39,8 @@ func TestIsLocalAdminBypassRequest(t *testing.T) {
 		{name: "loopback host and loopback remote", host: "127.0.0.1:8027", remoteAddr: "127.0.0.1:55321", want: true},
 		{name: "localhost host and docker bridge remote", host: "localhost:8027", remoteAddr: "172.18.0.1:55321", want: true},
 		{name: "ipv6 loopback host", host: "[::1]:8027", remoteAddr: "[::1]:55321", want: true},
+		{name: "wireguard host and docker bridge remote", host: "100.97.17.1:8027", remoteAddr: "172.18.0.1:55321", want: true},
+		{name: "wireguard subnet host and wireguard peer remote", host: "100.97.17.1:8027", remoteAddr: "100.97.17.23:55321", want: true},
 		{name: "public host rejected", host: "sub2api.research.for-immortal.cn", remoteAddr: "127.0.0.1:55321", want: false},
 		{name: "public remote rejected", host: "127.0.0.1:8027", remoteAddr: "203.0.113.10:55321", want: false},
 	}

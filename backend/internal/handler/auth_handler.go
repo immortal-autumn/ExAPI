@@ -219,8 +219,9 @@ func (h *AuthHandler) SendVerifyCode(c *gin.Context) {
 
 // LocalAdminLogin issues a normal admin token pair without email/password only when
 // SUB2API_LOCAL_ADMIN_BYPASS is explicitly enabled and the request is made via a
-// local browser host (127.0.0.1, ::1, or localhost). This is intended for
-// SSH-tunnel/local-host administration, not public nginx access.
+// local browser host (127.0.0.1, ::1, or localhost) or an explicitly configured
+// trusted CIDR (SUB2API_LOCAL_ADMIN_BYPASS_CIDRS). This is intended for
+// SSH-tunnel/WireGuard/local-host administration, not public nginx access.
 // POST /api/v1/auth/local-admin
 func (h *AuthHandler) LocalAdminLogin(c *gin.Context) {
 	if !localAdminBypassEnabled() {
@@ -228,7 +229,7 @@ func (h *AuthHandler) LocalAdminLogin(c *gin.Context) {
 		return
 	}
 	if !isLocalAdminBypassRequest(c) {
-		response.Forbidden(c, "Local admin bypass is only available from localhost")
+		response.Forbidden(c, "Local admin bypass is only available from localhost or configured trusted CIDRs")
 		return
 	}
 	if h == nil || h.userService == nil {
@@ -266,21 +267,55 @@ func isLocalAdminBypassRequest(c *gin.Context) bool {
 		host = h
 	}
 	host = strings.ToLower(strings.Trim(host, "[] "))
-	if host != "localhost" && host != "127.0.0.1" && host != "::1" {
+
+	remoteIP := requestRemoteIP(c)
+	if remoteIP == nil {
 		return false
 	}
 
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		// Direct host-port requests into Docker commonly appear from the bridge gateway
+		// (private RFC1918) rather than literal 127.0.0.1 inside the container.
+		return remoteIP.IsLoopback() || remoteIP.IsPrivate()
+	}
+
+	hostIP := net.ParseIP(host)
+	if hostIP == nil || !ipInConfiguredLocalAdminBypassCIDRs(hostIP) {
+		return false
+	}
+	// Docker port publishing may present WireGuard clients as the Docker bridge
+	// gateway inside the container. The trusted-CIDR check is therefore applied to
+	// the browser-visible Host IP, while the remote address must still be local or
+	// private rather than an arbitrary public Internet address.
+	return remoteIP.IsLoopback() || remoteIP.IsPrivate() || ipInConfiguredLocalAdminBypassCIDRs(remoteIP)
+}
+
+func requestRemoteIP(c *gin.Context) net.IP {
 	remoteHost, _, err := net.SplitHostPort(c.Request.RemoteAddr)
 	if err != nil {
 		remoteHost = c.Request.RemoteAddr
 	}
-	ip := net.ParseIP(strings.Trim(remoteHost, "[] "))
+	return net.ParseIP(strings.Trim(remoteHost, "[] "))
+}
+
+func ipInConfiguredLocalAdminBypassCIDRs(ip net.IP) bool {
 	if ip == nil {
 		return false
 	}
-	// Direct host-port requests into Docker commonly appear from the bridge gateway
-	// (private RFC1918) rather than literal 127.0.0.1 inside the container.
-	return ip.IsLoopback() || ip.IsPrivate()
+	for _, cidr := range strings.Split(os.Getenv("SUB2API_LOCAL_ADMIN_BYPASS_CIDRS"), ",") {
+		cidr = strings.TrimSpace(cidr)
+		if cidr == "" {
+			continue
+		}
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
+			continue
+		}
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // Login handles user login
