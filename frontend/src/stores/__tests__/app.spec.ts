@@ -13,6 +13,12 @@ vi.mock('@/api/auth', () => ({
 }))
 
 describe('useAppStore', () => {
+  it('defaults site name to ExAPI', () => {
+    setActivePinia(createPinia())
+    const store = useAppStore()
+    expect(store.siteName).toBe('ExAPI')
+  })
+
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.useFakeTimers()

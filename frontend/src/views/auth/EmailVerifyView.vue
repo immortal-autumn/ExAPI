@@ -168,6 +168,7 @@ import {
   isRegistrationEmailSuffixAllowed,
   normalizeRegistrationEmailSuffixWhitelist
 } from '@/utils/registrationEmailPolicy'
+import { getDefaultSiteName } from '@/config/brand'
 import {
   clearAllAffiliateReferralCodes,
   loadAffiliateReferralCode,
@@ -229,7 +230,7 @@ const hasRegisterData = ref<boolean>(false)
 // Public settings
 const turnstileEnabled = ref<boolean>(false)
 const turnstileSiteKey = ref<string>('')
-const siteName = ref<string>('Sub2API')
+const siteName = ref<string>(getDefaultSiteName())
 const registrationEmailSuffixWhitelist = ref<string[]>([])
 
 // Turnstile for resend
@@ -294,7 +295,7 @@ onMounted(async () => {
     const settings = await getPublicSettings()
     turnstileEnabled.value = settings.turnstile_enabled
     turnstileSiteKey.value = settings.turnstile_site_key || ''
-    siteName.value = settings.site_name || 'Sub2API'
+    siteName.value = settings.site_name || getDefaultSiteName()
     registrationEmailSuffixWhitelist.value = normalizeRegistrationEmailSuffixWhitelist(
       settings.registration_email_suffix_whitelist || []
     )
