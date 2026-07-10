@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Wei-Shaw/sub2api/internal/brand"
+
 	"golang.org/x/term"
 )
 
@@ -51,7 +53,7 @@ func RunCLI() error {
 
 	fmt.Println()
 	fmt.Println("╔═══════════════════════════════════════════╗")
-	fmt.Println("║       Sub2API Installation Wizard         ║")
+	fmt.Println("║        ExAPI Installation Wizard          ║")
 	fmt.Println("╚═══════════════════════════════════════════╝")
 	fmt.Println()
 
@@ -164,7 +166,7 @@ func RunCLI() error {
 	fmt.Println("── Admin Account ──")
 
 	for {
-		cfg.Admin.Email = promptString(reader, "Admin Email", "admin@example.com")
+		cfg.Admin.Email = promptString(reader, "Admin Email", brand.DefaultAdminEmail)
 		if cliValidateEmail(cfg.Admin.Email) {
 			break
 		}
