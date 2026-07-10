@@ -47,22 +47,17 @@
         <!-- Tab: Security — Admin API Key -->
         <div v-show="activeTab === 'security'" class="space-y-6">
           <!-- Admin API Key Settings -->
-          <div class="card">
+          <SettingsSectionCard>
+            <template #title>
+              {{ t("admin.settings.adminApiKey.title") }}
+            </template>
+            <template #description>
+              {{ t("admin.settings.adminApiKey.description") }}
+            </template>
+            <!-- Security Warning -->
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20"
             >
-              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
-                {{ t("admin.settings.adminApiKey.title") }}
-              </h2>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                {{ t("admin.settings.adminApiKey.description") }}
-              </p>
-            </div>
-            <div class="space-y-4 p-6">
-              <!-- Security Warning -->
-              <div
-                class="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20"
-              >
                 <div class="flex items-start">
                   <Icon
                     name="exclamationTriangle"
@@ -196,8 +191,7 @@
                   </p>
                 </div>
               </div>
-            </div>
-          </div>
+          </SettingsSectionCard>
         </div>
         <!-- /Tab: Security — Admin API Key -->
 
@@ -7365,6 +7359,7 @@ import ProxySelector from "@/components/common/ProxySelector.vue";
 import ImageUpload from "@/components/common/ImageUpload.vue";
 import BackupSettings from "@/views/admin/BackupView.vue";
 import EmailTemplateEditor from "@/views/admin/settings/EmailTemplateEditor.vue";
+import SettingsSectionCard from "@/views/admin/settings/SettingsSectionCard.vue";
 import { useClipboard } from "@/composables/useClipboard";
 import { affiliatesAPI, type AffiliateAdminEntry, type SimpleUser as AffiliateSimpleUser } from "@/api/admin/affiliates";
 import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiError";
