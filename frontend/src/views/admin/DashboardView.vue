@@ -7,6 +7,8 @@
       </div>
 
       <template v-else-if="stats">
+        <SingleUserCockpitPanel />
+
         <!-- Row 1: Core Stats -->
         <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <!-- Total API Keys -->
@@ -362,6 +364,7 @@ import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import Select from '@/components/common/Select.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
+import SingleUserCockpitPanel from './components/SingleUserCockpitPanel.vue'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
 
 import {
