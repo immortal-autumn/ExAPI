@@ -1,32 +1,23 @@
 import { createI18n } from 'vue-i18n'
 
-type LocaleCode = 'en' | 'zh'
+type LocaleCode = 'zh'
 
 type LocaleMessages = Record<string, any>
 
 const LOCALE_KEY = 'sub2api_locale'
-const DEFAULT_LOCALE: LocaleCode = 'en'
+const DEFAULT_LOCALE: LocaleCode = 'zh'
 
 const localeLoaders: Record<LocaleCode, () => Promise<{ default: LocaleMessages }>> = {
-  en: () => import('./locales/en'),
   zh: () => import('./locales/zh')
 }
 
 function isLocaleCode(value: string): value is LocaleCode {
-  return value === 'en' || value === 'zh'
+  return value === 'zh'
 }
 
 function getDefaultLocale(): LocaleCode {
-  const saved = localStorage.getItem(LOCALE_KEY)
-  if (saved && isLocaleCode(saved)) {
-    return saved
-  }
-
-  const browserLang = navigator.language.toLowerCase()
-  if (browserLang.startsWith('zh')) {
-    return 'zh'
-  }
-
+  // ExAPI fork policy: the product UI is Chinese-only. Ignore browser language
+  // and any legacy saved English locale to avoid mixed-language pages.
   return DEFAULT_LOCALE
 }
 
@@ -56,11 +47,15 @@ export async function loadLocaleMessages(locale: LocaleCode): Promise<void> {
 export async function initI18n(): Promise<void> {
   const current = getLocale()
   await loadLocaleMessages(current)
+  localStorage.setItem(LOCALE_KEY, current)
   document.documentElement.setAttribute('lang', current)
 }
 
 export async function setLocale(locale: string): Promise<void> {
   if (!isLocaleCode(locale)) {
+    localStorage.setItem(LOCALE_KEY, DEFAULT_LOCALE)
+    i18n.global.locale.value = DEFAULT_LOCALE
+    document.documentElement.setAttribute('lang', DEFAULT_LOCALE)
     return
   }
 
@@ -92,7 +87,6 @@ export function getLocale(): LocaleCode {
 }
 
 export const availableLocales = [
-  { code: 'en', name: 'English', flag: '🇺🇸' },
   { code: 'zh', name: '中文', flag: '🇨🇳' }
 ] as const
 
