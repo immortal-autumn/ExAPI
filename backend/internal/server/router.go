@@ -60,6 +60,9 @@ func SetupRouter(
 		}
 		return nil
 	}))
+	// Defense in depth for single-user deployments: hide the control plane on
+	// the configured public host before the embedded SPA can serve fallback HTML.
+	r.Use(middleware2.PublicControlPlaneGuard())
 
 	// Serve embedded frontend with settings injection if available
 	if web.HasEmbeddedFrontend() {
