@@ -1,46 +1,46 @@
 # ExAPI
 
-ExAPI is a private AI API gateway for routing local tools, coding agents, and applications through managed upstream AI accounts.
+ExAPI 是一个面向个人/私有基础设施的 AI API 网关，用于把本地工具、编程 Agent 和应用流量路由到可管理的上游 AI 账号池。
 
-It is forked from `Wei-Shaw/sub2api` and keeps several internal `sub2api` identifiers for compatibility, but the product direction of this fork is operator-first: public AI gateway endpoints, private control-plane access, quota visibility, and multi-account resilience.
+本项目 fork 自 `Wei-Shaw/sub2api`。为了兼容已有部署，部分内部模块、数据库、缓存、服务名仍保留 `sub2api` 标识；但本 fork 的产品方向是私有控制面、配额可见性、多账号韧性和本地集成体验。
 
-## Highlights
+## 主要特性
 
-- OpenAI-compatible `/v1` gateway.
-- Compatibility routes for Claude/Codex/Gemini/Antigravity-style clients inherited from upstream.
-- Private localhost/WireGuard control plane for single-user deployments.
-- Account pool management, scheduled account tests, quota/watch windows, and usage logs.
-- API key management for local IDEs, agents, and automation.
-- Optional multi-user/payment features retained from upstream for deployments that need them.
+- OpenAI 兼容 `/v1` 网关。
+- 继承上游的 Claude / Codex / Gemini / Antigravity 等客户端兼容路由。
+- 适合单用户部署的 localhost / WireGuard 私有控制面。
+- 上游账号池、定时账号测试、配额窗口、用量日志。
+- 面向 IDE、Agent、自动化脚本的 API Key 管理。
+- 保留上游多用户、订阅、支付、兑换码等可选能力，但不作为本 fork 的默认重点。
 
-## Deployment modes
+## 部署模式
 
-### Private single-user mode
+### 私有单用户模式
 
-Recommended for personal infrastructure:
+推荐用于个人服务器：
 
-- public domain exposes only AI gateway routes;
-- admin/control UI is available only through localhost or WireGuard/VPN;
-- sidebar and dashboard prioritize accounts, API keys, usage, proxies, ops, and settings;
-- quota and local integration details are shown directly on the admin dashboard.
+- 公网域名只暴露 AI 网关路径；
+- 管理后台仅通过 localhost 或 WireGuard/VPN 访问；
+- 侧边栏优先展示账号、API Key、用量、代理、运维和设置；
+- 控制台直接展示配额监控和本地集成入口。
 
-### Standard multi-user mode
+### 标准多用户模式
 
-ExAPI still retains the upstream SaaS-style features such as users, subscriptions, payments, groups, and redeem codes. These are useful for controlled team deployments but are not the default product emphasis of this fork.
+ExAPI 仍保留上游的 SaaS 风格功能，例如用户、订阅、支付、分组、兑换码等。它们适合团队/受控场景，但不是本 fork 的默认产品重点。
 
-## Architecture
+## 技术栈
 
-- Backend: Go, Gin, Ent, PostgreSQL, Redis.
-- Frontend: Vue 3, TypeScript, Pinia, Vue Router, TailwindCSS, Vite.
-- Deployment: Docker/Compose or systemd, typically behind nginx/Caddy/Cloudflare.
+- 后端：Go、Gin、Ent、PostgreSQL、Redis。
+- 前端：Vue 3、TypeScript、Pinia、Vue Router、TailwindCSS、Vite。
+- 部署：Docker/Compose 或 systemd，通常放在 nginx/Caddy/Cloudflare 后面。
 
-The Go module path and many runtime artifact names still reference `sub2api` intentionally. See [`docs/UPSTREAM_COMPATIBILITY.md`](docs/UPSTREAM_COMPATIBILITY.md) before attempting a full module/service/database rename.
+Go module 路径和不少运行时名称仍保留 `sub2api`。尝试完整重命名 module、服务、数据库或数据目录前，请先阅读 [`docs/UPSTREAM_COMPATIBILITY.md`](docs/UPSTREAM_COMPATIBILITY.md)。
 
-## Quick start
+## 快速开始
 
-For Docker-based deployment, start from the deployment templates under [`deploy/`](deploy/). Existing upstream deployment commands that reference `sub2api` paths or service names are still expected to work unless you perform the optional full artifact migration.
+Docker 部署请从 [`deploy/`](deploy/) 下的模板开始。除非你执行了完整迁移，否则上游文档中涉及 `sub2api` 路径/服务名的部署命令仍应保持兼容。
 
-For an ExAPI-branded private deployment, configure:
+ExAPI 私有部署建议配置：
 
 ```env
 RUN_MODE=simple
@@ -48,12 +48,12 @@ SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE=true
 SUB2API_PUBLIC_HOST=your-public-ai-gateway.example.com
 ```
 
-Then expose only the AI gateway paths publicly and keep `/admin`, `/login`, and `/api/v1/*` control APIs private.
+公网只放行 AI 网关路径，`/admin`、`/login`、`/api/v1/*` 控制面 API 应保持私有。
 
-## Safety notice
+## 安全声明
 
-Using upstream consumer AI accounts through a gateway may violate provider terms of service. Review each provider's terms, comply with local law, and operate only accounts and traffic you are authorized to use. This project is provided for technical research and self-hosted infrastructure purposes; you are responsible for deployment, account, and data risks.
+通过网关使用上游消费者 AI 账号可能违反服务商条款。请自行阅读相关条款、遵守所在地法律，并仅使用你有权操作的账号和流量。本项目仅用于技术研究和自托管基础设施场景；部署、账号和数据风险由使用者自行承担。
 
-## Upstream attribution
+## 上游致谢
 
-ExAPI is derived from the open-source Sub2API project by Wei-Shaw and contributors. This fork removes upstream sponsorship/referral presentation from the default README and focuses on private operator workflows. Historical compatibility notes are preserved separately in [`docs/UPSTREAM_COMPATIBILITY.md`](docs/UPSTREAM_COMPATIBILITY.md).
+ExAPI 派生自 Wei-Shaw 及贡献者维护的 Sub2API 开源项目。本 fork 默认 README 不再展示上游赞助/推广内容，而是聚焦私有运维工作流。兼容性说明见 [`docs/UPSTREAM_COMPATIBILITY.md`](docs/UPSTREAM_COMPATIBILITY.md)。
