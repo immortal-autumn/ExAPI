@@ -1,6 +1,6 @@
-# Sub2API Docker Image
+# ExAPI Docker Image
 
-Sub2API is an AI API Gateway Platform for distributing and managing AI product subscription API quotas.
+ExAPI is an AI API Gateway Platform for distributing and managing AI product subscription API quotas.
 
 ## Quick Start
 
