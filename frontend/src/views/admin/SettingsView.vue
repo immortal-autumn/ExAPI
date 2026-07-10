@@ -82,55 +82,44 @@
         <!-- /Tab: Security -->
 
         <!-- Tab: Gateway -->
-        <div v-show="activeTab === 'gateway'" class="space-y-6">
-          <GatewayCooldownPanel
-            :overload-cooldown-loading="overloadCooldownLoading"
-            :overload-cooldown-saving="overloadCooldownSaving"
-            :overload-cooldown-form="overloadCooldownForm"
-            :save-overload-cooldown-settings="saveOverloadCooldownSettings"
-            :rate-limit429-cooldown-loading="rateLimit429CooldownLoading"
-            :rate-limit429-cooldown-saving="rateLimit429CooldownSaving"
-            :rate-limit429-cooldown-form="rateLimit429CooldownForm"
-            :save-rate-limit429-cooldown-settings="saveRateLimit429CooldownSettings"
-          />
-
-          <GatewayStreamTimeoutPanel
-            :stream-timeout-loading="streamTimeoutLoading"
-            :stream-timeout-saving="streamTimeoutSaving"
-            :stream-timeout-form="streamTimeoutForm"
-            :save-stream-timeout-settings="saveStreamTimeoutSettings"
-          />
-
-          <GatewayRectifierPanel
-            :rectifier-loading="rectifierLoading"
-            :rectifier-saving="rectifierSaving"
-            :rectifier-form="rectifierForm"
-            :save-rectifier-settings="saveRectifierSettings"
-          />
-          <GatewayBetaPolicyPanel
-            :beta-policy-loading="betaPolicyLoading"
-            :beta-policy-saving="betaPolicySaving"
-            :beta-policy-form="betaPolicyForm"
-            :beta-policy-action-options="betaPolicyActionOptions"
-            :beta-policy-scope-options="betaPolicyScopeOptions"
-            :beta-presets="betaPresets"
-            :common-model-patterns="commonModelPatterns"
-            :get-beta-display-name="getBetaDisplayName"
-            :apply-beta-preset="applyBetaPreset"
-            :add-quick-pattern="addQuickPattern"
-            :save-beta-policy-settings="saveBetaPolicySettings"
-          />
-          <GatewayOpenAIFastPolicyPanel
-            :openai-fast-policy-form="openaiFastPolicyForm"
-            :openai-fast-policy-tier-options="openaiFastPolicyTierOptions"
-            :openai-fast-policy-action-options="openaiFastPolicyActionOptions"
-            :openai-fast-policy-scope-options="openaiFastPolicyScopeOptions"
-            :add-open-a-i-fast-policy-rule="addOpenAIFastPolicyRule"
-            :remove-open-a-i-fast-policy-rule="removeOpenAIFastPolicyRule"
-            :add-open-a-i-fast-policy-model-pattern="addOpenAIFastPolicyModelPattern"
-            :remove-open-a-i-fast-policy-model-pattern="removeOpenAIFastPolicyModelPattern"
-          />
-        </div>
+        <GatewaySettingsTab
+          v-show="activeTab === 'gateway'"
+          :overload-cooldown-loading="overloadCooldownLoading"
+          :overload-cooldown-saving="overloadCooldownSaving"
+          :overload-cooldown-form="overloadCooldownForm"
+          :save-overload-cooldown-settings="saveOverloadCooldownSettings"
+          :rate-limit429-cooldown-loading="rateLimit429CooldownLoading"
+          :rate-limit429-cooldown-saving="rateLimit429CooldownSaving"
+          :rate-limit429-cooldown-form="rateLimit429CooldownForm"
+          :save-rate-limit429-cooldown-settings="saveRateLimit429CooldownSettings"
+          :stream-timeout-loading="streamTimeoutLoading"
+          :stream-timeout-saving="streamTimeoutSaving"
+          :stream-timeout-form="streamTimeoutForm"
+          :save-stream-timeout-settings="saveStreamTimeoutSettings"
+          :rectifier-loading="rectifierLoading"
+          :rectifier-saving="rectifierSaving"
+          :rectifier-form="rectifierForm"
+          :save-rectifier-settings="saveRectifierSettings"
+          :beta-policy-loading="betaPolicyLoading"
+          :beta-policy-saving="betaPolicySaving"
+          :beta-policy-form="betaPolicyForm"
+          :beta-policy-action-options="betaPolicyActionOptions"
+          :beta-policy-scope-options="betaPolicyScopeOptions"
+          :beta-presets="betaPresets"
+          :common-model-patterns="commonModelPatterns"
+          :get-beta-display-name="getBetaDisplayName"
+          :apply-beta-preset="applyBetaPreset"
+          :add-quick-pattern="addQuickPattern"
+          :save-beta-policy-settings="saveBetaPolicySettings"
+          :openai-fast-policy-form="openaiFastPolicyForm"
+          :openai-fast-policy-tier-options="openaiFastPolicyTierOptions"
+          :openai-fast-policy-action-options="openaiFastPolicyActionOptions"
+          :openai-fast-policy-scope-options="openaiFastPolicyScopeOptions"
+          :add-open-a-i-fast-policy-rule="addOpenAIFastPolicyRule"
+          :remove-open-a-i-fast-policy-rule="removeOpenAIFastPolicyRule"
+          :add-open-a-i-fast-policy-model-pattern="addOpenAIFastPolicyModelPattern"
+          :remove-open-a-i-fast-policy-model-pattern="removeOpenAIFastPolicyModelPattern"
+        />
         <!-- /Tab: Gateway -->
 
 
@@ -3388,11 +3377,7 @@ import GeneralSettingsTab from "@/views/admin/settings/tabs/GeneralSettingsTab.v
 import AgreementSettingsTab from "@/views/admin/settings/tabs/AgreementSettingsTab.vue";
 import FeaturesSettingsTab from "@/views/admin/settings/tabs/FeaturesSettingsTab.vue";
 import SecuritySettingsTab from "@/views/admin/settings/tabs/SecuritySettingsTab.vue";
-import GatewayCooldownPanel from "@/views/admin/settings/gateway/GatewayCooldownPanel.vue";
-import GatewayStreamTimeoutPanel from "@/views/admin/settings/gateway/GatewayStreamTimeoutPanel.vue";
-import GatewayRectifierPanel from "@/views/admin/settings/gateway/GatewayRectifierPanel.vue";
-import GatewayBetaPolicyPanel from "@/views/admin/settings/gateway/GatewayBetaPolicyPanel.vue";
-import GatewayOpenAIFastPolicyPanel from "@/views/admin/settings/gateway/GatewayOpenAIFastPolicyPanel.vue";
+import GatewaySettingsTab from "@/views/admin/settings/tabs/GatewaySettingsTab.vue";
 import { useClipboard } from "@/composables/useClipboard";
 import { affiliatesAPI, type AffiliateAdminEntry, type SimpleUser as AffiliateSimpleUser } from "@/api/admin/affiliates";
 import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiError";
