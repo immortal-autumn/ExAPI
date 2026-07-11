@@ -542,9 +542,7 @@
         <!-- /Tab: Email -->
 
         <!-- Tab: Backup -->
-        <div v-show="activeTab === 'backup'">
-          <BackupSettings />
-        </div>
+        <BackupSettingsTab v-show="activeTab === 'backup'" />
 
         <!-- Save Button -->
         <div v-show="activeTab !== 'backup'" class="flex justify-end">
@@ -655,7 +653,6 @@ import AppLayout from "@/components/layout/AppLayout.vue";
 import Icon from "@/components/icons/Icon.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import PaymentProviderDialog from "@/components/payment/PaymentProviderDialog.vue";
-import BackupSettings from "@/views/admin/BackupView.vue";
 import GeneralSettingsTab from "@/views/admin/settings/tabs/GeneralSettingsTab.vue";
 import AgreementSettingsTab from "@/views/admin/settings/tabs/AgreementSettingsTab.vue";
 import FeaturesSettingsTab from "@/views/admin/settings/tabs/FeaturesSettingsTab.vue";
@@ -664,6 +661,7 @@ import GatewaySettingsTab from "@/views/admin/settings/tabs/GatewaySettingsTab.v
 import UserSettingsTab from "@/views/admin/settings/tabs/UserSettingsTab.vue";
 import PaymentSettingsTab from "@/views/admin/settings/tabs/PaymentSettingsTab.vue";
 import EmailSettingsTab from "@/views/admin/settings/tabs/EmailSettingsTab.vue";
+import BackupSettingsTab from "@/views/admin/settings/tabs/BackupSettingsTab.vue";
 import { useClipboard } from "@/composables/useClipboard";
 import { affiliatesAPI, type AffiliateAdminEntry, type SimpleUser as AffiliateSimpleUser } from "@/api/admin/affiliates";
 import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiError";
