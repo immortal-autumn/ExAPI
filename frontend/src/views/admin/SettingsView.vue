@@ -514,22 +514,19 @@
             :is-payment-type-enabled="isPaymentTypeEnabled"
           />
 
-          <!-- Provider Management -->
-          <PaymentProviderList
-            v-if="form.payment_enabled"
+          <PaymentProviderManagementPanel
+            :form="form"
             :providers="providers"
-            :loading="providersLoading"
-            :can-create="hasAnyPaymentTypeEnabled"
-            :enabled-payment-types="form.payment_enabled_types"
+            :providers-loading="providersLoading"
+            :has-any-payment-type-enabled="hasAnyPaymentTypeEnabled"
             :all-payment-types="allPaymentTypes"
-            :redirect-label="t('admin.settings.payment.easypayRedirect')"
-            @refresh="loadProviders"
-            @create="openCreateProvider"
-            @edit="openEditProvider"
-            @delete="confirmDeleteProvider"
-            @toggle-field="handleToggleField"
-            @toggle-type="handleToggleType"
-            @reorder="handleReorderProviders"
+            :load-providers="loadProviders"
+            :open-create-provider="openCreateProvider"
+            :open-edit-provider="openEditProvider"
+            :confirm-delete-provider="confirmDeleteProvider"
+            :handle-toggle-field="handleToggleField"
+            :handle-toggle-type="handleToggleType"
+            :handle-reorder-providers="handleReorderProviders"
           />
         </div>
 
@@ -1067,7 +1064,6 @@ import type { ProviderInstance } from "@/types/payment";
 import AppLayout from "@/components/layout/AppLayout.vue";
 import Icon from "@/components/icons/Icon.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
-import PaymentProviderList from "@/components/payment/PaymentProviderList.vue";
 import PaymentProviderDialog from "@/components/payment/PaymentProviderDialog.vue";
 import Toggle from "@/components/common/Toggle.vue";
 import BackupSettings from "@/views/admin/BackupView.vue";
@@ -1079,6 +1075,7 @@ import SecuritySettingsTab from "@/views/admin/settings/tabs/SecuritySettingsTab
 import GatewaySettingsTab from "@/views/admin/settings/tabs/GatewaySettingsTab.vue";
 import UserSettingsTab from "@/views/admin/settings/tabs/UserSettingsTab.vue";
 import PaymentSystemSettingsPanel from "@/views/admin/settings/payment/PaymentSystemSettingsPanel.vue";
+import PaymentProviderManagementPanel from "@/views/admin/settings/payment/PaymentProviderManagementPanel.vue";
 import { useClipboard } from "@/composables/useClipboard";
 import { affiliatesAPI, type AffiliateAdminEntry, type SimpleUser as AffiliateSimpleUser } from "@/api/admin/affiliates";
 import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiError";
