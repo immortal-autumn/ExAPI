@@ -563,34 +563,7 @@
             :update-test-email-address="updateTestEmailAddress"
           />
 
-          <!-- 订阅到期提醒 -->
-          <div class="card">
-            <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
-            >
-              <h3 class="text-base font-medium text-gray-900 dark:text-white">
-                {{ t("admin.settings.subscriptionExpiryNotify.title") }}
-              </h3>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                {{ t("admin.settings.subscriptionExpiryNotify.description") }}
-              </p>
-            </div>
-            <div class="px-6 py-6">
-              <div class="flex items-center justify-between gap-4">
-                <div>
-                  <label
-                    class="mb-0 block text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    {{ t("admin.settings.subscriptionExpiryNotify.enabled") }}
-                  </label>
-                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    {{ t("admin.settings.subscriptionExpiryNotify.enabledHint") }}
-                  </p>
-                </div>
-                <Toggle v-model="form.subscription_expiry_notify_enabled" />
-              </div>
-            </div>
-          </div>
+          <SubscriptionExpiryNotificationPanel :form="form" />
 
           <EmailTemplateEditor />
 
@@ -858,6 +831,7 @@ import UserSettingsTab from "@/views/admin/settings/tabs/UserSettingsTab.vue";
 import PaymentSettingsTab from "@/views/admin/settings/tabs/PaymentSettingsTab.vue";
 import SmtpSettingsPanel from "@/views/admin/settings/email/SmtpSettingsPanel.vue";
 import TestEmailPanel from "@/views/admin/settings/email/TestEmailPanel.vue";
+import SubscriptionExpiryNotificationPanel from "@/views/admin/settings/email/SubscriptionExpiryNotificationPanel.vue";
 import { useClipboard } from "@/composables/useClipboard";
 import { affiliatesAPI, type AffiliateAdminEntry, type SimpleUser as AffiliateSimpleUser } from "@/api/admin/affiliates";
 import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiError";
