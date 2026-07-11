@@ -524,60 +524,21 @@
           :handle-reorder-providers="handleReorderProviders"
         />
 
-        <div v-show="activeTab === 'email'" class="space-y-6">
-          <!-- Email disabled hint - show when email_verify_enabled is off -->
-          <div v-if="!form.email_verify_enabled" class="card">
-            <div class="p-6">
-              <div class="flex items-start gap-3">
-                <Icon
-                  name="mail"
-                  size="md"
-                  class="mt-0.5 flex-shrink-0 text-gray-400 dark:text-gray-500"
-                />
-                <div>
-                  <h3 class="font-medium text-gray-900 dark:text-white">
-                    {{ t("admin.settings.emailTabDisabledTitle") }}
-                  </h3>
-                  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    {{ t("admin.settings.emailTabDisabledHint") }}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <SmtpSettingsPanel
-            :form="form"
-            :testing-smtp="testingSmtp"
-            :load-failed="loadFailed"
-            :test-smtp-connection="testSmtpConnection"
-            :mark-smtp-password-manually-edited="markSmtpPasswordManuallyEdited"
-          />
-
-          <TestEmailPanel
-            :form="form"
-            :test-email-address="testEmailAddress"
-            :sending-test-email="sendingTestEmail"
-            :load-failed="loadFailed"
-            :send-test-email="sendTestEmail"
-            :update-test-email-address="updateTestEmailAddress"
-          />
-
-          <SubscriptionExpiryNotificationPanel :form="form" />
-
-          <EmailTemplateEditor />
-
-          <BalanceLowNotificationPanel
-            :form="form"
-            :current-origin="currentOrigin"
-          />
-
-          <AccountQuotaNotificationPanel
-            :form="form"
-            :add-quota-notify-email="addQuotaNotifyEmail"
-            :remove-quota-notify-email="removeQuotaNotifyEmail"
-          />
-        </div>
+        <EmailSettingsTab
+          v-show="activeTab === 'email'"
+          :form="form"
+          :testing-smtp="testingSmtp"
+          :load-failed="loadFailed"
+          :test-smtp-connection="testSmtpConnection"
+          :mark-smtp-password-manually-edited="markSmtpPasswordManuallyEdited"
+          :test-email-address="testEmailAddress"
+          :sending-test-email="sendingTestEmail"
+          :send-test-email="sendTestEmail"
+          :update-test-email-address="updateTestEmailAddress"
+          :current-origin="currentOrigin"
+          :add-quota-notify-email="addQuotaNotifyEmail"
+          :remove-quota-notify-email="removeQuotaNotifyEmail"
+        />
         <!-- /Tab: Email -->
 
         <!-- Tab: Backup -->
@@ -695,7 +656,6 @@ import Icon from "@/components/icons/Icon.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import PaymentProviderDialog from "@/components/payment/PaymentProviderDialog.vue";
 import BackupSettings from "@/views/admin/BackupView.vue";
-import EmailTemplateEditor from "@/views/admin/settings/EmailTemplateEditor.vue";
 import GeneralSettingsTab from "@/views/admin/settings/tabs/GeneralSettingsTab.vue";
 import AgreementSettingsTab from "@/views/admin/settings/tabs/AgreementSettingsTab.vue";
 import FeaturesSettingsTab from "@/views/admin/settings/tabs/FeaturesSettingsTab.vue";
@@ -703,11 +663,7 @@ import SecuritySettingsTab from "@/views/admin/settings/tabs/SecuritySettingsTab
 import GatewaySettingsTab from "@/views/admin/settings/tabs/GatewaySettingsTab.vue";
 import UserSettingsTab from "@/views/admin/settings/tabs/UserSettingsTab.vue";
 import PaymentSettingsTab from "@/views/admin/settings/tabs/PaymentSettingsTab.vue";
-import SmtpSettingsPanel from "@/views/admin/settings/email/SmtpSettingsPanel.vue";
-import TestEmailPanel from "@/views/admin/settings/email/TestEmailPanel.vue";
-import SubscriptionExpiryNotificationPanel from "@/views/admin/settings/email/SubscriptionExpiryNotificationPanel.vue";
-import BalanceLowNotificationPanel from "@/views/admin/settings/email/BalanceLowNotificationPanel.vue";
-import AccountQuotaNotificationPanel from "@/views/admin/settings/email/AccountQuotaNotificationPanel.vue";
+import EmailSettingsTab from "@/views/admin/settings/tabs/EmailSettingsTab.vue";
 import { useClipboard } from "@/composables/useClipboard";
 import { affiliatesAPI, type AffiliateAdminEntry, type SimpleUser as AffiliateSimpleUser } from "@/api/admin/affiliates";
 import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiError";
