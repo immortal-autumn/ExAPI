@@ -162,26 +162,18 @@
 
 
         <!-- Tab: Users -->
-        <div v-show="activeTab === 'users'" class="space-y-6">
-          <!-- Default Settings -->
-          <UserDefaultSettingsPanel
-            :form="form"
-            :subscription-groups="subscriptionGroups"
-            :default-subscription-group-options="defaultSubscriptionGroupOptions"
-            :add-default-subscription="addDefaultSubscription"
-            :remove-default-subscription="removeDefaultSubscription"
-          />
-
-          <UserAuthSourceDefaultsPanel
-            :form="form"
-            :auth-source-defaults="authSourceDefaults"
-            :auth-source-defaults-meta="authSourceDefaultsMeta"
-            :subscription-groups="subscriptionGroups"
-            :default-subscription-group-options="defaultSubscriptionGroupOptions"
-            :add-auth-source-default-subscription="addAuthSourceDefaultSubscription"
-            :remove-auth-source-default-subscription="removeAuthSourceDefaultSubscription"
-          />
-        </div>
+        <UserSettingsTab
+          v-show="activeTab === 'users'"
+          :form="form"
+          :subscription-groups="subscriptionGroups"
+          :default-subscription-group-options="defaultSubscriptionGroupOptions"
+          :add-default-subscription="addDefaultSubscription"
+          :remove-default-subscription="removeDefaultSubscription"
+          :auth-source-defaults="authSourceDefaults"
+          :auth-source-defaults-meta="authSourceDefaultsMeta"
+          :add-auth-source-default-subscription="addAuthSourceDefaultSubscription"
+          :remove-auth-source-default-subscription="removeAuthSourceDefaultSubscription"
+        />
         <!-- /Tab: Users -->
 
         <!-- Gateway Web Search Test Dialog -->
@@ -1574,8 +1566,7 @@ import AgreementSettingsTab from "@/views/admin/settings/tabs/AgreementSettingsT
 import FeaturesSettingsTab from "@/views/admin/settings/tabs/FeaturesSettingsTab.vue";
 import SecuritySettingsTab from "@/views/admin/settings/tabs/SecuritySettingsTab.vue";
 import GatewaySettingsTab from "@/views/admin/settings/tabs/GatewaySettingsTab.vue";
-import UserDefaultSettingsPanel from "@/views/admin/settings/users/UserDefaultSettingsPanel.vue";
-import UserAuthSourceDefaultsPanel from "@/views/admin/settings/users/UserAuthSourceDefaultsPanel.vue";
+import UserSettingsTab from "@/views/admin/settings/tabs/UserSettingsTab.vue";
 import { useClipboard } from "@/composables/useClipboard";
 import { affiliatesAPI, type AffiliateAdminEntry, type SimpleUser as AffiliateSimpleUser } from "@/api/admin/affiliates";
 import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiError";
