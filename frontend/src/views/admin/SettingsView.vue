@@ -501,34 +501,28 @@
 
         <!-- Tab: Email -->
         <!-- Tab: Payment -->
-        <div v-show="activeTab === 'payment'" class="space-y-6">
-          <PaymentSystemSettingsPanel
-            :form="form"
-            :load-balance-options="loadBalanceOptions"
-            :cancel-rate-limit-mode-options="cancelRateLimitModeOptions"
-            :cancel-rate-limit-unit-options="cancelRateLimitUnitOptions"
-            :all-payment-types="allPaymentTypes"
-            :payment-guide-href="paymentGuideHref"
-            :payment-methods-href="paymentMethodsHref"
-            :toggle-payment-type="togglePaymentType"
-            :is-payment-type-enabled="isPaymentTypeEnabled"
-          />
-
-          <PaymentProviderManagementPanel
-            :form="form"
-            :providers="providers"
-            :providers-loading="providersLoading"
-            :has-any-payment-type-enabled="hasAnyPaymentTypeEnabled"
-            :all-payment-types="allPaymentTypes"
-            :load-providers="loadProviders"
-            :open-create-provider="openCreateProvider"
-            :open-edit-provider="openEditProvider"
-            :confirm-delete-provider="confirmDeleteProvider"
-            :handle-toggle-field="handleToggleField"
-            :handle-toggle-type="handleToggleType"
-            :handle-reorder-providers="handleReorderProviders"
-          />
-        </div>
+        <PaymentSettingsTab
+          v-show="activeTab === 'payment'"
+          :form="form"
+          :load-balance-options="loadBalanceOptions"
+          :cancel-rate-limit-mode-options="cancelRateLimitModeOptions"
+          :cancel-rate-limit-unit-options="cancelRateLimitUnitOptions"
+          :all-payment-types="allPaymentTypes"
+          :payment-guide-href="paymentGuideHref"
+          :payment-methods-href="paymentMethodsHref"
+          :toggle-payment-type="togglePaymentType"
+          :is-payment-type-enabled="isPaymentTypeEnabled"
+          :providers="providers"
+          :providers-loading="providersLoading"
+          :has-any-payment-type-enabled="hasAnyPaymentTypeEnabled"
+          :load-providers="loadProviders"
+          :open-create-provider="openCreateProvider"
+          :open-edit-provider="openEditProvider"
+          :confirm-delete-provider="confirmDeleteProvider"
+          :handle-toggle-field="handleToggleField"
+          :handle-toggle-type="handleToggleType"
+          :handle-reorder-providers="handleReorderProviders"
+        />
 
         <div v-show="activeTab === 'email'" class="space-y-6">
           <!-- Email disabled hint - show when email_verify_enabled is off -->
@@ -1074,8 +1068,7 @@ import FeaturesSettingsTab from "@/views/admin/settings/tabs/FeaturesSettingsTab
 import SecuritySettingsTab from "@/views/admin/settings/tabs/SecuritySettingsTab.vue";
 import GatewaySettingsTab from "@/views/admin/settings/tabs/GatewaySettingsTab.vue";
 import UserSettingsTab from "@/views/admin/settings/tabs/UserSettingsTab.vue";
-import PaymentSystemSettingsPanel from "@/views/admin/settings/payment/PaymentSystemSettingsPanel.vue";
-import PaymentProviderManagementPanel from "@/views/admin/settings/payment/PaymentProviderManagementPanel.vue";
+import PaymentSettingsTab from "@/views/admin/settings/tabs/PaymentSettingsTab.vue";
 import { useClipboard } from "@/composables/useClipboard";
 import { affiliatesAPI, type AffiliateAdminEntry, type SimpleUser as AffiliateSimpleUser } from "@/api/admin/affiliates";
 import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiError";
