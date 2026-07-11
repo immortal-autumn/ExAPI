@@ -49,6 +49,61 @@
       :add-open-a-i-fast-policy-model-pattern="addOpenAIFastPolicyModelPattern"
       :remove-open-a-i-fast-policy-model-pattern="removeOpenAIFastPolicyModelPattern"
     />
+
+    <GatewayClaudeCodePanel :form="form" />
+
+    <GatewayCodexHardeningPanel
+      :form="form"
+      :codex-fingerprint-rows="codexFingerprintRows"
+      :codex-fingerprint-no-required="codexFingerprintNoRequired"
+      :codex-blacklist-rows="codexBlacklistRows"
+      :codex-whitelist-rows="codexWhitelistRows"
+      :add-codex-fingerprint-row="addCodexFingerprintRow"
+      :remove-codex-fingerprint-row="removeCodexFingerprintRow"
+      :add-codex-blacklist-row="addCodexBlacklistRow"
+      :remove-codex-blacklist-row="removeCodexBlacklistRow"
+      :add-codex-whitelist-row="addCodexWhitelistRow"
+      :remove-codex-whitelist-row="removeCodexWhitelistRow"
+    />
+
+    <GatewaySchedulingPanel
+      :form="form"
+      :open-a-i-advanced-scheduler-weight-fields="openAIAdvancedSchedulerWeightFields"
+    />
+
+    <GatewayForwardingBehaviorPanel
+      :form="form"
+      :claude-o-auth-system-prompt-blocks="claudeOAuthSystemPromptBlocks"
+      :claude-o-auth-system-prompt-preset-options="claudeOAuthSystemPromptPresetOptions"
+      :claude-o-auth-system-prompt-block-type-options="claudeOAuthSystemPromptBlockTypeOptions"
+      :claude-o-auth-system-prompt-cache-t-t-l-options="claudeOAuthSystemPromptCacheTTLOptions"
+      :get-claude-o-auth-preset-label="getClaudeOAuthPresetLabel"
+      :add-claude-o-auth-system-prompt-block="addClaudeOAuthSystemPromptBlock"
+      :reset-claude-o-auth-system-prompt-blocks="resetClaudeOAuthSystemPromptBlocks"
+      :toggle-claude-o-auth-system-prompt-block="toggleClaudeOAuthSystemPromptBlock"
+      :move-claude-o-auth-system-prompt-block="moveClaudeOAuthSystemPromptBlock"
+      :remove-claude-o-auth-system-prompt-block="removeClaudeOAuthSystemPromptBlock"
+      :apply-claude-o-auth-system-prompt-preset="applyClaudeOAuthSystemPromptPreset"
+      :mark-claude-o-auth-system-prompt-block-custom="markClaudeOAuthSystemPromptBlockCustom"
+    />
+
+    <GatewayWebSearchEmulationPanel
+      :web-search-config="webSearchConfig"
+      :expanded-providers="expandedProviders"
+      :api-key-visible="apiKeyVisible"
+      :web-search-proxies="webSearchProxies"
+      :add-web-search-provider="addWebSearchProvider"
+      :remove-web-search-provider="removeWebSearchProvider"
+      :toggle-provider-expand="toggleProviderExpand"
+      :copy-api-key="copyApiKey"
+      :format-subscribed-at="formatSubscribedAt"
+      :parse-subscribed-at="parseSubscribedAt"
+      :quota-percentage="quotaPercentage"
+      :reset-web-search-usage="resetWebSearchUsage"
+      :open-test-dialog="openTestDialog"
+    />
+
+    <GatewayUsageRecordsPanel :form="form" />
   </div>
 </template>
 
@@ -58,6 +113,12 @@ import GatewayStreamTimeoutPanel from '@/views/admin/settings/gateway/GatewayStr
 import GatewayRectifierPanel from '@/views/admin/settings/gateway/GatewayRectifierPanel.vue'
 import GatewayBetaPolicyPanel from '@/views/admin/settings/gateway/GatewayBetaPolicyPanel.vue'
 import GatewayOpenAIFastPolicyPanel from '@/views/admin/settings/gateway/GatewayOpenAIFastPolicyPanel.vue'
+import GatewayClaudeCodePanel from '@/views/admin/settings/gateway/GatewayClaudeCodePanel.vue'
+import GatewayCodexHardeningPanel from '@/views/admin/settings/gateway/GatewayCodexHardeningPanel.vue'
+import GatewaySchedulingPanel from '@/views/admin/settings/gateway/GatewaySchedulingPanel.vue'
+import GatewayForwardingBehaviorPanel from '@/views/admin/settings/gateway/GatewayForwardingBehaviorPanel.vue'
+import GatewayWebSearchEmulationPanel from '@/views/admin/settings/gateway/GatewayWebSearchEmulationPanel.vue'
+import GatewayUsageRecordsPanel from '@/views/admin/settings/gateway/GatewayUsageRecordsPanel.vue'
 
 type AnyHandler = (...args: any[]) => void
 
@@ -97,5 +158,42 @@ defineProps<{
   removeOpenAIFastPolicyRule: AnyHandler
   addOpenAIFastPolicyModelPattern: AnyHandler
   removeOpenAIFastPolicyModelPattern: AnyHandler
+  form: any
+  codexFingerprintRows: any[]
+  codexFingerprintNoRequired: boolean
+  codexBlacklistRows: any[]
+  codexWhitelistRows: any[]
+  addCodexFingerprintRow: AnyHandler
+  removeCodexFingerprintRow: AnyHandler
+  addCodexBlacklistRow: AnyHandler
+  removeCodexBlacklistRow: AnyHandler
+  addCodexWhitelistRow: AnyHandler
+  removeCodexWhitelistRow: AnyHandler
+  openAIAdvancedSchedulerWeightFields: any[]
+  claudeOAuthSystemPromptBlocks: any[]
+  claudeOAuthSystemPromptPresetOptions: any[]
+  claudeOAuthSystemPromptBlockTypeOptions: any[]
+  claudeOAuthSystemPromptCacheTTLOptions: any[]
+  getClaudeOAuthPresetLabel: (preset: any) => string
+  addClaudeOAuthSystemPromptBlock: AnyHandler
+  resetClaudeOAuthSystemPromptBlocks: AnyHandler
+  toggleClaudeOAuthSystemPromptBlock: AnyHandler
+  moveClaudeOAuthSystemPromptBlock: AnyHandler
+  removeClaudeOAuthSystemPromptBlock: AnyHandler
+  applyClaudeOAuthSystemPromptPreset: AnyHandler
+  markClaudeOAuthSystemPromptBlockCustom: AnyHandler
+  webSearchConfig: any
+  expandedProviders: Record<number, boolean>
+  apiKeyVisible: Record<number, boolean>
+  webSearchProxies: any[]
+  addWebSearchProvider: AnyHandler
+  removeWebSearchProvider: AnyHandler
+  toggleProviderExpand: AnyHandler
+  copyApiKey: AnyHandler
+  formatSubscribedAt: (ts: number | null) => string
+  parseSubscribedAt: (dateStr: string) => number | null
+  quotaPercentage: (provider: any) => number
+  resetWebSearchUsage: AnyHandler
+  openTestDialog: AnyHandler
 }>()
 </script>

@@ -119,6 +119,43 @@
           :remove-open-a-i-fast-policy-rule="removeOpenAIFastPolicyRule"
           :add-open-a-i-fast-policy-model-pattern="addOpenAIFastPolicyModelPattern"
           :remove-open-a-i-fast-policy-model-pattern="removeOpenAIFastPolicyModelPattern"
+          :form="form"
+          :codex-fingerprint-rows="codexFingerprintRows"
+          :codex-fingerprint-no-required="codexFingerprintNoRequired"
+          :codex-blacklist-rows="codexBlacklistRows"
+          :codex-whitelist-rows="codexWhitelistRows"
+          :add-codex-fingerprint-row="addCodexFingerprintRow"
+          :remove-codex-fingerprint-row="removeCodexFingerprintRow"
+          :add-codex-blacklist-row="addCodexBlacklistRow"
+          :remove-codex-blacklist-row="removeCodexBlacklistRow"
+          :add-codex-whitelist-row="addCodexWhitelistRow"
+          :remove-codex-whitelist-row="removeCodexWhitelistRow"
+          :open-a-i-advanced-scheduler-weight-fields="openAIAdvancedSchedulerWeightFields"
+          :claude-o-auth-system-prompt-blocks="claudeOAuthSystemPromptBlocks"
+          :claude-o-auth-system-prompt-preset-options="claudeOAuthSystemPromptPresetOptions"
+          :claude-o-auth-system-prompt-block-type-options="claudeOAuthSystemPromptBlockTypeOptions"
+          :claude-o-auth-system-prompt-cache-t-t-l-options="claudeOAuthSystemPromptCacheTTLOptions"
+          :get-claude-o-auth-preset-label="getClaudeOAuthPresetLabel"
+          :add-claude-o-auth-system-prompt-block="addClaudeOAuthSystemPromptBlock"
+          :reset-claude-o-auth-system-prompt-blocks="resetClaudeOAuthSystemPromptBlocks"
+          :toggle-claude-o-auth-system-prompt-block="toggleClaudeOAuthSystemPromptBlock"
+          :move-claude-o-auth-system-prompt-block="moveClaudeOAuthSystemPromptBlock"
+          :remove-claude-o-auth-system-prompt-block="removeClaudeOAuthSystemPromptBlock"
+          :apply-claude-o-auth-system-prompt-preset="applyClaudeOAuthSystemPromptPreset"
+          :mark-claude-o-auth-system-prompt-block-custom="markClaudeOAuthSystemPromptBlockCustom"
+          :web-search-config="webSearchConfig"
+          :expanded-providers="expandedProviders"
+          :api-key-visible="apiKeyVisible"
+          :web-search-proxies="webSearchProxies"
+          :add-web-search-provider="addWebSearchProvider"
+          :remove-web-search-provider="removeWebSearchProvider"
+          :toggle-provider-expand="toggleProviderExpand"
+          :copy-api-key="copyApiKey"
+          :format-subscribed-at="formatSubscribedAt"
+          :parse-subscribed-at="parseSubscribedAt"
+          :quota-percentage="quotaPercentage"
+          :reset-web-search-usage="resetWebSearchUsage"
+          :open-test-dialog="openTestDialog"
         />
         <!-- /Tab: Gateway -->
 
@@ -740,154 +777,89 @@
         </div>
         <!-- /Tab: Users -->
 
-        <!-- Tab: Gateway — Claude Code, Scheduling -->
-        <div v-show="activeTab === 'gateway'" class="space-y-6">
-          <!-- Claude Code Settings -->
-          <GatewayClaudeCodePanel :form="form" />
-
-          <!-- Codex Settings -->
-          <GatewayCodexHardeningPanel
-            :form="form"
-            :codex-fingerprint-rows="codexFingerprintRows"
-            :codex-fingerprint-no-required="codexFingerprintNoRequired"
-            :codex-blacklist-rows="codexBlacklistRows"
-            :codex-whitelist-rows="codexWhitelistRows"
-            :add-codex-fingerprint-row="addCodexFingerprintRow"
-            :remove-codex-fingerprint-row="removeCodexFingerprintRow"
-            :add-codex-blacklist-row="addCodexBlacklistRow"
-            :remove-codex-blacklist-row="removeCodexBlacklistRow"
-            :add-codex-whitelist-row="addCodexWhitelistRow"
-            :remove-codex-whitelist-row="removeCodexWhitelistRow"
-          />
-
-          <!-- Gateway Scheduling Settings -->
-          <GatewaySchedulingPanel
-            :form="form"
-            :open-a-i-advanced-scheduler-weight-fields="openAIAdvancedSchedulerWeightFields"
-          />
-
-          <!-- Gateway Forwarding Behavior -->
-          <GatewayForwardingBehaviorPanel
-            :form="form"
-            :claude-o-auth-system-prompt-blocks="claudeOAuthSystemPromptBlocks"
-            :claude-o-auth-system-prompt-preset-options="claudeOAuthSystemPromptPresetOptions"
-            :claude-o-auth-system-prompt-block-type-options="claudeOAuthSystemPromptBlockTypeOptions"
-            :claude-o-auth-system-prompt-cache-t-t-l-options="claudeOAuthSystemPromptCacheTTLOptions"
-            :get-claude-o-auth-preset-label="getClaudeOAuthPresetLabel"
-            :add-claude-o-auth-system-prompt-block="addClaudeOAuthSystemPromptBlock"
-            :reset-claude-o-auth-system-prompt-blocks="resetClaudeOAuthSystemPromptBlocks"
-            :toggle-claude-o-auth-system-prompt-block="toggleClaudeOAuthSystemPromptBlock"
-            :move-claude-o-auth-system-prompt-block="moveClaudeOAuthSystemPromptBlock"
-            :remove-claude-o-auth-system-prompt-block="removeClaudeOAuthSystemPromptBlock"
-            :apply-claude-o-auth-system-prompt-preset="applyClaudeOAuthSystemPromptPreset"
-            :mark-claude-o-auth-system-prompt-block-custom="markClaudeOAuthSystemPromptBlockCustom"
-          />
-
-          <!-- Web Search Emulation -->
-          <GatewayWebSearchEmulationPanel
-            :web-search-config="webSearchConfig"
-            :expanded-providers="expandedProviders"
-            :api-key-visible="apiKeyVisible"
-            :web-search-proxies="webSearchProxies"
-            :add-web-search-provider="addWebSearchProvider"
-            :remove-web-search-provider="removeWebSearchProvider"
-            :toggle-provider-expand="toggleProviderExpand"
-            :copy-api-key="copyApiKey"
-            :format-subscribed-at="formatSubscribedAt"
-            :parse-subscribed-at="parseSubscribedAt"
-            :quota-percentage="quotaPercentage"
-            :reset-web-search-usage="resetWebSearchUsage"
-            :open-test-dialog="openTestDialog"
-          />
-
-          <!-- Web Search Test Dialog -->
+        <!-- Gateway Web Search Test Dialog -->
+        <!-- Web Search Test Dialog -->
+        <div
+          v-if="wsTestDialogOpen"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          @click.self="wsTestDialogOpen = false"
+        >
           <div
-            v-if="wsTestDialogOpen"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-            @click.self="wsTestDialogOpen = false"
+            class="mx-4 w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-dark-800"
           >
-            <div
-              class="mx-4 w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-dark-800"
+            <h3
+              class="mb-4 text-lg font-semibold text-gray-900 dark:text-white"
             >
-              <h3
-                class="mb-4 text-lg font-semibold text-gray-900 dark:text-white"
+              {{ t("admin.settings.webSearchEmulation.testResultTitle") }}
+            </h3>
+            <div class="flex items-center gap-2">
+              <input
+                v-model="wsTestQuery"
+                type="text"
+                class="input flex-1 text-sm"
+                :placeholder="
+                  t('admin.settings.webSearchEmulation.testDefaultQuery')
+                "
+                @keyup.enter="testWebSearchProvider()"
+              />
+              <button
+                type="button"
+                class="btn btn-primary btn-sm"
+                :disabled="wsTestLoading"
+                @click="testWebSearchProvider()"
               >
-                {{ t("admin.settings.webSearchEmulation.testResultTitle") }}
-              </h3>
-              <div class="flex items-center gap-2">
-                <input
-                  v-model="wsTestQuery"
-                  type="text"
-                  class="input flex-1 text-sm"
-                  :placeholder="
-                    t('admin.settings.webSearchEmulation.testDefaultQuery')
-                  "
-                  @keyup.enter="testWebSearchProvider()"
-                />
-                <button
-                  type="button"
-                  class="btn btn-primary btn-sm"
-                  :disabled="wsTestLoading"
-                  @click="testWebSearchProvider()"
-                >
-                  {{
-                    wsTestLoading
-                      ? t("admin.settings.webSearchEmulation.testing")
-                      : t("admin.settings.webSearchEmulation.test")
-                  }}
-                </button>
-              </div>
-              <!-- Test results -->
+                {{
+                  wsTestLoading
+                    ? t("admin.settings.webSearchEmulation.testing")
+                    : t("admin.settings.webSearchEmulation.test")
+                }}
+              </button>
+            </div>
+            <!-- Test results -->
+            <div
+              v-if="wsTestResult"
+              class="mt-4 max-h-80 overflow-y-auto rounded-lg bg-gray-50 p-4 dark:bg-dark-700"
+            >
+              <p
+                class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                {{
+                  t("admin.settings.webSearchEmulation.testResultProvider")
+                }}: {{ wsTestResult.provider }}
+              </p>
               <div
-                v-if="wsTestResult"
-                class="mt-4 max-h-80 overflow-y-auto rounded-lg bg-gray-50 p-4 dark:bg-dark-700"
+                v-if="wsTestResult.results.length === 0"
+                class="text-sm text-gray-400"
               >
-                <p
-                  class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  {{
-                    t("admin.settings.webSearchEmulation.testResultProvider")
-                  }}: {{ wsTestResult.provider }}
-                </p>
-                <div
-                  v-if="wsTestResult.results.length === 0"
-                  class="text-sm text-gray-400"
-                >
-                  {{ t("admin.settings.webSearchEmulation.testNoResults") }}
-                </div>
-                <div
-                  v-for="(r, rIdx) in wsTestResult.results"
-                  :key="rIdx"
-                  class="mt-2 border-t border-gray-200 pt-2 first:mt-0 first:border-0 first:pt-0 dark:border-dark-600"
-                >
-                  <a
-                    :href="r.url"
-                    target="_blank"
-                    class="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
-                    >{{ r.title }}</a
-                  >
-                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                    {{ r.snippet }}
-                  </p>
-                </div>
+                {{ t("admin.settings.webSearchEmulation.testNoResults") }}
               </div>
-              <div class="mt-4 flex justify-end">
-                <button
-                  type="button"
-                  class="btn btn-secondary btn-sm"
-                  @click="wsTestDialogOpen = false"
+              <div
+                v-for="(r, rIdx) in wsTestResult.results"
+                :key="rIdx"
+                class="mt-2 border-t border-gray-200 pt-2 first:mt-0 first:border-0 first:pt-0 dark:border-dark-600"
+              >
+                <a
+                  :href="r.url"
+                  target="_blank"
+                  class="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+                  >{{ r.title }}</a
                 >
-                  {{ t("common.close") }}
-                </button>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ r.snippet }}
+                </p>
               </div>
             </div>
+            <div class="mt-4 flex justify-end">
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                @click="wsTestDialogOpen = false"
+              >
+                {{ t("common.close") }}
+              </button>
+            </div>
           </div>
-
-        <!-- Usage Records Settings -->
-        <GatewayUsageRecordsPanel :form="form" />
         </div>
-        <!-- /Tab: Gateway — Claude Code, Scheduling -->
-
         <!-- Tab: General -->
         <div v-show="activeTab === 'general'" class="space-y-6">
           <GeneralSettingsTab
@@ -2197,12 +2169,6 @@ import AgreementSettingsTab from "@/views/admin/settings/tabs/AgreementSettingsT
 import FeaturesSettingsTab from "@/views/admin/settings/tabs/FeaturesSettingsTab.vue";
 import SecuritySettingsTab from "@/views/admin/settings/tabs/SecuritySettingsTab.vue";
 import GatewaySettingsTab from "@/views/admin/settings/tabs/GatewaySettingsTab.vue";
-import GatewayClaudeCodePanel from "@/views/admin/settings/gateway/GatewayClaudeCodePanel.vue";
-import GatewayCodexHardeningPanel from "@/views/admin/settings/gateway/GatewayCodexHardeningPanel.vue";
-import GatewaySchedulingPanel from "@/views/admin/settings/gateway/GatewaySchedulingPanel.vue";
-import GatewayForwardingBehaviorPanel from "@/views/admin/settings/gateway/GatewayForwardingBehaviorPanel.vue";
-import GatewayWebSearchEmulationPanel from "@/views/admin/settings/gateway/GatewayWebSearchEmulationPanel.vue";
-import GatewayUsageRecordsPanel from "@/views/admin/settings/gateway/GatewayUsageRecordsPanel.vue";
 import { useClipboard } from "@/composables/useClipboard";
 import { affiliatesAPI, type AffiliateAdminEntry, type SimpleUser as AffiliateSimpleUser } from "@/api/admin/affiliates";
 import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiError";

@@ -7,6 +7,10 @@ vi.mock('vue-i18n', () => ({
   }),
 }))
 
+vi.mock('@/components/common/ProxySelector.vue', () => ({
+  default: { template: '<div>proxy-selector</div>' },
+}))
+
 import GatewaySettingsTab from '../tabs/GatewaySettingsTab.vue'
 
 describe('GatewaySettingsTab', () => {
@@ -49,6 +53,63 @@ describe('GatewaySettingsTab', () => {
         removeOpenAIFastPolicyRule: fn,
         addOpenAIFastPolicyModelPattern: fn,
         removeOpenAIFastPolicyModelPattern: fn,
+        form: {
+          min_claude_code_version: '1.0.0',
+          max_claude_code_version: '2.0.0',
+          min_codex_version: '0.1.0',
+          max_codex_version: '1.0.0',
+          codex_cli_only_allow_app_server_clients: true,
+          allow_ungrouped_key_scheduling: true,
+          openai_advanced_scheduler_enabled: false,
+          openai_advanced_scheduler_sticky_weighted_enabled: false,
+          openai_advanced_scheduler_subscription_priority_enabled: false,
+          enable_fingerprint_unification: true,
+          enable_metadata_passthrough: true,
+          enable_cch_signing: true,
+          enable_claude_oauth_system_prompt_injection: true,
+          enable_anthropic_cache_ttl_1h_injection: false,
+          rewrite_message_cache_control: false,
+          enable_client_dateline_normalization: true,
+          antigravity_user_agent_version: '1.2.3',
+          openai_codex_user_agent: 'codex-test',
+          allow_user_view_error_requests: true,
+        },
+        codexFingerprintRows: [],
+        codexFingerprintNoRequired: false,
+        codexBlacklistRows: [],
+        codexWhitelistRows: [],
+        addCodexFingerprintRow: fn,
+        removeCodexFingerprintRow: fn,
+        addCodexBlacklistRow: fn,
+        removeCodexBlacklistRow: fn,
+        addCodexWhitelistRow: fn,
+        removeCodexWhitelistRow: fn,
+        openAIAdvancedSchedulerWeightFields: [],
+        claudeOAuthSystemPromptBlocks: [],
+        claudeOAuthSystemPromptPresetOptions: [],
+        claudeOAuthSystemPromptBlockTypeOptions: [],
+        claudeOAuthSystemPromptCacheTTLOptions: [],
+        getClaudeOAuthPresetLabel: (preset: string) => preset,
+        addClaudeOAuthSystemPromptBlock: fn,
+        resetClaudeOAuthSystemPromptBlocks: fn,
+        toggleClaudeOAuthSystemPromptBlock: fn,
+        moveClaudeOAuthSystemPromptBlock: fn,
+        removeClaudeOAuthSystemPromptBlock: fn,
+        applyClaudeOAuthSystemPromptPreset: fn,
+        markClaudeOAuthSystemPromptBlockCustom: fn,
+        webSearchConfig: { enabled: false, providers: [] },
+        expandedProviders: {},
+        apiKeyVisible: {},
+        webSearchProxies: [],
+        addWebSearchProvider: fn,
+        removeWebSearchProvider: fn,
+        toggleProviderExpand: fn,
+        copyApiKey: fn,
+        formatSubscribedAt: () => '',
+        parseSubscribedAt: () => null,
+        quotaPercentage: () => 0,
+        resetWebSearchUsage: fn,
+        openTestDialog: fn,
       },
       global: {
         stubs: {
@@ -67,5 +128,11 @@ describe('GatewaySettingsTab', () => {
     expect(wrapper.text()).toContain('admin.settings.rectifier.title')
     expect(wrapper.text()).toContain('admin.settings.betaPolicy.title')
     expect(wrapper.text()).toContain('admin.settings.openaiFastPolicy.title')
+    expect(wrapper.text()).toContain('admin.settings.claudeCode.title')
+    expect(wrapper.text()).toContain('admin.settings.gatewayForwarding.codexHardeningTitle')
+    expect(wrapper.text()).toContain('admin.settings.scheduling.title')
+    expect(wrapper.text()).toContain('admin.settings.gatewayForwarding.title')
+    expect(wrapper.text()).toContain('admin.settings.webSearchEmulation.title')
+    expect(wrapper.text()).toContain('admin.settings.usageRecords.title')
   })
 })
