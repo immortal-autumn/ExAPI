@@ -12,6 +12,7 @@ import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
+import { isSingleUserGatewayRestrictedPath, singleUserGatewayRedirectPath } from './singleUserGatewayMode'
 import { resolveRouteDocumentTitle } from './title'
 
 /**
@@ -869,21 +870,12 @@ router.beforeEach(async (to, _from, next) => {
     }
   }
 
-  // 简易模式下限制访问某些页面
-  if (authStore.isSimpleMode) {
-    const restrictedPaths = [
-      '/admin/groups',
-      '/admin/subscriptions',
-      '/admin/redeem',
-      '/subscriptions',
-      '/redeem'
-    ]
-
-    if (restrictedPaths.some((path) => to.path.startsWith(path))) {
-      // 简易模式下访问受限页面,重定向到仪表板
-      next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
-      return
-    }
+  // Single-user gateway mode: keep only gateway/account/key/control-plane surfaces.
+  // Multi-user, payment/order, affiliate, subscription, and redeem management stay
+  // out of the private gateway UI even if legacy routes still exist for compatibility.
+  if (isSingleUserGatewayRestrictedPath(to.path)) {
+    next(singleUserGatewayRedirectPath(authStore.isAdmin))
+    return
   }
 
   // Backend mode: admin gets full access, non-admin blocked

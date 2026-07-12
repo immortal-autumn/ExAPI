@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -39,6 +41,14 @@ describe('AppSidebar scroll position persistence', () => {
     expect(componentSource).toContain('onMounted')
     expect(componentSource).toContain('appStore.sidebarScrollTop')
     expect(componentSource).toContain('nextTick')
+  })
+})
+
+describe('AppSidebar single-user gateway navigation', () => {
+  it('filters multi-user and payment management routes through the shared restriction helper', () => {
+    expect(componentSource).toContain("import { isSingleUserGatewayRestrictedPath } from '@/router/singleUserGatewayMode'")
+    expect(componentSource).toContain('!isSingleUserGatewayRestrictedPath(item.path)')
+    expect(componentSource).toContain('!isSingleUserGatewayRestrictedPath(child.path)')
   })
 })
 

@@ -196,6 +196,7 @@ import VersionBadge from '@/components/common/VersionBadge.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
 import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
+import { isSingleUserGatewayRestrictedPath } from '@/router/singleUserGatewayMode'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
 
 interface NavItem {
@@ -726,9 +727,14 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
   return items
 }
 
-// finalizeNav 合并三重过滤：featureFlag 过滤 + simple 模式过滤。
+// finalizeNav 合并过滤：featureFlag + single-user gateway route restrictions + simple/private-control hints。
 function finalizeNav(items: NavItem[]): NavItem[] {
   const visible = applyFeatureFlags(items)
+    .filter((item) => !isSingleUserGatewayRestrictedPath(item.path))
+    .map((item) => item.children
+      ? { ...item, children: item.children.filter((child) => !isSingleUserGatewayRestrictedPath(child.path)) }
+      : item)
+    .filter((item) => !item.children || item.children.length > 0)
   return singleUserPrivateControlPlane.value ? visible.filter(item => !item.hideInSimpleMode) : visible
 }
 
@@ -808,9 +814,9 @@ const adminNavItems = computed((): NavItem[] => {
     { path: '/admin/usage', label: t('nav.usage'), icon: ChartIcon }
   ]
 
-  const visible = applyFeatureFlags(baseItems)
+  const visible = finalizeNav(baseItems)
 
-  // 简单模式下，在系统设置前插入 API密钥
+  // 单用户网关控制台在系统设置前插入 API 密钥，保持网关操作的最短路径。
   if (singleUserPrivateControlPlane.value) {
     const filtered = visible.filter(item => !item.hideInSimpleMode)
     filtered.push({ path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon })

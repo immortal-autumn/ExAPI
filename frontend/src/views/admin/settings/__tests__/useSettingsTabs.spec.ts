@@ -8,12 +8,12 @@ describe('useSettingsTabs', () => {
       'agreement',
       'features',
       'security',
-      'users',
       'gateway',
-      'payment',
       'email',
       'backup',
     ])
+    expect(SETTINGS_TABS.map((tab) => tab.key)).not.toContain('users')
+    expect(SETTINGS_TABS.map((tab) => tab.key)).not.toContain('payment')
   })
 
   it('wraps arrow-key navigation across tabs', () => {

@@ -5,9 +5,7 @@ export const SETTINGS_TABS: SettingsTabMeta[] = [
   { key: 'agreement', icon: 'document' },
   { key: 'features', icon: 'bolt' },
   { key: 'security', icon: 'shield' },
-  { key: 'users', icon: 'user' },
   { key: 'gateway', icon: 'server' },
-  { key: 'payment', icon: 'creditCard' },
   { key: 'email', icon: 'mail' },
   { key: 'backup', icon: 'database' },
 ]

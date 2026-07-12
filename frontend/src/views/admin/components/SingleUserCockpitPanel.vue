@@ -8,7 +8,7 @@
             <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Single-user cockpit</h2>
           </div>
           <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Private control plane for quota monitoring, wakeup readiness, and multi-account switching.
+            Private gateway control plane for quota monitoring, wakeup readiness, and upstream account switching.
           </p>
         </div>
         <div class="flex gap-2">
@@ -77,7 +77,7 @@
 
         <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
           <div class="mb-3 flex items-center justify-between">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Multi-account management</h3>
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Upstream account routing</h3>
             <button class="text-xs text-primary-600 hover:text-primary-500 dark:text-primary-400" @click="router.push('/admin/accounts')">
               Open table
             </button>
