@@ -8,6 +8,7 @@ import { resolveRouteDocumentTitle } from '@/router/title'
 import AnnouncementPopup from '@/components/common/AnnouncementPopup.vue'
 import { useAppStore, useAuthStore, useSubscriptionStore, useAnnouncementStore, useAdminComplianceStore, useAdminSettingsStore } from '@/stores'
 import { getSetupStatus } from '@/api/setup'
+import { isSingleUserPrivateControlPlaneBrowser } from '@/router/singleUserGatewayMode'
 
 const router = useRouter()
 const route = useRoute()
@@ -17,6 +18,7 @@ const subscriptionStore = useSubscriptionStore()
 const announcementStore = useAnnouncementStore()
 const adminComplianceStore = useAdminComplianceStore()
 const adminSettingsStore = useAdminSettingsStore()
+const saasFeaturesEnabled = !isSingleUserPrivateControlPlaneBrowser()
 
 function updateDocumentTitle() {
   const customMenuItems = [
@@ -69,7 +71,7 @@ watch(
 
 // Watch for authentication state and manage subscription data + announcements
 function onVisibilityChange() {
-  if (document.visibilityState === 'visible' && authStore.isAuthenticated) {
+  if (saasFeaturesEnabled && document.visibilityState === 'visible' && authStore.isAuthenticated) {
     announcementStore.fetchAnnouncements()
   }
 }
@@ -89,23 +91,24 @@ watch(
         })
       }
 
-      // User logged in: preload subscriptions and start polling
-      subscriptionStore.fetchActiveSubscriptions().catch((error) => {
-        console.error('Failed to preload subscriptions:', error)
-      })
-      subscriptionStore.startPolling()
+      if (saasFeaturesEnabled) {
+        // User logged in: preload subscriptions and start polling
+        subscriptionStore.fetchActiveSubscriptions().catch((error) => {
+          console.error('Failed to preload subscriptions:', error)
+        })
+        subscriptionStore.startPolling()
 
-      // Announcements: new login vs page refresh restore
-      if (oldValue === false) {
-        // New login: delay 3s then force fetch
-        setTimeout(() => announcementStore.fetchAnnouncements(true), 3000)
-      } else {
-        // Page refresh restore (oldValue was undefined)
-        announcementStore.fetchAnnouncements()
+        // Announcements: new login vs page refresh restore
+        if (oldValue === false) {
+          // New login: delay 3s then force fetch
+          setTimeout(() => announcementStore.fetchAnnouncements(true), 3000)
+        } else {
+          // Page refresh restore (oldValue was undefined)
+          announcementStore.fetchAnnouncements()
+        }
+
+        document.addEventListener('visibilitychange', onVisibilityChange)
       }
-
-      // Register visibility change listener
-      document.addEventListener('visibilitychange', onVisibilityChange)
     } else {
       // User logged out: clear data and stop polling
       subscriptionStore.clear()
@@ -119,7 +122,7 @@ watch(
 
 // Route change trigger (throttled by store)
 router.afterEach(() => {
-  if (authStore.isAuthenticated) {
+  if (saasFeaturesEnabled && authStore.isAuthenticated) {
     announcementStore.fetchAnnouncements()
   }
 })
@@ -155,6 +158,6 @@ onMounted(async () => {
   <NavigationProgress />
   <RouterView />
   <Toast />
-  <AnnouncementPopup />
+  <AnnouncementPopup v-if="saasFeaturesEnabled" />
   <AdminComplianceDialog />
 </template>
