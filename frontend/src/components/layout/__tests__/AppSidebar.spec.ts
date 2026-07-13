@@ -55,6 +55,10 @@ describe('AppSidebar single-user gateway navigation', () => {
     expect(componentSource).toContain('authStore.isSimpleMode || isSingleUserPrivateControlPlaneBrowser()')
     expect(componentSource).not.toContain("window.location.hostname\n  return host === '100.97.17.1'")
   })
+
+  it('fetches admin settings through one lifecycle path', () => {
+    expect(componentSource.match(/adminSettingsStore\.fetch\(\)/g)).toHaveLength(1)
+  })
 })
 
 describe('AppSidebar header styles', () => {

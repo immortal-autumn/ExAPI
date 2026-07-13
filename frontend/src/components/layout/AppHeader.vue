@@ -145,7 +145,7 @@
                   {{ t('nav.profile') }}
                 </router-link>
 
-                <router-link to="/keys" @click="closeDropdown" class="dropdown-item">
+                <router-link :to="privateGatewayControlPlane ? '/admin/api-keys' : '/keys'" @click="closeDropdown" class="dropdown-item">
                   <Icon name="key" size="sm" />
                   {{ t('nav.apiKeys') }}
                 </router-link>

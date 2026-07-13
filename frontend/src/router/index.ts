@@ -192,15 +192,7 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/keys',
-    name: 'Keys',
-    component: () => import('@/views/user/KeysView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: false,
-      title: 'API Keys',
-      titleKey: 'keys.title',
-      descriptionKey: 'keys.description'
-    }
+    redirect: '/admin/api-keys'
   },
   {
     path: '/batch-image',
@@ -398,6 +390,18 @@ const routes: RouteRecordRaw[] = [
       title: 'Admin Dashboard',
       titleKey: 'admin.dashboard.title',
       descriptionKey: 'admin.dashboard.description'
+    }
+  },
+  {
+    path: '/admin/api-keys',
+    name: 'AdminAPIKeys',
+    component: () => import('@/views/user/KeysView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'API Keys',
+      titleKey: 'keys.title',
+      descriptionKey: 'keys.description'
     }
   },
   {

@@ -19,5 +19,6 @@ describe('AppHeader single-user gateway cleanup', () => {
     expect(componentSource).toContain('isSingleUserPrivateControlPlaneBrowser')
     expect(componentSource).toContain("defineAsyncComponent(() => import('@/components/common/AnnouncementBell.vue'))")
     expect(componentSource).toContain("defineAsyncComponent(() => import('@/components/common/SubscriptionProgressMini.vue'))")
+    expect(componentSource).toContain(":to=\"privateGatewayControlPlane ? '/admin/api-keys' : '/keys'\"")
   })
 })
