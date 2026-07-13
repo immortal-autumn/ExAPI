@@ -5,8 +5,6 @@ describe('useSettingsTabs', () => {
   it('keeps the expected settings tab order', () => {
     expect(SETTINGS_TABS.map((tab) => tab.key)).toEqual([
       'general',
-      'agreement',
-      'features',
       'security',
       'gateway',
       'email',
@@ -19,7 +17,7 @@ describe('useSettingsTabs', () => {
   it('wraps arrow-key navigation across tabs', () => {
     expect(getNextSettingsTab('general', 'ArrowLeft')).toBe('backup')
     expect(getNextSettingsTab('general', 'ArrowUp')).toBe('backup')
-    expect(getNextSettingsTab('general', 'ArrowRight')).toBe('agreement')
+    expect(getNextSettingsTab('general', 'ArrowRight')).toBe('security')
     expect(getNextSettingsTab('backup', 'ArrowRight')).toBe('general')
   })
 

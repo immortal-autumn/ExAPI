@@ -46,7 +46,7 @@
 
         <!-- Tab: Security -->
         <SecuritySettingsTab
-          v-show="activeTab === 'security'"
+          v-if="activeTab === 'security'"
           v-model:registration-email-suffix-whitelist-draft="registrationEmailSuffixWhitelistDraft"
           :form="form"
           :admin-api-key-loading="adminApiKeyLoading"
@@ -83,7 +83,7 @@
 
         <!-- Tab: Gateway -->
         <GatewaySettingsTab
-          v-show="activeTab === 'gateway'"
+          v-if="activeTab === 'gateway'"
           :overload-cooldown-loading="overloadCooldownLoading"
           :overload-cooldown-saving="overloadCooldownSaving"
           :overload-cooldown-form="overloadCooldownForm"
@@ -260,7 +260,7 @@
           </div>
         </div>
         <!-- Tab: General -->
-        <div v-show="activeTab === 'general'" class="space-y-6">
+        <div v-if="activeTab === 'general'" class="space-y-6">
           <GeneralSettingsTab
             v-model:table-page-size-options-input="tablePageSizeOptionsInput"
             :form="form"
@@ -525,7 +525,7 @@
         />
 
         <EmailSettingsTab
-          v-show="activeTab === 'email'"
+          v-if="activeTab === 'email'"
           :form="form"
           :testing-smtp="testingSmtp"
           :load-failed="loadFailed"
@@ -542,7 +542,7 @@
         <!-- /Tab: Email -->
 
         <!-- Tab: Backup -->
-        <BackupSettingsTab v-show="activeTab === 'backup'" />
+        <BackupSettingsTab v-if="activeTab === 'backup'" />
 
         <!-- Save Button -->
         <div v-show="activeTab !== 'backup'" class="flex justify-end">
@@ -616,7 +616,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from "vue";
+import { ref, reactive, computed, onMounted, watch, defineAsyncComponent } from "vue";
 import { useI18n } from "vue-i18n";
 import { adminAPI } from "@/api";
 import {
@@ -653,15 +653,15 @@ import AppLayout from "@/components/layout/AppLayout.vue";
 import Icon from "@/components/icons/Icon.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import PaymentProviderDialog from "@/components/payment/PaymentProviderDialog.vue";
-import GeneralSettingsTab from "@/views/admin/settings/tabs/GeneralSettingsTab.vue";
+const GeneralSettingsTab = defineAsyncComponent(() => import("@/views/admin/settings/tabs/GeneralSettingsTab.vue"));
 import AgreementSettingsTab from "@/views/admin/settings/tabs/AgreementSettingsTab.vue";
 import FeaturesSettingsTab from "@/views/admin/settings/tabs/FeaturesSettingsTab.vue";
-import SecuritySettingsTab from "@/views/admin/settings/tabs/SecuritySettingsTab.vue";
-import GatewaySettingsTab from "@/views/admin/settings/tabs/GatewaySettingsTab.vue";
+const SecuritySettingsTab = defineAsyncComponent(() => import("@/views/admin/settings/tabs/SecuritySettingsTab.vue"));
+const GatewaySettingsTab = defineAsyncComponent(() => import("@/views/admin/settings/tabs/GatewaySettingsTab.vue"));
 import UserSettingsTab from "@/views/admin/settings/tabs/UserSettingsTab.vue";
 import PaymentSettingsTab from "@/views/admin/settings/tabs/PaymentSettingsTab.vue";
-import EmailSettingsTab from "@/views/admin/settings/tabs/EmailSettingsTab.vue";
-import BackupSettingsTab from "@/views/admin/settings/tabs/BackupSettingsTab.vue";
+const EmailSettingsTab = defineAsyncComponent(() => import("@/views/admin/settings/tabs/EmailSettingsTab.vue"));
+const BackupSettingsTab = defineAsyncComponent(() => import("@/views/admin/settings/tabs/BackupSettingsTab.vue"));
 import { useClipboard } from "@/composables/useClipboard";
 import { affiliatesAPI, type AffiliateAdminEntry, type SimpleUser as AffiliateSimpleUser } from "@/api/admin/affiliates";
 import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiError";

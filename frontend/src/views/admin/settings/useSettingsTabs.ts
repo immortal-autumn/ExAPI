@@ -2,8 +2,6 @@ import type { SettingsTab, SettingsTabMeta } from './types'
 
 export const SETTINGS_TABS: SettingsTabMeta[] = [
   { key: 'general', icon: 'home' },
-  { key: 'agreement', icon: 'document' },
-  { key: 'features', icon: 'bolt' },
   { key: 'security', icon: 'shield' },
   { key: 'gateway', icon: 'server' },
   { key: 'email', icon: 'mail' },
