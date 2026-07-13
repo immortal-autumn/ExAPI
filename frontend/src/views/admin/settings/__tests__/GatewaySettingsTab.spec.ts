@@ -122,12 +122,11 @@ describe('GatewaySettingsTab', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('admin.settings.overloadCooldown.title')
-    expect(wrapper.text()).toContain('admin.settings.rateLimit429Cooldown.title')
-    expect(wrapper.text()).toContain('admin.settings.streamTimeout.title')
-    expect(wrapper.text()).toContain('admin.settings.rectifier.title')
-    expect(wrapper.text()).toContain('admin.settings.betaPolicy.title')
-    expect(wrapper.text()).toContain('admin.settings.openaiFastPolicy.title')
+    expect(wrapper.text()).toContain('cooldown-panel')
+    expect(wrapper.text()).toContain('stream-timeout-panel')
+    expect(wrapper.text()).toContain('rectifier-panel')
+    expect(wrapper.text()).toContain('beta-policy-panel')
+    expect(wrapper.text()).toContain('openai-fast-policy-panel')
     expect(wrapper.text()).toContain('admin.settings.claudeCode.title')
     expect(wrapper.text()).toContain('admin.settings.gatewayForwarding.codexHardeningTitle')
     expect(wrapper.text()).toContain('admin.settings.scheduling.title')
