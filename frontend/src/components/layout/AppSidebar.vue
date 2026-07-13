@@ -25,7 +25,7 @@
           {{ siteName }}
         </router-link>
         <!-- Version Badge -->
-        <VersionBadge :version="siteVersion" />
+        <VersionBadge :version="siteVersion" :disable-updates="singleUserPrivateControlPlane" />
       </div>
     </div>
 

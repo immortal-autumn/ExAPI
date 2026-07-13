@@ -1,7 +1,7 @@
 <template>
   <div class="relative">
     <!-- Admin: Full version badge with dropdown -->
-    <template v-if="isAdmin">
+    <template v-if="isAdmin && !disableUpdates">
       <button
         @click="toggleDropdown"
         class="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs transition-colors"
@@ -631,8 +631,8 @@
     </template>
 
     <!-- Non-admin: Simple static version text -->
-    <span v-else-if="version" class="text-xs text-gray-500 dark:text-dark-400">
-      v{{ version }}
+    <span v-else-if="currentVersion" class="text-xs text-gray-500 dark:text-dark-400">
+      v{{ currentVersion }}
     </span>
   </div>
 </template>
@@ -659,12 +659,14 @@ const { t } = useI18n()
 
 const props = defineProps<{
   version?: string
+  disableUpdates?: boolean
 }>()
 
 const authStore = useAuthStore()
 const appStore = useAppStore()
 
 const isAdmin = computed(() => authStore.isAdmin)
+const disableUpdates = computed(() => props.disableUpdates === true)
 
 const dropdownOpen = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
@@ -732,6 +734,7 @@ const activeManualCommand = computed(() =>
 const isReleaseBuild = computed(() => buildType.value === 'release')
 
 function toggleDropdown() {
+  if (disableUpdates.value) return
   dropdownOpen.value = !dropdownOpen.value
 }
 
@@ -740,7 +743,7 @@ function closeDropdown() {
 }
 
 async function refreshVersion(force = true) {
-  if (!isAdmin.value) return
+  if (!isAdmin.value || disableUpdates.value) return
 
   // Reset update states when refreshing
   updateError.value = ''
@@ -752,6 +755,7 @@ async function refreshVersion(force = true) {
 }
 
 async function handleUpdate() {
+  if (disableUpdates.value) return
   if (updating.value) return
 
   updating.value = true
@@ -783,7 +787,7 @@ function resetRollbackState() {
 }
 
 async function toggleRollbackPanel() {
-  if (!isAdmin.value) return
+  if (!isAdmin.value || disableUpdates.value) return
   rollbackPanelOpen.value = !rollbackPanelOpen.value
   // Source builds only show a hint, no version list to fetch
   if (
@@ -797,7 +801,7 @@ async function toggleRollbackPanel() {
 }
 
 async function loadRollbackVersions() {
-  if (!isAdmin.value) return
+  if (!isAdmin.value || disableUpdates.value) return
   rollbackVersionsLoading.value = true
   rollbackVersionsError.value = ''
   try {
@@ -826,7 +830,7 @@ function formatPublishedAt(publishedAt: string): string {
 }
 
 async function handleRollback() {
-  if (!isAdmin.value) return
+  if (!isAdmin.value || disableUpdates.value) return
   if (rollingBack.value || !selectedRollbackVersion.value) return
 
   rollingBack.value = true
@@ -849,6 +853,7 @@ async function handleRollback() {
 }
 
 async function handleRestart() {
+  if (disableUpdates.value) return
   if (restarting.value) return
 
   restarting.value = true
@@ -910,7 +915,7 @@ function handleClickOutside(event: MouseEvent) {
 }
 
 onMounted(() => {
-  if (isAdmin.value) {
+  if (isAdmin.value && !disableUpdates.value) {
     // Use cached version if available, otherwise fetch
     appStore.fetchVersion(false)
   }
