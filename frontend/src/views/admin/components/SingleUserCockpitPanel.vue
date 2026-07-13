@@ -158,8 +158,6 @@ let copyTimer: ReturnType<typeof setTimeout> | null = null
 
 const links = computed(() => getLocalIntegrationLinks({
   origin: typeof window !== 'undefined' ? window.location.origin : undefined,
-  publicHost: 'sub2api.research.for-immortal.cn',
-  wireGuardURL: 'http://100.97.17.1:8027',
 }))
 
 const summary = computed(() => buildSingleUserCockpitSummary(accounts.value))

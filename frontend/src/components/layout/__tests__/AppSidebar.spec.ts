@@ -46,9 +46,14 @@ describe('AppSidebar scroll position persistence', () => {
 
 describe('AppSidebar single-user gateway navigation', () => {
   it('filters multi-user and payment management routes through the shared restriction helper', () => {
-    expect(componentSource).toContain("import { isSingleUserGatewayRestrictedPath } from '@/router/singleUserGatewayMode'")
+    expect(componentSource).toContain("isSingleUserPrivateControlPlaneBrowser")
     expect(componentSource).toContain('!isSingleUserGatewayRestrictedPath(item.path)')
     expect(componentSource).toContain('!isSingleUserGatewayRestrictedPath(child.path)')
+  })
+
+  it('uses the centralized private-control-plane host helper', () => {
+    expect(componentSource).toContain('authStore.isSimpleMode || isSingleUserPrivateControlPlaneBrowser()')
+    expect(componentSource).not.toContain("window.location.hostname\n  return host === '100.97.17.1'")
   })
 })
 

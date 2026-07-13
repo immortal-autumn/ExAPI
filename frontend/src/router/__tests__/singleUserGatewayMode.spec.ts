@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   SINGLE_USER_GATEWAY_RESTRICTED_PREFIXES,
   isSingleUserGatewayRestrictedPath,
+  isSingleUserPrivateControlPlaneHost,
 } from '../singleUserGatewayMode'
 
 describe('single-user gateway mode route restrictions', () => {
@@ -31,6 +32,14 @@ describe('single-user gateway mode route restrictions', () => {
     ]) {
       expect(isSingleUserGatewayRestrictedPath(path)).toBe(true)
     }
+  })
+
+  it('centralizes private control-plane host detection', () => {
+    for (const host of ['localhost', '127.0.0.1', '::1', '100.97.17.1']) {
+      expect(isSingleUserPrivateControlPlaneHost(host)).toBe(true)
+    }
+
+    expect(isSingleUserPrivateControlPlaneHost('sub2api.research.for-immortal.cn')).toBe(false)
   })
 
   it('keeps gateway/account/key/control-plane routes available', () => {

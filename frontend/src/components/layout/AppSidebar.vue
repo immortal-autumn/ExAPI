@@ -196,7 +196,7 @@ import VersionBadge from '@/components/common/VersionBadge.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
 import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
-import { isSingleUserGatewayRestrictedPath } from '@/router/singleUserGatewayMode'
+import { isSingleUserGatewayRestrictedPath, isSingleUserPrivateControlPlaneBrowser } from '@/router/singleUserGatewayMode'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
 
 interface NavItem {
@@ -252,11 +252,7 @@ const sidebarNavRef = ref<HTMLElement | null>(null)
 const isDark = ref(document.documentElement.classList.contains('dark'))
 
 const homePath = computed(() => (isAdmin.value ? '/admin/dashboard' : '/dashboard'))
-const singleUserPrivateControlPlane = computed(() => {
-  if (authStore.isSimpleMode) return true
-  const host = window.location.hostname
-  return host === '100.97.17.1' || host === '127.0.0.1' || host === 'localhost' || host === '::1'
-})
+const singleUserPrivateControlPlane = computed(() => authStore.isSimpleMode || isSingleUserPrivateControlPlaneBrowser())
 
 // Track which parent nav groups are expanded
 const expandedGroups = ref<Set<string>>(new Set())

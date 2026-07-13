@@ -12,7 +12,7 @@ import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
-import { isSingleUserGatewayRestrictedPath, singleUserGatewayRedirectPath } from './singleUserGatewayMode'
+import { isSingleUserGatewayRestrictedPath, isSingleUserPrivateControlPlaneBrowser, singleUserGatewayRedirectPath } from './singleUserGatewayMode'
 import { resolveRouteDocumentTitle } from './title'
 
 /**
@@ -230,7 +230,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/redeem',
     name: 'Redeem',
-    component: () => import('@/views/user/RedeemView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -242,7 +242,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/affiliate',
     name: 'Affiliate',
-    component: () => import('@/views/user/AffiliateView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -254,7 +254,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/available-channels',
     name: 'UserAvailableChannels',
-    component: () => import('@/views/user/AvailableChannelsView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -278,7 +278,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/subscriptions',
     name: 'Subscriptions',
-    component: () => import('@/views/user/SubscriptionsView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -290,7 +290,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/purchase',
     name: 'PurchaseSubscription',
-    component: () => import('@/views/user/PaymentView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -303,7 +303,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/orders',
     name: 'OrderList',
-    component: () => import('@/views/user/UserOrdersView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -315,7 +315,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/payment/qrcode',
     name: 'PaymentQRCode',
-    component: () => import('@/views/user/PaymentQRCodeView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -327,7 +327,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/payment/result',
     name: 'PaymentResult',
-    component: () => import('@/views/user/PaymentResultView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: false,
       requiresAdmin: false,
@@ -339,7 +339,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/payment/stripe',
     name: 'StripePayment',
-    component: () => import('@/views/user/StripePaymentView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: false,
       requiresAdmin: false,
@@ -351,7 +351,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/payment/airwallex',
     name: 'AirwallexPayment',
-    component: () => import('@/views/user/AirwallexPaymentView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: false,
       requiresAdmin: false,
@@ -363,7 +363,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/payment/stripe-popup',
     name: 'StripePopup',
-    component: () => import('@/views/user/StripePopupView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: false,
       requiresAdmin: false,
@@ -415,7 +415,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/users',
     name: 'AdminUsers',
-    component: () => import('@/views/admin/UsersView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -427,7 +427,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/groups',
     name: 'AdminGroups',
-    component: () => import('@/views/admin/GroupsView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -478,7 +478,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/subscriptions',
     name: 'AdminSubscriptions',
-    component: () => import('@/views/admin/SubscriptionsView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -502,7 +502,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/announcements',
     name: 'AdminAnnouncements',
-    component: () => import('@/views/admin/AnnouncementsView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -526,7 +526,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/redeem',
     name: 'AdminRedeem',
-    component: () => import('@/views/admin/RedeemView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -538,7 +538,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/promo-codes',
     name: 'AdminPromoCodes',
-    component: () => import('@/views/admin/PromoCodesView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -591,7 +591,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/affiliates/invites',
     name: 'AdminAffiliateInvites',
-    component: () => import('@/views/admin/affiliates/AdminAffiliateInvitesView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -603,7 +603,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/affiliates/rebates',
     name: 'AdminAffiliateRebates',
-    component: () => import('@/views/admin/affiliates/AdminAffiliateRebatesView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -615,7 +615,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/affiliates/transfers',
     name: 'AdminAffiliateTransfers',
-    component: () => import('@/views/admin/affiliates/AdminAffiliateTransfersView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -630,7 +630,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/orders/dashboard',
     name: 'AdminPaymentDashboard',
-    component: () => import('@/views/admin/orders/AdminPaymentDashboardView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -642,7 +642,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/orders',
     name: 'AdminOrders',
-    component: () => import('@/views/admin/orders/AdminOrdersView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -654,7 +654,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/orders/plans',
     name: 'AdminPaymentPlans',
-    component: () => import('@/views/admin/orders/AdminPaymentPlansView.vue'),
+    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -713,11 +713,7 @@ const BACKEND_MODE_CALLBACK_PATHS = [
 const BACKEND_MODE_PENDING_AUTH_PATHS = ['/register', '/email-verify']
 
 function isLocalAdminBypassBrowserHost(): boolean {
-  if (typeof window === 'undefined') {
-    return false
-  }
-  const host = window.location.hostname.toLowerCase()
-  return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '100.97.17.1'
+  return isSingleUserPrivateControlPlaneBrowser()
 }
 
 function isBackendModePublicRouteAllowed(path: string, hasPendingAuthSession: boolean): boolean {

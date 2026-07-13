@@ -24,7 +24,7 @@
       <!-- Right: Announcements + Docs + Subscriptions + Balance + User Dropdown -->
       <div class="flex items-center gap-3">
         <!-- Announcement Bell -->
-        <AnnouncementBell v-if="user" />
+        <AnnouncementBell v-if="showSaasHeaderWidgets" />
 
         <!-- Docs Link -->
         <a
@@ -39,11 +39,11 @@
         </a>
 
         <!-- Subscription Progress (for users with active subscriptions) -->
-        <SubscriptionProgressMini v-if="user" />
+        <SubscriptionProgressMini v-if="showSaasHeaderWidgets" />
 
         <!-- Balance Display -->
         <div
-          v-if="user"
+          v-if="showSaasHeaderWidgets"
           class="group relative hidden items-center gap-2 rounded-xl bg-primary-50 px-3 py-1.5 dark:bg-primary-900/20 sm:flex"
         >
           <svg
@@ -127,7 +127,7 @@
               </div>
 
               <!-- Balance (mobile only) -->
-              <div class="border-b border-gray-100 px-4 py-2 dark:border-dark-700 sm:hidden">
+              <div v-if="showSaasHeaderWidgets" class="border-b border-gray-100 px-4 py-2 dark:border-dark-700 sm:hidden">
                 <div class="text-xs text-gray-500 dark:text-dark-400">
                   {{ t('common.balance') }}
                 </div>
@@ -237,15 +237,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
 import { useAdminSettingsStore } from '@/stores/adminSettings'
-import SubscriptionProgressMini from '@/components/common/SubscriptionProgressMini.vue'
-import AnnouncementBell from '@/components/common/AnnouncementBell.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { sanitizeUrl } from '@/utils/url'
+import { isSingleUserPrivateControlPlaneBrowser } from '@/router/singleUserGatewayMode'
 
 const router = useRouter()
 const route = useRoute()
@@ -255,7 +254,12 @@ const authStore = useAuthStore()
 const adminSettingsStore = useAdminSettingsStore()
 const onboardingStore = useOnboardingStore()
 
+const AnnouncementBell = defineAsyncComponent(() => import('@/components/common/AnnouncementBell.vue'))
+const SubscriptionProgressMini = defineAsyncComponent(() => import('@/components/common/SubscriptionProgressMini.vue'))
+
 const user = computed(() => authStore.user)
+const privateGatewayControlPlane = computed(() => authStore.isSimpleMode || isSingleUserPrivateControlPlaneBrowser())
+const showSaasHeaderWidgets = computed(() => Boolean(user.value) && !privateGatewayControlPlane.value)
 const dropdownOpen = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
 const contactInfo = computed(() => appStore.contactInfo)
