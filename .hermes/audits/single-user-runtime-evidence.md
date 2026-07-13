@@ -31,3 +31,16 @@ Do not add indexes, remove indexes, rewrite queries, vacuum manually, or change 
 ## Dormant compatibility code
 
 Frontend customer/payment settings logic remains source-coupled inside `SettingsView.vue`, but its tabs are absent from the operator surface, its panels are conditionally unmounted, and its subscription/payment/affiliate loaders are disabled on private control-plane hosts. A wholesale deletion would require a high-risk rewrite of a 4,000-line component for no additional runtime-request benefit. Backend route families and the subscription-expiry worker are disabled by product mode while database schema and dependency constructors remain intact for migration compatibility.
+
+## Final validation and deployment
+
+- Backend: `GOTOOLCHAIN=auto go test ./...` passed.
+- Frontend: 191 test files passed; 984 tests passed; 11 retired Payment/Users UI cases were explicitly skipped after those tabs left the product surface.
+- `vue-tsc -b`, production build, and bundle-budget enforcement passed.
+- Deployed image: `sha256:e8904927e22a7859a7d5ef50a036e542f79b900274d060811bce83b509803e49`.
+- Only the `sub2api` application container was recreated; PostgreSQL and Redis remained healthy and untouched.
+- Live private checks: `/health`, `/admin/dashboard`, `/admin/api-keys`, and `/admin/settings` returned `200` and rendered in the browser.
+- Live retired surfaces: registration, payment administration, multi-user administration, announcements, public login, and updater checks returned `404`.
+- Public `/v1/models` without credentials returned `401`, preserving the authentication boundary.
+- Fresh browser resource inspection after the prior three-second timer window found no requests to `/subscriptions/active`, `/announcements`, or `/admin/payment/config`; console and JavaScript error counts were zero.
+- Authenticated `/v1` content was not rerun because no raw API-key secret was retained or exposed. The earlier authenticated model-list and `codex-auto-review` completion regression remains the latest credentialed evidence.
