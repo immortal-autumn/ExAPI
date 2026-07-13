@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -25,22 +26,24 @@ func RegisterUserRoutes(
 			user.GET("/profile", h.User.GetProfile)
 			user.PUT("/password", h.User.ChangePassword)
 			user.PUT("", h.User.UpdateProfile)
-			user.GET("/aff", h.User.GetAffiliate)
-			user.POST("/aff/transfer", h.User.TransferAffiliateQuota)
-			user.POST("/account-bindings/email/send-code", h.User.SendEmailBindingCode)
-			user.POST("/account-bindings/email", h.User.BindEmailIdentity)
-			user.DELETE("/account-bindings/:provider", h.User.UnbindIdentity)
-			user.POST("/auth-identities/bind/start", h.User.StartIdentityBinding)
 			user.GET("/api-keys/:id/usage/daily", h.Usage.GetMyAPIKeyDailyUsage)
 			user.GET("/platform-quotas", h.User.GetMyPlatformQuotas)
 
-			// 通知邮箱管理
-			notifyEmail := user.Group("/notify-email")
-			{
-				notifyEmail.POST("/send-code", h.User.SendNotifyEmailCode)
-				notifyEmail.POST("/verify", h.User.VerifyNotifyEmail)
-				notifyEmail.PUT("/toggle", h.User.ToggleNotifyEmail)
-				notifyEmail.DELETE("", h.User.RemoveNotifyEmail)
+			if config.SaaSFeaturesEnabled() {
+				user.GET("/aff", h.User.GetAffiliate)
+				user.POST("/aff/transfer", h.User.TransferAffiliateQuota)
+				user.POST("/account-bindings/email/send-code", h.User.SendEmailBindingCode)
+				user.POST("/account-bindings/email", h.User.BindEmailIdentity)
+				user.DELETE("/account-bindings/:provider", h.User.UnbindIdentity)
+				user.POST("/auth-identities/bind/start", h.User.StartIdentityBinding)
+
+				notifyEmail := user.Group("/notify-email")
+				{
+					notifyEmail.POST("/send-code", h.User.SendNotifyEmailCode)
+					notifyEmail.POST("/verify", h.User.VerifyNotifyEmail)
+					notifyEmail.PUT("/toggle", h.User.ToggleNotifyEmail)
+					notifyEmail.DELETE("", h.User.RemoveNotifyEmail)
+				}
 			}
 
 			// TOTP 双因素认证
@@ -72,10 +75,12 @@ func RegisterUserRoutes(
 			groups.GET("/rates", h.APIKey.GetUserGroupRates)
 		}
 
-		// 用户可用渠道（非管理员接口）
-		channels := authenticated.Group("/channels")
-		{
-			channels.GET("/available", h.AvailableChannel.List)
+		if config.SaaSFeaturesEnabled() {
+			// 用户可用渠道（非管理员接口）
+			channels := authenticated.Group("/channels")
+			{
+				channels.GET("/available", h.AvailableChannel.List)
+			}
 		}
 
 		// 使用记录
@@ -94,27 +99,26 @@ func RegisterUserRoutes(
 			usage.POST("/dashboard/api-keys-usage", h.Usage.DashboardAPIKeysUsage)
 		}
 
-		// 公告（用户可见）
-		announcements := authenticated.Group("/announcements")
-		{
-			announcements.GET("", h.Announcement.List)
-			announcements.POST("/:id/read", h.Announcement.MarkRead)
-		}
+		if config.SaaSFeaturesEnabled() {
+			announcements := authenticated.Group("/announcements")
+			{
+				announcements.GET("", h.Announcement.List)
+				announcements.POST("/:id/read", h.Announcement.MarkRead)
+			}
 
-		// 卡密兑换
-		redeem := authenticated.Group("/redeem")
-		{
-			redeem.POST("", h.Redeem.Redeem)
-			redeem.GET("/history", h.Redeem.GetHistory)
-		}
+			redeem := authenticated.Group("/redeem")
+			{
+				redeem.POST("", h.Redeem.Redeem)
+				redeem.GET("/history", h.Redeem.GetHistory)
+			}
 
-		// 用户订阅
-		subscriptions := authenticated.Group("/subscriptions")
-		{
-			subscriptions.GET("", h.Subscription.List)
-			subscriptions.GET("/active", h.Subscription.GetActive)
-			subscriptions.GET("/progress", h.Subscription.GetProgress)
-			subscriptions.GET("/summary", h.Subscription.GetSummary)
+			subscriptions := authenticated.Group("/subscriptions")
+			{
+				subscriptions.GET("", h.Subscription.List)
+				subscriptions.GET("/active", h.Subscription.GetActive)
+				subscriptions.GET("/progress", h.Subscription.GetProgress)
+				subscriptions.GET("/summary", h.Subscription.GetSummary)
+			}
 		}
 
 		// 渠道监控（用户只读）

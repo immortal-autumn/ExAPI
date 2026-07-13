@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -29,17 +30,22 @@ func RegisterAdminRoutes(
 		// 仪表盘
 		registerDashboardRoutes(admin, h)
 
-		// 用户管理
-		registerUserManagementRoutes(admin, h)
+		// Multi-user commercial administration is omitted from private gateway mode.
+		if config.SaaSFeaturesEnabled() {
+			registerUserManagementRoutes(admin, h)
+			registerAnnouncementRoutes(admin, h)
+			registerRedeemCodeRoutes(admin, h)
+			registerPromoCodeRoutes(admin, h)
+			registerSubscriptionRoutes(admin, h)
+			registerUserAttributeRoutes(admin, h)
+			registerAffiliateRoutes(admin, h)
+		}
 
-		// 分组管理
+		// 分组管理（账号与 API Key 路由依赖）
 		registerGroupRoutes(admin, h)
 
 		// 账号管理
 		registerAccountRoutes(admin, h)
-
-		// 公告管理
-		registerAnnouncementRoutes(admin, h)
 
 		// OpenAI OAuth
 		registerOpenAIOAuthRoutes(admin, h)
@@ -56,12 +62,6 @@ func RegisterAdminRoutes(
 		// 代理管理
 		registerProxyRoutes(admin, h)
 
-		// 卡密管理
-		registerRedeemCodeRoutes(admin, h)
-
-		// 优惠码管理
-		registerPromoCodeRoutes(admin, h)
-
 		// 系统设置
 		registerSettingsRoutes(admin, h)
 
@@ -77,14 +77,8 @@ func RegisterAdminRoutes(
 		// 系统管理
 		registerSystemRoutes(admin, h)
 
-		// 订阅管理
-		registerSubscriptionRoutes(admin, h)
-
 		// 使用记录管理
 		registerUsageRoutes(admin, h)
-
-		// 用户属性管理
-		registerUserAttributeRoutes(admin, h)
 
 		// 错误透传规则管理
 		registerErrorPassthroughRoutes(admin, h)
@@ -106,9 +100,6 @@ func RegisterAdminRoutes(
 
 		// 风控中心
 		registerContentModerationRoutes(admin, h)
-
-		// 邀请返利（专属用户管理）
-		registerAffiliateRoutes(admin, h)
 	}
 }
 

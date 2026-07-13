@@ -225,7 +225,9 @@ func ProvideSubscriptionExpiryService(userSubRepo UserSubscriptionRepository, se
 	svc.SetSettingRepository(settingRepo)
 	svc.SetNotificationEmailService(notificationEmailService)
 	svc.SetLeaderLock(lockCache, db)
-	svc.Start()
+	if config.SaaSFeaturesEnabled() {
+		svc.Start()
+	}
 	return svc
 }
 

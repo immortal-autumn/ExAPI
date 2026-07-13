@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,7 +17,7 @@ import (
 // localhost/WireGuard direct access.
 func PublicControlPlaneGuard() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !singleUserPrivateControlPlaneEnabled() {
+		if !config.SingleUserPrivateControlPlaneEnabled() {
 			c.Next()
 			return
 		}
@@ -32,15 +33,6 @@ func PublicControlPlaneGuard() gin.HandlerFunc {
 		}
 
 		c.AbortWithStatus(http.StatusNotFound)
-	}
-}
-
-func singleUserPrivateControlPlaneEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE"))) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
 	}
 }
 
