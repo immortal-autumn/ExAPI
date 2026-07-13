@@ -163,7 +163,7 @@
 
         <!-- Tab: Users -->
         <UserSettingsTab
-          v-show="activeTab === 'users'"
+          v-if="activeTab === 'users'"
           :form="form"
           :subscription-groups="subscriptionGroups"
           :default-subscription-group-options="defaultSubscriptionGroupOptions"
@@ -462,7 +462,7 @@
 	        <!-- /Tab: General -->
 
         <!-- Tab: Login Agreement -->
-        <div v-show="activeTab === 'agreement'" class="space-y-6">
+        <div v-if="activeTab === 'agreement'" class="space-y-6">
           <AgreementSettingsTab
             :form="form"
             :local-text="localText"
@@ -475,7 +475,7 @@
 
 
         <!-- Tab: Features (功能开关) -->
-        <div v-show="activeTab === 'features'" class="space-y-6">
+        <div v-if="activeTab === 'features'" class="space-y-6">
           <FeaturesSettingsTab
             :form="form"
             :affiliate-state="affiliateState"
@@ -502,7 +502,7 @@
         <!-- Tab: Email -->
         <!-- Tab: Payment -->
         <PaymentSettingsTab
-          v-show="activeTab === 'payment'"
+          v-if="activeTab === 'payment'"
           :form="form"
           :load-balance-options="loadBalanceOptions"
           :cancel-rate-limit-mode-options="cancelRateLimitModeOptions"
@@ -675,6 +675,7 @@ import {
   parseRegistrationEmailSuffixWhitelistInput,
 } from "@/utils/registrationEmailPolicy";
 import { getDefaultSiteName } from '@/config/brand'
+import { isSingleUserPrivateControlPlaneBrowser } from '@/router/singleUserGatewayMode'
 import {
   parseFingerprintSignalsToRows,
   serializeFingerprintRowsToJSON,
@@ -3827,14 +3828,16 @@ async function handleDeleteProvider() {
 
 onMounted(() => {
   loadSettings();
-  loadSubscriptionGroups();
   loadAdminApiKey();
   loadOverloadCooldownSettings();
   loadRateLimit429CooldownSettings();
   loadStreamTimeoutSettings();
   loadRectifierSettings();
   loadBetaPolicySettings();
-  loadProviders();
+  if (!isSingleUserPrivateControlPlaneBrowser()) {
+    loadSubscriptionGroups();
+    loadProviders();
+  }
 });
 
 // =========================
@@ -4184,7 +4187,7 @@ async function submitAffiliateBatchModal() {
 watch(
   () => form.affiliate_enabled,
   (enabled, prev) => {
-    if (enabled && !prev) {
+    if (enabled && !prev && !isSingleUserPrivateControlPlaneBrowser()) {
       loadAffiliateUsers();
     }
   },

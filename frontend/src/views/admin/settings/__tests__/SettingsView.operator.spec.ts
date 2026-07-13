@@ -32,4 +32,16 @@ describe('SettingsView operator tab loading', () => {
       expect(source).toContain(`v-if="activeTab === '${key}'"`)
     }
   })
+
+  it('never mounts unreachable customer and commercial panels', () => {
+    for (const tab of ['agreement', 'features', 'users', 'payment']) {
+      expect(source).not.toContain(`v-show="activeTab === '${tab}'"`)
+    }
+  })
+
+  it('guards customer and commercial loaders outside private mode', () => {
+    expect(source).toContain('if (!isSingleUserPrivateControlPlaneBrowser())')
+    expect(source).toContain('loadSubscriptionGroups();')
+    expect(source).toContain('loadProviders();')
+  })
 })
