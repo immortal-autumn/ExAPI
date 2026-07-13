@@ -1,3 +1,8 @@
+import {
+  SINGLE_USER_LEGACY_PREFIXES,
+  isSingleUserLegacyPath,
+} from '@/config/singleUserProduct'
+
 export const SINGLE_USER_PRIVATE_CONTROL_PLANE_HOSTS = [
   'localhost',
   '127.0.0.1',
@@ -5,33 +10,10 @@ export const SINGLE_USER_PRIVATE_CONTROL_PLANE_HOSTS = [
   '100.97.17.1',
 ] as const
 
-export const SINGLE_USER_GATEWAY_RESTRICTED_PREFIXES = [
-  // Multi-user administration
-  '/admin/users',
-  '/admin/groups',
-  '/admin/subscriptions',
-  '/admin/redeem',
-  '/admin/promo-codes',
-  '/admin/announcements',
-  '/admin/affiliates',
-
-  // Payment/order administration
-  '/admin/orders',
-
-  // User-facing SaaS/payment surfaces that do not belong in a private gateway
-  '/subscriptions',
-  '/purchase',
-  '/orders',
-  '/payment',
-  '/redeem',
-  '/affiliate',
-  '/available-channels',
-] as const
+export const SINGLE_USER_GATEWAY_RESTRICTED_PREFIXES = SINGLE_USER_LEGACY_PREFIXES
 
 export function isSingleUserGatewayRestrictedPath(path: string): boolean {
-  return SINGLE_USER_GATEWAY_RESTRICTED_PREFIXES.some((prefix) => (
-    path === prefix || path.startsWith(`${prefix}/`)
-  ))
+  return isSingleUserLegacyPath(path)
 }
 
 export function isSingleUserPrivateControlPlaneHost(hostname: string): boolean {
