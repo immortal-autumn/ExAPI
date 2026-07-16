@@ -1567,3 +1567,29 @@ git diff --check: PASS
 No live scheduled backup, object, metadata, database, service, or deployment was touched.
 
 Deployment/runtime mutation: none.
+
+## 2026-07-16 — Deployment follow-up: executable Redis authentication contract
+
+The explicitly authorized deployment exposed a defect not caught by render-only Compose tests: the multiline `sh -c` body launched bare `redis-server` as its first blocking command, so later option lines including `--requirepass` were never arguments.
+
+Remediation:
+
+- Reopened `SEC-006` before changing code.
+- Replaced the multiline shell body in standard, local, and development manifests with one `exec redis-server ... --requirepass "$REDISCLI_AUTH"` command.
+- Made the development Redis credential fail closed as well.
+- Upgraded the render regression to parse Compose JSON and assert the exact command vector.
+- Rotated the accidentally exposed deployment Redis credential before final verification.
+
+Verification:
+
+```text
+Compose Redis authentication contract: PASS
+Disposable Redis 8, network=none, host ports=0: PASS
+Disposable unauthenticated PING rejected: PASS
+Disposable authenticated PING accepted: PASS
+Deployed unauthenticated PING rejected: PASS
+Deployed authenticated PING accepted: PASS
+Application health after coordinated Redis/application restart: PASS
+```
+
+`SEC-006` is closed again. The deployment backup is retained under `/home/opc/archive/sub2api-deployments/20260716T105059Z/`.

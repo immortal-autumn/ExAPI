@@ -13,9 +13,16 @@ for file in deploy/docker-compose.yml deploy/docker-compose.local.yml; do
   rendered=$(REDIS_PASSWORD='test-only-redis-password' POSTGRES_PASSWORD='test-only-postgres' \
     SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID=test \
     SUB2API_DATA_ENCRYPTION_KEYS_JSON='{"test":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}' \
-    docker compose -f "$file" config)
-  grep -q -- '--requirepass "test-only-redis-password"' <<<"$rendered" || fail "$file omitted Redis requirepass"
-  grep -q 'REDIS_PASSWORD: test-only-redis-password' <<<"$rendered" || fail "$file omitted application Redis password"
+    docker compose -f "$file" config --format json)
+  python3 -c '
+import json, sys
+cfg = json.load(sys.stdin)
+expected = "exec redis-server --save 60 1 --appendonly yes --appendfsync everysec --requirepass \"$$REDISCLI_AUTH\""
+if cfg["services"]["redis"]["command"] != ["sh", "-c", expected]:
+    raise SystemExit("Redis command is not a single exec with requirepass")
+if cfg["services"]["sub2api"]["environment"].get("REDIS_PASSWORD") != "test-only-redis-password":
+    raise SystemExit("application Redis password is missing")
+' <<<"$rendered"
 done
 
 printf 'redis-auth-contract: PASS\n'
