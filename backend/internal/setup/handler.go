@@ -54,7 +54,7 @@ func getStatus(c *gin.Context) {
 func setupGuard() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !NeedsSetup() {
-			response.Error(c, http.StatusForbidden, "Setup is not allowed: system is already installed")
+			response.Error(c, http.StatusForbidden, "系统已完成安装，不允许重复执行安装流程")
 			c.Abort()
 			return
 		}
@@ -92,10 +92,10 @@ func validateEmail(email string) bool {
 // validatePassword checks password strength
 func validatePassword(password string) error {
 	if len(password) < 8 {
-		return fmt.Errorf("password must be at least 8 characters")
+		return fmt.Errorf("密码长度不能少于 8 个字符")
 	}
 	if len(password) > 128 {
-		return fmt.Errorf("password must be at most 128 characters")
+		return fmt.Errorf("密码长度不能超过 128 个字符")
 	}
 	return nil
 }
@@ -171,7 +171,7 @@ func testDatabase(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, gin.H{"message": "Connection successful"})
+	response.Success(c, gin.H{"message": "连接成功"})
 }
 
 // TestRedisRequest represents Redis test request
@@ -218,7 +218,7 @@ func testRedis(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, gin.H{"message": "Connection successful"})
+	response.Success(c, gin.H{"message": "连接成功"})
 }
 
 // InstallRequest represents installation request
@@ -237,7 +237,7 @@ func install(c *gin.Context) {
 
 	// Double-check after acquiring lock
 	if !NeedsSetup() {
-		response.Error(c, http.StatusForbidden, "Setup is not allowed: system is already installed")
+		response.Error(c, http.StatusForbidden, "系统已完成安装，不允许重复执行安装流程")
 		return
 	}
 

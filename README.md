@@ -46,7 +46,15 @@ ExAPI 私有部署建议配置：
 RUN_MODE=simple
 SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE=true
 SUB2API_PUBLIC_HOST=your-public-ai-gateway.example.com
+# Required external root; docker-deploy.sh generates these securely.
+SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID=data-v1
+SUB2API_DATA_ENCRYPTION_KEYS_JSON={"data-v1":"<base64-encoded-32-byte-key>"}
 ```
+
+The external data keyring is mandatory and must be retained outside PostgreSQL
+and ordinary data backups. Prefer `deploy/docker-deploy.sh` or `deploy/install.sh`,
+which generate and permission it automatically; see [`deploy/README.md`](deploy/README.md)
+for manual generation, rotation, migration, and recovery guidance.
 
 公网只放行 AI 网关路径，`/admin`、`/login`、`/api/v1/*` 控制面 API 应保持私有。
 

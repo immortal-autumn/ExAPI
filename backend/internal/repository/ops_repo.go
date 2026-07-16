@@ -14,7 +14,8 @@ import (
 )
 
 type opsRepository struct {
-	db *sql.DB
+	db       *sql.DB
+	digester *gatewayAPIKeyDigester
 }
 
 const insertOpsErrorLogSQL = `
@@ -64,8 +65,16 @@ INSERT INTO ops_error_logs (
   $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41
 )`
 
-func NewOpsRepository(db *sql.DB) service.OpsRepository {
-	return &opsRepository{db: db}
+func NewOpsRepository(db *sql.DB) (service.OpsRepository, error) {
+	digester, err := loadGatewayAPIKeyDigester()
+	if err != nil {
+		return nil, err
+	}
+	return &opsRepository{db: db, digester: digester}, nil
+}
+
+func newOpsRepositoryWithDigester(db *sql.DB, digester *gatewayAPIKeyDigester) *opsRepository {
+	return &opsRepository{db: db, digester: digester}
 }
 
 func (r *opsRepository) InsertErrorLog(ctx context.Context, input *service.OpsInsertErrorLogInput) (int64, error) {
@@ -652,13 +661,21 @@ LIMIT 1`
 // 同一 key 可能有多条历史(反复创建/删除),取 deleted_at 最近一条(id 作同毫秒 tiebreaker)。
 // 未命中返回 (nil, nil)。
 func (r *opsRepository) LookupDeletedKeyAudit(ctx context.Context, key string) (*service.DeletedKeyAuditResult, error) {
+	if r.digester == nil {
+		return nil, errGatewayAPIKeyDigestRequired
+	}
+	digests, err := r.digester.CandidateDigests(key)
+	if err != nil {
+		return nil, err
+	}
 	var res service.DeletedKeyAuditResult
-	err := r.db.QueryRowContext(ctx, `
+	err = r.db.QueryRowContext(ctx, `
 		SELECT user_id, key_name
 		FROM deleted_api_key_audits
-		WHERE key = $1
+		WHERE key_digest = ANY($1)
+		   OR (key_digest IS NULL AND key = $2)
 		ORDER BY deleted_at DESC, id DESC
-		LIMIT 1`, key).Scan(&res.UserID, &res.KeyName)
+		LIMIT 1`, pq.Array(digests), key).Scan(&res.UserID, &res.KeyName)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil

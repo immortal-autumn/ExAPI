@@ -227,6 +227,7 @@ export interface PublicSettings {
   github_oauth_enabled: boolean
   google_oauth_enabled: boolean
   backend_mode_enabled: boolean
+  single_user_private_control_plane: boolean
   version: string
   // 服务器全局时区（IANA 名称与当前 UTC 偏移），高峰时段等服务端本地时间窗口的展示标注用；
   // 可选：注入的 __APP_CONFIG__ 旧缓存可能缺失
@@ -583,7 +584,8 @@ export interface ModelsListConfig {
 export interface ApiKey {
   id: number
   user_id: number
-  key: string
+  key: string // Raw only in create response; empty in list/get/update responses.
+  key_prefix: string
   name: string
   group_id: number | null
   status: 'active' | 'inactive' | 'quota_exhausted' | 'expired'

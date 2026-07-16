@@ -460,6 +460,12 @@ func TestFrontendServer_Middleware(t *testing.T) {
 			"/health",
 			"/responses",
 			"/responses/compact",
+			"/chat/completions",
+			"/embeddings",
+			"/images/generations",
+			"/images/edits",
+			"/videos/generations",
+			"/videos/request-123",
 		}
 
 		for _, path := range apiPaths {
@@ -527,6 +533,10 @@ func TestFrontendServer_Middleware(t *testing.T) {
 			"/dashboard",
 			"/users/123",
 			"/settings/profile",
+			"/images/generations-fake",
+			"/images/edits/extra",
+			"/videos/request-123/extra",
+			"/videos/generations/extra",
 		}
 
 		for _, path := range spaPaths {
@@ -636,7 +646,15 @@ func TestServeEmbeddedFrontend(t *testing.T) {
 		router := gin.New()
 		router.Use(middleware)
 
-		spaPaths := []string{"/dashboard", "/users/123", "/settings"}
+		spaPaths := []string{
+			"/dashboard",
+			"/users/123",
+			"/settings",
+			"/images/generations-fake",
+			"/images/edits/extra",
+			"/videos/request-123/extra",
+			"/videos/generations/extra",
+		}
 
 		for _, path := range spaPaths {
 			t.Run(path, func(t *testing.T) {
@@ -664,6 +682,12 @@ func TestServeEmbeddedFrontend(t *testing.T) {
 			"/health",
 			"/responses",
 			"/responses/compact",
+			"/chat/completions",
+			"/embeddings",
+			"/images/generations",
+			"/images/edits",
+			"/videos/generations",
+			"/videos/request-123",
 		}
 
 		for _, path := range apiPaths {

@@ -257,7 +257,7 @@ apiClient.interceptors.response.use(
             return Promise.reject({
               status: 401,
               code: 'TOKEN_REFRESH_FAILED',
-              message: 'Session expired. Please log in again.'
+              message: '登录状态已失效，请重新登录。'
             })
           }
         }
@@ -300,7 +300,7 @@ apiClient.interceptors.response.use(
     // Network error
     return Promise.reject({
       status: 0,
-      message: 'Network error. Please check your connection.'
+      message: '网络连接异常，请检查网络后重试。'
     })
   }
 )

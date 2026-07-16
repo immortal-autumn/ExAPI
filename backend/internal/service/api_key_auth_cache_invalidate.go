@@ -1,6 +1,8 @@
 package service
 
-import "context"
+import (
+	"context"
+)
 
 // InvalidateAuthCacheByKey 清除指定 API Key 的认证缓存
 func (s *APIKeyService) InvalidateAuthCacheByKey(ctx context.Context, key string) {
@@ -11,38 +13,31 @@ func (s *APIKeyService) InvalidateAuthCacheByKey(ctx context.Context, key string
 	s.deleteAuthCache(ctx, cacheKey)
 }
 
-// InvalidateAuthCacheByUserID 清除用户相关的 API Key 认证缓存
+// InvalidateAuthCacheByUserID advances the process-local generation. This
+// invalidates every L1/L2 lookup without enumerating or recovering raw keys.
 func (s *APIKeyService) InvalidateAuthCacheByUserID(ctx context.Context, userID int64) {
 	if userID <= 0 {
 		return
 	}
-	keys, err := s.apiKeyRepo.ListKeysByUserID(ctx, userID)
-	if err != nil {
-		return
-	}
-	s.deleteAuthCacheByKeys(ctx, keys)
+	s.invalidateAllAuthCache(ctx)
 }
 
-// InvalidateAuthCacheByGroupID 清除分组相关的 API Key 认证缓存
+// InvalidateAuthCacheByGroupID uses the same generation boundary. Group/user
+// changes are rare; bounded stale Redis entries expire naturally and cannot be
+// read after the generation changes.
 func (s *APIKeyService) InvalidateAuthCacheByGroupID(ctx context.Context, groupID int64) {
 	if groupID <= 0 {
 		return
 	}
-	keys, err := s.apiKeyRepo.ListKeysByGroupID(ctx, groupID)
-	if err != nil {
-		return
-	}
-	s.deleteAuthCacheByKeys(ctx, keys)
+	s.invalidateAllAuthCache(ctx)
 }
 
-func (s *APIKeyService) deleteAuthCacheByKeys(ctx context.Context, keys []string) {
-	if len(keys) == 0 {
-		return
+func (s *APIKeyService) invalidateAllAuthCache(ctx context.Context) {
+	s.authCacheEpoch.Add(1)
+	if s.authCacheL1 != nil {
+		s.authCacheL1.Clear()
 	}
-	for _, key := range keys {
-		if key == "" {
-			continue
-		}
-		s.deleteAuthCache(ctx, s.authCacheKey(key))
+	if s.cache != nil {
+		_ = s.cache.PublishAuthCacheInvalidation(ctx, authCacheInvalidateAll)
 	}
 }

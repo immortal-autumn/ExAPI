@@ -60,7 +60,41 @@ func TestPublicControlPlaneGuardBlocksControlAPIsOnPublicHost(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, w.Code)
 }
 
-func TestPublicControlPlaneGuardAllowsWireGuardControlPanel(t *testing.T) {
+func TestPublicControlPlaneGuardRejectsGatewayLookalikes(t *testing.T) {
+	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "true")
+	t.Setenv("SUB2API_PUBLIC_HOST", "sub2api.research.for-immortal.cn")
+
+	for _, path := range []string{
+		"/responses-fake",
+		"/chat/completions-extra",
+		"/embeddings-old",
+		"/images/generations-fake",
+		"/videos/request/extra",
+	} {
+		t.Run(path, func(t *testing.T) {
+			require.False(t, isPublicGatewayPath(path))
+		})
+	}
+}
+
+func TestPublicControlPlaneGuardFailsClosedWhenPublicHostMissing(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "true")
+	t.Setenv("SUB2API_PUBLIC_HOST", "")
+
+	r := gin.New()
+	r.Use(PublicControlPlaneGuard())
+	r.GET("/admin/dashboard", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	req := httptest.NewRequest(http.MethodGet, "https://unconfigured.example/admin/dashboard", nil)
+	req.Host = "unconfigured.example"
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestPublicControlPlaneGuardFailsClosedForUnknownHost(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "true")
 	t.Setenv("SUB2API_PUBLIC_HOST", "sub2api.research.for-immortal.cn")
@@ -69,16 +103,60 @@ func TestPublicControlPlaneGuardAllowsWireGuardControlPanel(t *testing.T) {
 	r.Use(PublicControlPlaneGuard())
 	r.GET("/admin/dashboard", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 
+	req := httptest.NewRequest(http.MethodGet, "https://attacker.invalid/admin/dashboard", nil)
+	req.Host = "attacker.invalid"
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestPublicControlPlaneGuardAllowsExplicitPrivateControlHost(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "true")
+	t.Setenv("SUB2API_PUBLIC_HOST", "sub2api.research.for-immortal.cn")
+	t.Setenv("SUB2API_PRIVATE_CONTROL_HOSTS", "localhost,127.0.0.1,::1,100.97.17.1")
+	t.Setenv("SUB2API_PRIVATE_CONTROL_CIDRS", "100.97.17.0/24")
+
+	r := gin.New()
+	r.Use(PublicControlPlaneGuard())
+	r.GET("/admin/dashboard", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
 	req := httptest.NewRequest(http.MethodGet, "http://100.97.17.1:8027/admin/dashboard", nil)
 	req.Host = "100.97.17.1:8027"
+	req.RemoteAddr = "100.97.17.25:43120"
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNoContent, w.Code)
 }
 
-func TestPublicControlPlaneGuardDisabledByDefault(t *testing.T) {
+func TestPublicControlPlaneGuardRejectsSpoofedPrivateHostFromRemotePeer(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "true")
+	t.Setenv("SUB2API_PRIVATE_CONTROL_HOSTS", "localhost,127.0.0.1,100.97.17.1")
+	t.Setenv("SUB2API_PRIVATE_CONTROL_CIDRS", "100.97.17.0/24")
+
+	for _, host := range []string{"localhost", "127.0.0.1", "100.97.17.1"} {
+		t.Run(host, func(t *testing.T) {
+			r := gin.New()
+			r.Use(PublicControlPlaneGuard())
+			r.GET("/admin/dashboard", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+			req := httptest.NewRequest(http.MethodGet, "http://example.invalid/admin/dashboard", nil)
+			req.Host = host
+			req.RemoteAddr = "203.0.113.25:43120"
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusNotFound, w.Code)
+		})
+	}
+}
+
+func TestPublicControlPlaneGuardStandardModeMustBeExplicit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "false")
 	t.Setenv("SUB2API_PUBLIC_HOST", "sub2api.research.for-immortal.cn")
 
 	r := gin.New()

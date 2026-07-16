@@ -30,7 +30,7 @@ func TestUserRepository_DeleteUser_AtomicWithAPIKeys(t *testing.T) {
 	client := testEntClient(t)
 
 	userRepo := NewUserRepository(client, integrationDB)
-	apiKeyRepo := NewAPIKeyRepository(client, integrationDB)
+	apiKeyRepo := newAPIKeyRepositoryWithSQL(client, integrationDB)
 
 	// 已提交的初始数据：1 个用户 + 2 个 active API Key。
 	user := mustCreateUser(t, client, &service.User{})

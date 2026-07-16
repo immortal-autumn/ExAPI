@@ -20,7 +20,7 @@ services:
         soft: 100000
         hard: 100000
     ports:
-      - "${BIND_HOST:-0.0.0.0}:${SERVER_PORT:-8080}:8080"
+      - "${BIND_HOST:-127.0.0.1}:${SERVER_PORT:-8080}:8080"
     volumes:
       - sub2api_data:/app/data
     extra_hosts:
@@ -38,6 +38,12 @@ services:
       - SERVER_PORT=8080
       - SERVER_MODE=${SERVER_MODE:-release}
       - RUN_MODE=${RUN_MODE:-standard}
+      - SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE=${SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE:-true}
+      - SUB2API_PUBLIC_HOST=${SUB2API_PUBLIC_HOST:-}
+      - SUB2API_PRIVATE_CONTROL_HOSTS=${SUB2API_PRIVATE_CONTROL_HOSTS:-localhost,127.0.0.1,::1}
+      - SUB2API_PRIVATE_CONTROL_CIDRS=${SUB2API_PRIVATE_CONTROL_CIDRS:-}
+      - SUB2API_LOCAL_ADMIN_BYPASS=${SUB2API_LOCAL_ADMIN_BYPASS:-false}
+      - SUB2API_LOCAL_ADMIN_BYPASS_CIDRS=${SUB2API_LOCAL_ADMIN_BYPASS_CIDRS:-}
 
       # =======================================================================
       # Database Configuration (PostgreSQL) - Required
@@ -75,6 +81,16 @@ services:
       # =======================================================================
       - JWT_SECRET=${JWT_SECRET:-}
       - JWT_EXPIRE_HOUR=${JWT_EXPIRE_HOUR:-24}
+
+      # External cryptographic roots (never store these in PostgreSQL/backups).
+      - SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID=${SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID:?SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID is required}
+      - SUB2API_DATA_ENCRYPTION_KEYS_JSON=${SUB2API_DATA_ENCRYPTION_KEYS_JSON:?SUB2API_DATA_ENCRYPTION_KEYS_JSON is required}
+      - SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID=${SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID:-}
+      - SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON=${SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON:-}
+      - SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID=${SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID:-}
+      - SUB2API_BACKUP_ENCRYPTION_KEYS_JSON=${SUB2API_BACKUP_ENCRYPTION_KEYS_JSON:-}
+      - SUB2API_ALLOW_LEGACY_PLAINTEXT_BACKUP_RESTORE=${SUB2API_ALLOW_LEGACY_PLAINTEXT_BACKUP_RESTORE:-false}
+      - SUB2API_MIGRATE_LEGACY_SECURITY_SECRETS=${SUB2API_MIGRATE_LEGACY_SECURITY_SECRETS:-false}
 
       # =======================================================================
       # Setup Configuration

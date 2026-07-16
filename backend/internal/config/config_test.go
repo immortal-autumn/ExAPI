@@ -15,11 +15,13 @@ func resetViperWithJWTSecret(t *testing.T) {
 	t.Helper()
 	viper.Reset()
 	t.Setenv("JWT_SECRET", strings.Repeat("x", 32))
+	t.Setenv("REDIS_PASSWORD", "test-only-redis-password")
 }
 
 func TestLoadForBootstrapAllowsMissingJWTSecret(t *testing.T) {
 	viper.Reset()
 	t.Setenv("JWT_SECRET", "")
+	t.Setenv("REDIS_PASSWORD", "test-only-redis-password")
 
 	cfg, err := LoadForBootstrap()
 	if err != nil {
@@ -473,6 +475,36 @@ func TestValidateLinuxDoFrontendRedirectURL(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "linuxdo_connect.frontend_redirect_url") {
 		t.Fatalf("Validate() expected frontend_redirect_url error, got: %v", err)
+	}
+}
+
+func TestValidatePrivateModeRequiresRedisAuthentication(t *testing.T) {
+	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "false")
+	resetViperWithJWTSecret(t)
+	cfg, loadErr := Load()
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "true")
+	cfg.Redis.Password = ""
+
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "redis.password") {
+		t.Fatalf("Validate() expected redis.password error in private mode, got %v", err)
+	}
+}
+
+func TestValidateExplicitStandardModeAllowsLegacyPasswordlessRedis(t *testing.T) {
+	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "false")
+	resetViperWithJWTSecret(t)
+	cfg, loadErr := Load()
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	cfg.Redis.Password = ""
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("explicit standard mode should preserve legacy passwordless Redis compatibility: %v", err)
 	}
 }
 

@@ -6,13 +6,14 @@ import (
 )
 
 // SingleUserPrivateControlPlaneEnabled reports whether the process is running
-// as a private single-operator gateway control plane.
+// as a private single-operator gateway control plane. ExAPI fails closed: only
+// an explicit false value enables the legacy multi-user/SaaS surface.
 func SingleUserPrivateControlPlaneEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE"))) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
+	case "0", "false", "no", "off":
 		return false
+	default:
+		return true
 	}
 }
 

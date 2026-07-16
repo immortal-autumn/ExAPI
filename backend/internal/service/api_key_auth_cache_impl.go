@@ -8,13 +8,17 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
+	"strconv"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 14 // v14: include group video pricing fields
+const (
+	apiKeyAuthSnapshotVersion = 14 // v14: include group video pricing fields
+	authCacheInvalidateAll    = "__all__"
+)
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -97,6 +101,11 @@ func (s *APIKeyService) StartAuthCacheInvalidationSubscriber(ctx context.Context
 		return
 	}
 	if err := s.cache.SubscribeAuthCacheInvalidation(ctx, func(cacheKey string) {
+		if cacheKey == authCacheInvalidateAll {
+			s.authCacheEpoch.Add(1)
+			s.authCacheL1.Clear()
+			return
+		}
 		s.authCacheL1.Del(cacheKey)
 	}); err != nil {
 		// Log but don't fail - L1 cache will still work, just without cross-instance invalidation
@@ -106,7 +115,7 @@ func (s *APIKeyService) StartAuthCacheInvalidationSubscriber(ctx context.Context
 
 func (s *APIKeyService) authCacheKey(key string) string {
 	sum := sha256.Sum256([]byte(key))
-	return hex.EncodeToString(sum[:])
+	return strconv.FormatUint(s.authCacheEpoch.Load(), 10) + ":" + hex.EncodeToString(sum[:])
 }
 
 func (s *APIKeyService) getAuthCacheEntry(ctx context.Context, cacheKey string) (*APIKeyAuthCacheEntry, bool) {

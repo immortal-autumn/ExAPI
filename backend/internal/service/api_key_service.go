@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -71,8 +72,6 @@ type APIKeyRepository interface {
 	// UpdateGroupIDByUserAndGroup 将用户下绑定 oldGroupID 的所有 Key 迁移到 newGroupID
 	UpdateGroupIDByUserAndGroup(ctx context.Context, userID, oldGroupID, newGroupID int64) (int64, error)
 	CountByGroupID(ctx context.Context, groupID int64) (int64, error)
-	ListKeysByUserID(ctx context.Context, userID int64) ([]string, error)
-	ListKeysByGroupID(ctx context.Context, groupID int64) ([]string, error)
 
 	// Quota methods
 	IncrementQuotaUsed(ctx context.Context, id int64, amount float64) (float64, error)
@@ -216,6 +215,7 @@ type APIKeyService struct {
 	authGroup             singleflight.Group
 	lastUsedTouchL1       sync.Map // keyID -> nextAllowedAt(time.Time)
 	lastUsedTouchSF       singleflight.Group
+	authCacheEpoch        atomic.Uint64
 }
 
 // NewAPIKeyService 创建API Key服务实例
@@ -778,7 +778,14 @@ func (s *APIKeyService) Delete(ctx context.Context, id int64, userID int64) erro
 	if s.cache != nil {
 		_ = s.cache.DeleteCreateAttemptCount(ctx, userID)
 	}
-	s.InvalidateAuthCacheByKey(ctx, key)
+	// Protected rows store only a non-secret placeholder, so exact invalidation
+	// cannot reconstruct the submitted key. Advance the user/global generation;
+	// legacy plaintext rows may still use exact invalidation during migration.
+	if strings.HasPrefix(key, "__hmac__") {
+		s.InvalidateAuthCacheByUserID(ctx, userID)
+	} else {
+		s.InvalidateAuthCacheByKey(ctx, key)
+	}
 	s.lastUsedTouchL1.Delete(id)
 
 	return nil

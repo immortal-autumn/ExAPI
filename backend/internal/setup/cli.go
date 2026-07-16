@@ -53,7 +53,7 @@ func RunCLI() error {
 
 	fmt.Println()
 	fmt.Println("╔═══════════════════════════════════════════╗")
-	fmt.Println("║        ExAPI Installation Wizard          ║")
+	fmt.Println("║        ExAPI 安装向导          ║")
 	fmt.Println("╚═══════════════════════════════════════════╝")
 	fmt.Println()
 
@@ -214,7 +214,7 @@ func RunCLI() error {
 	fmt.Printf("Server: :%d\n", cfg.Server.Port)
 	fmt.Println()
 
-	if !promptConfirm(reader, "Proceed with installation?") {
+	if !promptConfirm(reader, "是否开始安装？") {
 		fmt.Println("Installation cancelled")
 		return nil
 	}

@@ -151,6 +151,50 @@ func TestSecurityHeaders(t *testing.T) {
 		assert.Empty(t, GetNonceFromContext(c))
 	})
 
+	t.Run("bare_gateway_aliases_skip_csp_nonce_generation", func(t *testing.T) {
+		cfg := config.CSPConfig{Enabled: true, Policy: "script-src 'self' __CSP_NONCE__"}
+		paths := []string{
+			"/responses",
+			"/responses/compact",
+			"/chat/completions",
+			"/embeddings",
+			"/images/generations",
+			"/images/edits",
+			"/videos/generations",
+			"/videos/request-123",
+		}
+		for _, path := range paths {
+			t.Run(path, func(t *testing.T) {
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Request = httptest.NewRequest(http.MethodGet, path, nil)
+				SecurityHeaders(cfg, nil)(c)
+				assert.Empty(t, w.Header().Get("Content-Security-Policy"))
+				assert.Empty(t, GetNonceFromContext(c))
+			})
+		}
+	})
+
+	t.Run("unregistered_media_lookalikes_receive_csp", func(t *testing.T) {
+		cfg := config.CSPConfig{Enabled: true, Policy: "script-src 'self' __CSP_NONCE__"}
+		paths := []string{
+			"/images/generations-fake",
+			"/images/edits/extra",
+			"/videos/request-123/extra",
+			"/videos/generations/extra",
+		}
+		for _, path := range paths {
+			t.Run(path, func(t *testing.T) {
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Request = httptest.NewRequest(http.MethodGet, path, nil)
+				SecurityHeaders(cfg, nil)(c)
+				assert.NotEmpty(t, w.Header().Get("Content-Security-Policy"))
+				assert.NotEmpty(t, GetNonceFromContext(c))
+			})
+		}
+	})
+
 	t.Run("csp_enabled_with_nonce_placeholder", func(t *testing.T) {
 		cfg := config.CSPConfig{
 			Enabled: true,

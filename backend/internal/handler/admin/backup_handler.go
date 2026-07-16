@@ -7,6 +7,18 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type backupConnectionResponse struct {
+	OK      bool   `json:"ok"`
+	Message string `json:"message"`
+}
+
+func backupConnectionResult(err error) backupConnectionResponse {
+	if err != nil {
+		return backupConnectionResponse{OK: false, Message: "连接失败"}
+	}
+	return backupConnectionResponse{OK: true, Message: "连接成功"}
+}
+
 type BackupHandler struct {
 	backupService *service.BackupService
 	userService   *service.UserService
@@ -51,11 +63,7 @@ func (h *BackupHandler) TestS3Connection(c *gin.Context) {
 		return
 	}
 	err := h.backupService.TestS3Connection(c.Request.Context(), req)
-	if err != nil {
-		response.Success(c, gin.H{"ok": false, "message": err.Error()})
-		return
-	}
-	response.Success(c, gin.H{"ok": true, "message": "connection successful"})
+	response.Success(c, backupConnectionResult(err))
 }
 
 // ─── 定时备份 ───
@@ -103,7 +111,7 @@ func (h *BackupHandler) CreateBackup(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Accepted(c, record)
+	response.Accepted(c, service.BackupRecordForAPI(*record))
 }
 
 func (h *BackupHandler) ListBackups(c *gin.Context) {
@@ -115,7 +123,7 @@ func (h *BackupHandler) ListBackups(c *gin.Context) {
 	if records == nil {
 		records = []service.BackupRecord{}
 	}
-	response.Success(c, gin.H{"items": records})
+	response.Success(c, gin.H{"items": service.BackupRecordsForAPI(records)})
 }
 
 func (h *BackupHandler) GetBackup(c *gin.Context) {
@@ -129,7 +137,7 @@ func (h *BackupHandler) GetBackup(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, record)
+	response.Success(c, service.BackupRecordForAPI(*record))
 }
 
 func (h *BackupHandler) DeleteBackup(c *gin.Context) {
@@ -201,5 +209,5 @@ func (h *BackupHandler) RestoreBackup(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Accepted(c, record)
+	response.Accepted(c, service.BackupRecordForAPI(*record))
 }

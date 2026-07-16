@@ -52,7 +52,8 @@ type AdminUser struct {
 type APIKey struct {
 	ID          int64      `json:"id"`
 	UserID      int64      `json:"user_id"`
-	Key         string     `json:"key"`
+	Key         string     `json:"key,omitempty"` // returned only once by the create endpoint
+	KeyPrefix   string     `json:"key_prefix"`
 	Name        string     `json:"name"`
 	GroupID     *int64     `json:"group_id"`
 	Status      string     `json:"status"`

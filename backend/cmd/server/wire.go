@@ -7,7 +7,6 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/ent"
@@ -107,11 +106,6 @@ func provideCleanup(
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-
-		type cleanupStep struct {
-			name string
-			fn   func() error
-		}
 
 		// 应用层清理步骤可并行执行，基础设施资源（Redis/Ent）最后按顺序关闭。
 		parallelSteps := []cleanupStep{
@@ -257,7 +251,7 @@ func provideCleanup(
 			}},
 			{"BackupService", func() error {
 				if backupSvc != nil {
-					backupSvc.Stop()
+					return backupSvc.StopContext(ctx)
 				}
 				return nil
 			}},
@@ -296,43 +290,28 @@ func provideCleanup(
 			}},
 		}
 
-		runParallel := func(steps []cleanupStep) {
-			var wg sync.WaitGroup
-			for i := range steps {
-				step := steps[i]
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					if err := step.fn(); err != nil {
-						log.Printf("[Cleanup] %s failed: %v", step.name, err)
-						return
-					}
-					log.Printf("[Cleanup] %s succeeded", step.name)
-				}()
-			}
-			wg.Wait()
-		}
-
-		runSequential := func(steps []cleanupStep) {
-			for i := range steps {
-				step := steps[i]
-				if err := step.fn(); err != nil {
-					log.Printf("[Cleanup] %s failed: %v", step.name, err)
-					continue
-				}
-				log.Printf("[Cleanup] %s succeeded", step.name)
+		completedResults, applicationCleanupComplete := runCleanupParallel(ctx, parallelSteps)
+		for _, result := range completedResults {
+			if result.err != nil {
+				log.Printf("[Cleanup] %s failed: %v", result.name, result.err)
+			} else {
+				log.Printf("[Cleanup] %s succeeded", result.name)
 			}
 		}
-
-		runParallel(parallelSteps)
-		runSequential(infraSteps)
-
-		// Check if context timed out
-		select {
-		case <-ctx.Done():
-			log.Printf("[Cleanup] Warning: cleanup timed out after 10 seconds")
-		default:
-			log.Printf("[Cleanup] All cleanup steps completed")
+		if !applicationCleanupComplete {
+			// Closing shared Redis/PostgreSQL clients while a legacy cleanup goroutine
+			// is still running can race use-after-close. Bound process shutdown, but
+			// deliberately skip infrastructure closure and let process exit reclaim it.
+			log.Printf("[Cleanup] Warning: application cleanup deadline exceeded; skipping Redis/Ent close to avoid racing active cleanup")
+			return
 		}
+		for _, result := range runCleanupSequential(infraSteps) {
+			if result.err != nil {
+				log.Printf("[Cleanup] %s failed: %v", result.name, result.err)
+			} else {
+				log.Printf("[Cleanup] %s succeeded", result.name)
+			}
+		}
+		log.Printf("[Cleanup] All cleanup steps completed")
 	}
 }

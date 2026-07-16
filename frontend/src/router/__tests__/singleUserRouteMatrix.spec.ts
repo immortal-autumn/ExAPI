@@ -1,4 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
+import {
+  SINGLE_USER_ADMIN_ROUTES,
+  SINGLE_USER_COMPATIBILITY_REDIRECTS,
+  SINGLE_USER_PUBLIC_ROUTES,
+} from '@/config/singleUserProduct'
 
 const authStore = vi.hoisted(() => ({
   checkAuth: vi.fn(),
@@ -33,7 +38,50 @@ vi.mock('@/composables/useRoutePrefetch', () => ({
   }),
 }))
 
-describe('single-user API key routes', () => {
+describe('single-user private route matrix', () => {
+  it('registers exactly the product contract plus compatibility and 404 routes', async () => {
+    const { default: router } = await import('@/router')
+    const paths = new Set(router.getRoutes().map((record) => record.path))
+    const expected = new Set([
+      ...SINGLE_USER_PUBLIC_ROUTES,
+      ...SINGLE_USER_ADMIN_ROUTES,
+      ...SINGLE_USER_COMPATIBILITY_REDIRECTS,
+      '/:pathMatch(.*)*',
+    ])
+
+    expect(paths).toEqual(expected)
+  })
+
+  it('does not register dormant customer, payment, OAuth, or custom-page routes', async () => {
+    const { default: router } = await import('@/router')
+    const paths = new Set(router.getRoutes().map((record) => record.path))
+
+    for (const path of [
+      '/register',
+      '/email-verify',
+      '/forgot-password',
+      '/reset-password',
+      '/auth/callback',
+      '/auth/linuxdo/callback',
+      '/auth/wechat/callback',
+      '/auth/wechat/payment/callback',
+      '/auth/dingtalk/callback',
+      '/auth/dingtalk/email-completion',
+      '/auth/oidc/callback',
+      '/payment/result',
+      '/payment/stripe',
+      '/payment/airwallex',
+      '/payment/stripe-popup',
+      '/profile',
+      '/custom/:id',
+      '/dashboard',
+      '/usage',
+      '/monitor',
+    ]) {
+      expect(paths.has(path), path).toBe(false)
+    }
+  })
+
   it('registers API-key management as an admin route', async () => {
     const { default: router } = await import('@/router')
     const route = router.getRoutes().find((record) => record.name === 'AdminAPIKeys')

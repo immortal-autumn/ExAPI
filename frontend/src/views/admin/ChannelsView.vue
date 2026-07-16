@@ -627,6 +627,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { formatChineseDate } from '@/utils/zhPresentation'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { adminAPI } from '@/api/admin'
@@ -765,7 +766,7 @@ const platformOrder: GroupPlatform[] = ['anthropic', 'openai', 'gemini', 'antigr
 // ── Helpers ──
 function formatDate(value: string): string {
   if (!value) return '-'
-  return new Date(value).toLocaleDateString()
+  return formatChineseDate(value)
 }
 
 // ── Platform section helpers ──

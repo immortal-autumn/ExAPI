@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/routecontract"
 	"github.com/gin-gonic/gin"
 )
 
@@ -119,12 +120,7 @@ func isAPIRoutePath(c *gin.Context) bool {
 	if c == nil || c.Request == nil || c.Request.URL == nil {
 		return false
 	}
-	path := c.Request.URL.Path
-	return strings.HasPrefix(path, "/v1/") ||
-		strings.HasPrefix(path, "/v1beta/") ||
-		strings.HasPrefix(path, "/antigravity/") ||
-		strings.HasPrefix(path, "/responses") ||
-		strings.HasPrefix(path, "/images")
+	return routecontract.IsAPIPath(c.Request.URL.Path)
 }
 
 // enhanceCSPPolicy 确保 CSP 策略包含 nonce 支持和支付 SDK 必需域名。

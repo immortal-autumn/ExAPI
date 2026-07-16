@@ -36,6 +36,7 @@ func newAuthRoutesTestRouter(redisClient *redis.Client) *gin.Engine {
 }
 
 func TestAuthRoutesRateLimitFailCloseWhenRedisUnavailable(t *testing.T) {
+	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "false")
 	rdb := redis.NewClient(&redis.Options{
 		Addr:         "127.0.0.1:1",
 		DialTimeout:  50 * time.Millisecond,

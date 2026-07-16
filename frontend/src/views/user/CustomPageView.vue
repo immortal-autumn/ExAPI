@@ -230,7 +230,7 @@ async function fetchAndRenderMarkdown(slug: string) {
       headers: authStore.token ? { Authorization: `Bearer ${authStore.token}` } : {},
     })
     if (!resp.ok) {
-      renderedHtml.value = '<p class="text-red-500">Page not found</p>'
+      renderedHtml.value = '<p class="text-red-500">页面不存在</p>'
       return
     }
     let raw = await resp.text()
@@ -263,7 +263,7 @@ async function fetchAndRenderMarkdown(slug: string) {
     renderedHtml.value = withIds
     tocItems.value = toc
   } catch {
-    renderedHtml.value = '<p class="text-red-500">Failed to load page</p>'
+    renderedHtml.value = '<p class="text-red-500">页面加载失败</p>'
   } finally {
     loading.value = false
     await nextTick()

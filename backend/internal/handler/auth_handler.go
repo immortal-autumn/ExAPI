@@ -218,10 +218,10 @@ func (h *AuthHandler) SendVerifyCode(c *gin.Context) {
 }
 
 // LocalAdminLogin issues a normal admin token pair without email/password only when
-// SUB2API_LOCAL_ADMIN_BYPASS is explicitly enabled and the request is made via a
-// local browser host (127.0.0.1, ::1, or localhost) or an explicitly configured
-// trusted CIDR (SUB2API_LOCAL_ADMIN_BYPASS_CIDRS). This is intended for
-// SSH-tunnel/WireGuard/local-host administration, not public nginx access.
+// SUB2API_LOCAL_ADMIN_BYPASS is explicitly enabled and the socket peer is loopback
+// or belongs to SUB2API_LOCAL_ADMIN_BYPASS_CIDRS. The request Host is checked only
+// for direct loopback access and is never used to grant trust to a private proxy/LAN
+// peer. This endpoint must not be exposed through a public reverse proxy.
 // POST /api/v1/auth/local-admin
 func (h *AuthHandler) LocalAdminLogin(c *gin.Context) {
 	if !localAdminBypassEnabled() {
@@ -262,32 +262,31 @@ func isLocalAdminBypassRequest(c *gin.Context) bool {
 	if c == nil || c.Request == nil {
 		return false
 	}
-	host := c.Request.Host
-	if h, _, err := net.SplitHostPort(host); err == nil {
-		host = h
-	}
-	host = strings.ToLower(strings.Trim(host, "[] "))
 
 	remoteIP := requestRemoteIP(c)
 	if remoteIP == nil {
 		return false
 	}
-
-	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
-		// Direct host-port requests into Docker commonly appear from the bridge gateway
-		// (private RFC1918) rather than literal 127.0.0.1 inside the container.
-		return remoteIP.IsLoopback() || remoteIP.IsPrivate()
+	if ipInConfiguredLocalAdminBypassCIDRs(remoteIP) {
+		return true
 	}
-
-	hostIP := net.ParseIP(host)
-	if hostIP == nil || !ipInConfiguredLocalAdminBypassCIDRs(hostIP) {
+	if !remoteIP.IsLoopback() {
 		return false
 	}
-	// Docker port publishing may present WireGuard clients as the Docker bridge
-	// gateway inside the container. The trusted-CIDR check is therefore applied to
-	// the browser-visible Host IP, while the remote address must still be local or
-	// private rather than an arbitrary public Internet address.
-	return remoteIP.IsLoopback() || remoteIP.IsPrivate() || ipInConfiguredLocalAdminBypassCIDRs(remoteIP)
+
+	// For direct loopback access, require a loopback browser host as a defense
+	// against routing this credential-free endpoint through an unrelated virtual
+	// host. Host can restrict a loopback request, but it never grants source trust.
+	host := c.Request.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.ToLower(strings.Trim(host, "[] "))
+	if host == "localhost" {
+		return true
+	}
+	hostIP := net.ParseIP(host)
+	return hostIP != nil && hostIP.IsLoopback()
 }
 
 func requestRemoteIP(c *gin.Context) net.IP {

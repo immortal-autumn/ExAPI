@@ -1,0 +1,38 @@
+# ExAPI remediation campaign baseline
+
+captured_at_utc: 2026-07-15
+repository: /home/opc/src/sub2api
+branch: feat/local-admin-bypass
+head: 44613bfaf950b76d066f01cd763444b52f80f7c5
+tracking: origin/feat/local-admin-bypass (ahead 9)
+modified_tracked: 44
+staged: 0
+untracked: 47
+
+distribution:
+  modified:
+    README.md: 1
+    backend: 17
+    deploy: 9
+    frontend: 17
+  untracked:
+    .hermes: 18
+    backend: 20
+    deploy: 1
+    frontend: 8
+
+live_no_deploy_sentinel:
+  image_id: sha256:3942f6908505fd7af19238b26a6102ddeab8696c53616b20380f3965661f5304
+  started_at: 2026-07-15T01:44:15.758049584Z
+  restart_count: 0
+  health: healthy
+  running_services:
+    - sub2api
+    - postgres
+    - redis
+
+rules:
+  - Do not deploy or restart/recreate any live service.
+  - Compare the live sentinel at campaign closure.
+  - Do not discard or overwrite pre-existing modifications.
+  - Use the goal ledger 2026-07-15-exapi-full-remediation-goal.md as the authoritative issue list.

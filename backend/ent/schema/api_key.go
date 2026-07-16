@@ -38,6 +38,16 @@ func (APIKey) Fields() []ent.Field {
 			MaxLen(128).
 			NotEmpty().
 			Unique(),
+		field.String("key_digest").
+			MaxLen(256).
+			Optional().
+			Nillable().
+			Unique().
+			Comment("Versioned purpose-bound HMAC verifier; raw gateway keys are never stored here"),
+		field.String("key_prefix").
+			MaxLen(16).
+			Default("").
+			Comment("Non-secret display prefix for operator identification"),
 		field.String("name").
 			MaxLen(100).
 			NotEmpty(),

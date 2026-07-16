@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
@@ -35,9 +36,14 @@ func ProvideUpdateService(cache UpdateCache, githubClient GitHubReleaseClient, b
 	return NewUpdateService(cache, githubClient, buildInfo.Version, buildInfo.BuildType)
 }
 
-// ProvideEmailQueueService creates EmailQueueService with default worker count
+// ProvideEmailQueueService creates the shared verification queue. Private mode
+// keeps one worker for operator TOTP but does not need customer-scale workers.
 func ProvideEmailQueueService(emailService *EmailService) *EmailQueueService {
-	return NewEmailQueueService(emailService, 3)
+	workers := 3
+	if !config.SaaSFeaturesEnabled() {
+		workers = 1
+	}
+	return NewEmailQueueService(emailService, workers)
 }
 
 // ProvideOAuthRefreshAPI creates OAuthRefreshAPI with the default lock TTL.
@@ -461,10 +467,14 @@ func ProvideBackupService(
 	encryptor SecretEncryptor,
 	storeFactory BackupObjectStoreFactory,
 	dumper DBDumper,
-) *BackupService {
-	svc := NewBackupService(settingRepo, cfg, encryptor, storeFactory, dumper)
+) (*BackupService, error) {
+	keyrings, err := config.LoadExternalKeyringsFromEnv()
+	if err != nil {
+		return nil, fmt.Errorf("load external backup keyring: %w", err)
+	}
+	svc := NewBackupService(settingRepo, cfg, encryptor, storeFactory, dumper, keyrings.BackupEncryption)
 	svc.Start()
-	return svc
+	return svc, nil
 }
 
 // ProvideOpsService constructs OpsService and wires the SettingService-backed quota
@@ -695,7 +705,9 @@ func ProvidePaymentService(entClient *dbent.Client, registry *payment.Registry, 
 func ProvidePaymentOrderExpiryService(paymentSvc *PaymentService, lockCache LeaderLockCache, db *sql.DB) *PaymentOrderExpiryService {
 	svc := NewPaymentOrderExpiryService(paymentSvc, 60*time.Second)
 	svc.SetLeaderLock(lockCache, db)
-	svc.Start()
+	if config.SaaSFeaturesEnabled() {
+		svc.Start()
+	}
 	return svc
 }
 

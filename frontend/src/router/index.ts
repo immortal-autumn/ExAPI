@@ -12,6 +12,7 @@ import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
+import { filterSingleUserProductRoutes } from '@/config/singleUserProduct'
 import { isSingleUserGatewayRestrictedPath, isSingleUserPrivateControlPlaneBrowser, singleUserGatewayRedirectPath } from './singleUserGatewayMode'
 import { resolveRouteDocumentTitle } from './title'
 
@@ -26,7 +27,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/setup/SetupWizardView.vue'),
     meta: {
       requiresAuth: false,
-      title: 'Setup'
+      title: '安装向导'
     }
   },
 
@@ -62,7 +63,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/auth/EmailVerifyView.vue'),
     meta: {
       requiresAuth: false,
-      title: 'Verify Email'
+      title: '验证邮箱'
     }
   },
   {
@@ -122,7 +123,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/auth/DingTalkEmailCompletionView.vue'),
     meta: {
       requiresAuth: false,
-      title: 'DingTalk Email Completion'
+      title: '补全钉钉邮箱'
     }
   },
   {
@@ -151,7 +152,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/auth/ResetPasswordView.vue'),
     meta: {
       requiresAuth: false,
-      title: 'Reset Password'
+      title: '重置密码'
     }
   },
   {
@@ -160,7 +161,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/KeyUsageView.vue'),
     meta: {
       requiresAuth: false,
-      title: 'Key Usage',
+      title: '密钥用量查询',
     }
   },
   {
@@ -169,7 +170,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/public/LegalDocumentView.vue'),
     meta: {
       requiresAuth: false,
-      title: 'Legal Document'
+      title: '协议文档'
     }
   },
 
@@ -679,12 +680,16 @@ const routes: RouteRecordRaw[] = [
   }
 ]
 
+const productRoutes = isSingleUserPrivateControlPlaneBrowser()
+  ? filterSingleUserProductRoutes(routes)
+  : routes
+
 /**
  * Create router instance
  */
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  routes,
+  routes: productRoutes,
   scrollBehavior(_to, _from, savedPosition) {
     // Scroll to saved position when using browser back/forward
     if (savedPosition) {

@@ -127,6 +127,7 @@ type authCacheStub struct {
 	getAuthCache   func(ctx context.Context, key string) (*APIKeyAuthCacheEntry, error)
 	setAuthKeys    []string
 	deleteAuthKeys []string
+	publishedKeys  []string
 }
 
 func (s *authCacheStub) GetCreateAttemptCount(ctx context.Context, userID int64) (int, error) {
@@ -167,6 +168,7 @@ func (s *authCacheStub) DeleteAuthCache(ctx context.Context, key string) error {
 }
 
 func (s *authCacheStub) PublishAuthCacheInvalidation(ctx context.Context, cacheKey string) error {
+	s.publishedKeys = append(s.publishedKeys, cacheKey)
 	return nil
 }
 
@@ -356,6 +358,31 @@ func TestAPIKeyService_GetByKey_IgnoresLegacyAuthCacheSnapshotWithoutMessagesDis
 	require.Equal(t, "gpt-5.4-nano", apiKey.Group.MessagesDispatchModelConfig.OpusMappedModel)
 }
 
+func TestAPIKeyService_InvalidationByUserAndGroupDoesNotEnumerateRawKeys(t *testing.T) {
+	repo := &authRepoStub{
+		listKeysByUserID: func(context.Context, int64) ([]string, error) {
+			t.Fatal("user invalidation enumerated raw API keys")
+			return nil, nil
+		},
+		listKeysByGroupID: func(context.Context, int64) ([]string, error) {
+			t.Fatal("group invalidation enumerated raw API keys")
+			return nil, nil
+		},
+	}
+	cache := &authCacheStub{}
+	cfg := &config.Config{APIKeyAuth: config.APIKeyAuthCacheConfig{L1Size: 100, L1TTLSeconds: 60, L2TTLSeconds: 60}}
+	svc := NewAPIKeyService(repo, nil, nil, nil, nil, cache, cfg)
+
+	before := svc.authCacheKey("test-key")
+	svc.InvalidateAuthCacheByUserID(context.Background(), 7)
+	afterUser := svc.authCacheKey("test-key")
+	svc.InvalidateAuthCacheByGroupID(context.Background(), 9)
+	afterGroup := svc.authCacheKey("test-key")
+
+	require.NotEqual(t, before, afterUser)
+	require.NotEqual(t, afterUser, afterGroup)
+}
+
 func TestAPIKeyService_GetByKey_NegativeCache(t *testing.T) {
 	cache := &authCacheStub{}
 	repo := &authRepoStub{
@@ -455,39 +482,24 @@ func TestAPIKeyService_GetByKey_UsesL1Cache(t *testing.T) {
 
 func TestAPIKeyService_InvalidateAuthCacheByUserID(t *testing.T) {
 	cache := &authCacheStub{}
-	repo := &authRepoStub{
-		listKeysByUserID: func(ctx context.Context, userID int64) ([]string, error) {
-			return []string{"k1", "k2"}, nil
-		},
-	}
-	cfg := &config.Config{
-		APIKeyAuth: config.APIKeyAuthCacheConfig{
-			L2TTLSeconds:       60,
-			NegativeTTLSeconds: 30,
-		},
-	}
-	svc := NewAPIKeyService(repo, nil, nil, nil, nil, cache, cfg)
+	svc := NewAPIKeyService(&authRepoStub{}, nil, nil, nil, nil, cache, &config.Config{})
+	before := svc.authCacheKey("test-key")
 
 	svc.InvalidateAuthCacheByUserID(context.Background(), 7)
-	require.Len(t, cache.deleteAuthKeys, 2)
+	require.NotEqual(t, before, svc.authCacheKey("test-key"))
+	require.Equal(t, []string{authCacheInvalidateAll}, cache.publishedKeys)
+	require.Empty(t, cache.deleteAuthKeys)
 }
 
 func TestAPIKeyService_InvalidateAuthCacheByGroupID(t *testing.T) {
 	cache := &authCacheStub{}
-	repo := &authRepoStub{
-		listKeysByGroupID: func(ctx context.Context, groupID int64) ([]string, error) {
-			return []string{"k1", "k2"}, nil
-		},
-	}
-	cfg := &config.Config{
-		APIKeyAuth: config.APIKeyAuthCacheConfig{
-			L2TTLSeconds: 60,
-		},
-	}
-	svc := NewAPIKeyService(repo, nil, nil, nil, nil, cache, cfg)
+	svc := NewAPIKeyService(&authRepoStub{}, nil, nil, nil, nil, cache, &config.Config{})
+	before := svc.authCacheKey("test-key")
 
 	svc.InvalidateAuthCacheByGroupID(context.Background(), 9)
-	require.Len(t, cache.deleteAuthKeys, 2)
+	require.NotEqual(t, before, svc.authCacheKey("test-key"))
+	require.Equal(t, []string{authCacheInvalidateAll}, cache.publishedKeys)
+	require.Empty(t, cache.deleteAuthKeys)
 }
 
 func TestAPIKeyService_InvalidateAuthCacheByKey(t *testing.T) {

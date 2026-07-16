@@ -4,11 +4,13 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/ent/apikey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
@@ -31,6 +33,62 @@ func (s *APIKeyRepoSuite) SetupTest() {
 
 func TestAPIKeyRepoSuite(t *testing.T) {
 	suite.Run(t, new(APIKeyRepoSuite))
+}
+
+func (s *APIKeyRepoSuite) TestCreateStoresDigestAndSupportsMixedLegacyAuthentication() {
+	secured := newAPIKeyRepositoryWithSQLAndDigester(
+		s.client,
+		s.client,
+		mustGatewayAPIKeyDigesterForTest(s.T()),
+	)
+	user := s.mustCreateUser("digest-storage@test.com")
+	const raw = "test-digest-storage-key-value"
+	key := &service.APIKey{UserID: user.ID, Key: raw, Name: "Digest Key", Status: service.StatusActive}
+
+	s.Require().NoError(secured.Create(s.ctx, key))
+
+	stored, err := s.client.APIKey.Query().Where(apikey.IDEQ(key.ID)).Only(s.ctx)
+	s.Require().NoError(err)
+	s.Require().NotEqual(raw, stored.Key)
+	s.Require().True(strings.HasPrefix(stored.Key, "__hmac__"))
+	s.Require().NotNil(stored.KeyDigest)
+	s.Require().NotContains(*stored.KeyDigest, raw)
+	s.Require().Equal(gatewayAPIKeyDisplayPrefix(raw), stored.KeyPrefix)
+	s.Require().True(secured.digester.Verify(raw, *stored.KeyDigest))
+
+	got, err := secured.GetByKeyForAuth(s.ctx, raw)
+	s.Require().NoError(err)
+	s.Require().Equal(key.ID, got.ID)
+	s.Require().Empty(got.Key, "repository must not return reusable API-key material")
+
+	exists, err := secured.ExistsByKey(s.ctx, raw)
+	s.Require().NoError(err)
+	s.Require().True(exists)
+	listed, _, err := secured.ListByUserID(s.ctx, user.ID, pagination.PaginationParams{Page: 1, PageSize: 10}, service.APIKeyListFilters{})
+	s.Require().NoError(err)
+	s.Require().NotEmpty(listed)
+	s.Require().Empty(listed[0].Key, "list result must not contain reusable key material")
+	s.Require().Equal(gatewayAPIKeyDisplayPrefix(raw), listed[0].KeyPrefix)
+	byID, err := secured.GetByID(s.ctx, key.ID)
+	s.Require().NoError(err)
+	s.Require().Empty(byID.Key, "get-by-id result must not contain reusable key material")
+	s.Require().Equal(gatewayAPIKeyDisplayPrefix(raw), byID.KeyPrefix)
+	_, err = secured.GetByKeyForAuth(s.ctx, "wrong-key")
+	s.Require().ErrorIs(err, service.ErrAPIKeyNotFound)
+
+	const legacyRaw = "test-legacy-dual-read-key"
+	legacy, err := s.client.APIKey.Create().
+		SetUserID(user.ID).
+		SetKey(legacyRaw).
+		SetName("Legacy Key").
+		SetStatus(service.StatusActive).
+		Save(s.ctx)
+	s.Require().NoError(err)
+
+	legacyGot, err := secured.GetByKeyForAuth(s.ctx, legacyRaw)
+	s.Require().NoError(err)
+	s.Require().Equal(legacy.ID, legacyGot.ID)
+	s.Require().Empty(legacyGot.Key)
 }
 
 // --- Create / GetByID / GetByKey ---
@@ -506,7 +564,7 @@ func (s *APIKeyRepoSuite) TestIncrementQuotaUsedAndGetState() {
 // 注意：此测试使用 testEntClient（非事务隔离），数据会真正写入数据库。
 func TestIncrementQuotaUsed_Concurrent(t *testing.T) {
 	client := testEntClient(t)
-	repo := NewAPIKeyRepository(client, integrationDB).(*apiKeyRepository)
+	repo := newAPIKeyRepositoryWithSQL(client, integrationDB)
 	ctx := context.Background()
 
 	// 创建测试用户和 API Key
@@ -556,30 +614,37 @@ func TestIncrementQuotaUsed_Concurrent(t *testing.T) {
 		"并发递增后总和应为 %v，实际为 %v", float64(goroutines)*increment, got.QuotaUsed)
 }
 
-func (s *APIKeyRepoSuite) TestDeleteWithAudit_WritesAuditAndSoftDeletes() {
+func (s *APIKeyRepoSuite) TestDeleteWithAudit_WritesVerifierNotRawKey() {
+	secured := newAPIKeyRepositoryWithSQLAndDigester(s.client, s.client, mustGatewayAPIKeyDigesterForTest(s.T()))
 	user := s.mustCreateUser("delwithaudit@test.com")
+	const raw = "test-delete-audit-raw-key"
 	key := &service.APIKey{
 		UserID: user.ID,
-		Key:    "sk-del-audit-1",
+		Key:    raw,
 		Name:   "Audit Me",
 		Status: service.StatusActive,
 	}
-	s.Require().NoError(s.repo.Create(s.ctx, key))
+	s.Require().NoError(secured.Create(s.ctx, key))
 
-	s.Require().NoError(s.repo.DeleteWithAudit(s.ctx, key.ID))
+	s.Require().NoError(secured.DeleteWithAudit(s.ctx, key.ID))
 
-	_, err := s.repo.GetByID(s.ctx, key.ID)
+	_, err := secured.GetByID(s.ctx, key.ID)
 	s.Require().Error(err)
 
 	rows, qErr := s.client.QueryContext(s.ctx,
-		`SELECT key, key_name, user_id, api_key_id FROM deleted_api_key_audits WHERE api_key_id = $1`, key.ID)
+		`SELECT key, key_digest, key_name, user_id, api_key_id FROM deleted_api_key_audits WHERE api_key_id = $1`, key.ID)
 	s.Require().NoError(qErr)
 	defer rows.Close()
 	s.Require().True(rows.Next(), "expected one audit row")
-	var auditKey, auditName string
+	var auditKey string
+	var auditDigest *string
+	var auditName string
 	var auditUserID, auditAPIKeyID int64
-	s.Require().NoError(rows.Scan(&auditKey, &auditName, &auditUserID, &auditAPIKeyID))
-	s.Require().Equal("sk-del-audit-1", auditKey)
+	s.Require().NoError(rows.Scan(&auditKey, &auditDigest, &auditName, &auditUserID, &auditAPIKeyID))
+	s.Require().NotEqual(raw, auditKey)
+	s.Require().NotContains(auditKey, raw)
+	s.Require().NotNil(auditDigest)
+	s.Require().True(secured.digester.Verify(raw, *auditDigest))
 	s.Require().Equal("Audit Me", auditName)
 	s.Require().Equal(user.ID, auditUserID)
 	s.Require().Equal(key.ID, auditAPIKeyID)

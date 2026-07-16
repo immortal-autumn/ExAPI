@@ -4,7 +4,7 @@
 # =============================================================================
 # This script prepares deployment files for ExAPI:
 #   - Downloads docker-compose.local.yml and .env.example
-#   - Generates secure secrets (JWT_SECRET, TOTP_ENCRYPTION_KEY, POSTGRES_PASSWORD)
+#   - Generates secure secrets (JWT, TOTP, data encryption, PostgreSQL)
 #   - Creates necessary data directories
 #
 # After running this script, you can start services with:
@@ -43,6 +43,45 @@ print_error() {
 # Generate random secret
 generate_secret() {
     openssl rand -hex 32
+}
+
+generate_base64_key() {
+    openssl rand -base64 32 | tr -d '\r\n'
+}
+
+# Read an existing .env value without evaluating shell syntax.
+read_env_value() {
+    local name="$1" file="${2:-.env}"
+    [ -f "$file" ] || return 1
+    python3 - "$file" "$name" <<'PY'
+import sys
+path, name = sys.argv[1:]
+for raw in open(path, encoding="utf-8"):
+    if raw.startswith(name + "="):
+        value = raw.split("=", 1)[1].strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        print(value, end="")
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
+validate_keyring_pair() {
+    local active="$1" keys="$2" label="$3"
+    python3 - "$active" "$keys" "$label" <<'PY'
+import base64, json, sys
+active, raw, label = sys.argv[1:]
+if not active or not raw:
+    raise SystemExit(f"{label} keyring is empty")
+try:
+    keys = json.loads(raw)
+    material = base64.b64decode(keys[active], validate=True)
+except Exception as exc:
+    raise SystemExit(f"{label} keyring is malformed: {exc}")
+if len(material) != 32:
+    raise SystemExit(f"{label} active key must decode to exactly 32 bytes")
+PY
 }
 
 # Check if command exists
@@ -100,26 +139,58 @@ main() {
     print_info "Generating secure secrets..."
     echo ""
 
-    # Generate secrets
-    JWT_SECRET=$(generate_secret)
-    TOTP_ENCRYPTION_KEY=$(generate_secret)
-    POSTGRES_PASSWORD=$(generate_secret)
-
-    # Create .env from .env.example
-    cp .env.example .env
-
-    # Update .env with generated secrets (cross-platform compatible)
-    if sed --version >/dev/null 2>&1; then
-        # GNU sed (Linux)
-        sed -i "s/^JWT_SECRET=.*/JWT_SECRET=${JWT_SECRET}/" .env
-        sed -i "s/^TOTP_ENCRYPTION_KEY=.*/TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY}/" .env
-        sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=${POSTGRES_PASSWORD}/" .env
+    # Generate state-coupled credentials only for a fresh deployment. On
+    # redeploy they must remain aligned with the retained database and encrypted
+    # TOTP/JWT state.
+    if [ -f .env ]; then
+        JWT_SECRET=$(read_env_value JWT_SECRET)
+        TOTP_ENCRYPTION_KEY=$(read_env_value TOTP_ENCRYPTION_KEY)
+        POSTGRES_PASSWORD=$(read_env_value POSTGRES_PASSWORD)
+        [ -n "$JWT_SECRET" ] || { print_error "existing JWT_SECRET is empty"; exit 1; }
+        [ -n "$TOTP_ENCRYPTION_KEY" ] || { print_error "existing TOTP_ENCRYPTION_KEY is empty"; exit 1; }
+        [ -n "$POSTGRES_PASSWORD" ] || { print_error "existing POSTGRES_PASSWORD is empty"; exit 1; }
+        DATA_ENCRYPTION_ACTIVE_KEY_ID=$(read_env_value SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID)
+        DATA_ENCRYPTION_KEYS_JSON=$(read_env_value SUB2API_DATA_ENCRYPTION_KEYS_JSON)
+        BACKUP_ENCRYPTION_ACTIVE_KEY_ID=$(read_env_value SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID)
+        BACKUP_ENCRYPTION_KEYS_JSON=$(read_env_value SUB2API_BACKUP_ENCRYPTION_KEYS_JSON)
+        validate_keyring_pair "$DATA_ENCRYPTION_ACTIVE_KEY_ID" "$DATA_ENCRYPTION_KEYS_JSON" data-encryption
+        validate_keyring_pair "$BACKUP_ENCRYPTION_ACTIVE_KEY_ID" "$BACKUP_ENCRYPTION_KEYS_JSON" backup-encryption
+        print_info "Preserving existing validated encryption keyrings"
     else
-        # BSD sed (macOS)
-        sed -i '' "s/^JWT_SECRET=.*/JWT_SECRET=${JWT_SECRET}/" .env
-        sed -i '' "s/^TOTP_ENCRYPTION_KEY=.*/TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY}/" .env
-        sed -i '' "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=${POSTGRES_PASSWORD}/" .env
+        JWT_SECRET=$(generate_secret)
+        TOTP_ENCRYPTION_KEY=$(generate_secret)
+        POSTGRES_PASSWORD=$(generate_secret)
+        DATA_ENCRYPTION_ACTIVE_KEY_ID=data-v1
+        DATA_ENCRYPTION_KEY=$(generate_base64_key)
+        DATA_ENCRYPTION_KEYS_JSON="{\"data-v1\":\"${DATA_ENCRYPTION_KEY}\"}"
+        BACKUP_ENCRYPTION_ACTIVE_KEY_ID=backup-v1
+        BACKUP_ENCRYPTION_KEY=$(generate_base64_key)
+        BACKUP_ENCRYPTION_KEYS_JSON="{\"backup-v1\":\"${BACKUP_ENCRYPTION_KEY}\"}"
     fi
+
+    # Create .env atomically under a restrictive umask. Secret values are
+    # substituted by shell builtins so they never appear in child-process argv.
+    local old_umask env_tmp
+    old_umask=$(umask)
+    umask 077
+    env_tmp=".env.tmp.$$"
+    : > "$env_tmp"
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            JWT_SECRET=*) printf 'JWT_SECRET=%s\n' "$JWT_SECRET" ;;
+            TOTP_ENCRYPTION_KEY=*) printf 'TOTP_ENCRYPTION_KEY=%s\n' "$TOTP_ENCRYPTION_KEY" ;;
+            POSTGRES_PASSWORD=*) printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD" ;;
+            SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID=*) printf 'SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID=%s\n' "$DATA_ENCRYPTION_ACTIVE_KEY_ID" ;;
+            SUB2API_DATA_ENCRYPTION_KEYS_JSON=*) printf 'SUB2API_DATA_ENCRYPTION_KEYS_JSON=%s\n' "$DATA_ENCRYPTION_KEYS_JSON" ;;
+            SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID=*) printf 'SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID=%s\n' "$BACKUP_ENCRYPTION_ACTIVE_KEY_ID" ;;
+            SUB2API_BACKUP_ENCRYPTION_KEYS_JSON=*) printf 'SUB2API_BACKUP_ENCRYPTION_KEYS_JSON=%s\n' "$BACKUP_ENCRYPTION_KEYS_JSON" ;;
+            *) printf '%s\n' "$line" ;;
+        esac
+    done < .env.example > "$env_tmp"
+    mv -f "$env_tmp" .env
+    chmod 600 .env
+    umask "$old_umask"
+    unset DATA_ENCRYPTION_ACTIVE_KEY_ID DATA_ENCRYPTION_KEY DATA_ENCRYPTION_KEYS_JSON BACKUP_ENCRYPTION_ACTIVE_KEY_ID BACKUP_ENCRYPTION_KEY BACKUP_ENCRYPTION_KEYS_JSON
 
     # Create data directories
     print_info "Creating data directories..."
@@ -135,10 +206,7 @@ main() {
     echo "  Preparation Complete!"
     echo "=========================================="
     echo ""
-    echo "Generated secure credentials:"
-    echo "  POSTGRES_PASSWORD:     ${POSTGRES_PASSWORD}"
-    echo "  JWT_SECRET:            ${JWT_SECRET}"
-    echo "  TOTP_ENCRYPTION_KEY:   ${TOTP_ENCRYPTION_KEY}"
+    echo "Generated credentials were saved to .env (not displayed)."
     echo ""
     print_warning "These credentials have been saved to .env file."
     print_warning "Please keep them secure and do not share publicly!"

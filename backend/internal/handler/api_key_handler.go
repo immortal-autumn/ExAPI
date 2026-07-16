@@ -179,7 +179,11 @@ func (h *APIKeyHandler) Create(c *gin.Context) {
 		if err != nil {
 			return nil, err
 		}
-		return dto.APIKeyFromService(key), nil
+		out := dto.APIKeyFromService(key)
+		// API keys are unrecoverable after creation. Return the raw key exactly
+		// once in this response; list/get/update mappers expose only key_prefix.
+		out.Key = key.Key
+		return out, nil
 	})
 }
 

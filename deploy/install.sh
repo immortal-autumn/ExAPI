@@ -36,9 +36,10 @@ INSTALL_DIR="/opt/sub2api"
 SERVICE_NAME="sub2api"
 SERVICE_USER="sub2api"
 CONFIG_DIR="/etc/sub2api"
+RUNTIME_ENV_FILE="/etc/sub2api.env"
 
 # Server configuration (will be set by user)
-SERVER_HOST="0.0.0.0"
+SERVER_HOST="127.0.0.1"
 SERVER_PORT="8080"
 
 # Language (default: zh = Chinese)
@@ -139,7 +140,7 @@ declare -A MSG_ZH=(
     ["remove_manually"]="如不再需要，请手动删除"
     ["removing_install_lock"]="正在移除安装锁文件..."
     ["install_lock_removed"]="安装锁文件已移除，重新安装时将进入设置向导"
-    ["purge_prompt"]="是否同时删除配置目录？这将清除所有配置和数据 [y/N]: "
+    ["purge_prompt"]="是否同时删除配置目录和外部加密密钥？这将清除配置，并使依赖该密钥的加密数据和备份无法恢复 [y/N]: "
     ["removing_config_dir"]="正在移除配置目录..."
     ["uninstall_complete"]="ExAPI 已卸载"
 
@@ -264,7 +265,7 @@ declare -A MSG_EN=(
     ["remove_manually"]="Remove it manually if you no longer need it."
     ["removing_install_lock"]="Removing install lock file..."
     ["install_lock_removed"]="Install lock removed. Setup wizard will appear on next install."
-    ["purge_prompt"]="Also remove config directory? This will delete all config and data [y/N]: "
+    ["purge_prompt"]="Also remove the config directory and external encryption keyring? Encrypted database fields and backups that depend on it will become unrecoverable [y/N]: "
     ["removing_config_dir"]="Removing config directory..."
     ["uninstall_complete"]="ExAPI has been uninstalled"
 
@@ -328,8 +329,12 @@ print_error() {
 # Check if running interactively (can access terminal)
 # When piped (curl | bash), stdin is not a terminal, but /dev/tty may still be available
 is_interactive() {
-    # Check if /dev/tty is available (works even when piped)
-    [ -e /dev/tty ] && [ -r /dev/tty ] && [ -w /dev/tty ]
+    # Opening /dev/tty can still fail in containers/CI even when the device node
+    # exists and its mode bits look readable/writable.
+    if [ -t 0 ]; then
+        return 0
+    fi
+    { exec 9<>/dev/tty && exec 9>&-; } 2>/dev/null
 }
 
 # Select language
@@ -471,6 +476,10 @@ check_dependencies() {
 
     if ! command -v tar &> /dev/null; then
         missing+=("tar")
+    fi
+
+    if ! command -v openssl &> /dev/null; then
+        missing+=("openssl")
     fi
 
     if [ ${#missing[@]} -gt 0 ]; then
@@ -662,9 +671,112 @@ setup_directories() {
     print_success "$(msg 'dirs_configured')"
 }
 
+# Validate one external keyring without sourcing the secret-bearing file.
+validate_runtime_keyring() {
+    local active_name="$1" keys_name="$2" label="$3"
+    python3 - "$RUNTIME_ENV_FILE" "$active_name" "$keys_name" "$label" <<'PY'
+import base64, json, sys
+path, active_name, keys_name, label = sys.argv[1:]
+values = {}
+with open(path, encoding="utf-8") as handle:
+    for raw in handle:
+        line = raw.rstrip("\r\n")
+        if "=" not in line or line.lstrip().startswith("#"):
+            continue
+        key, value = line.split("=", 1)
+        if key in (active_name, keys_name):
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+                value = value[1:-1]
+            values[key] = value
+active = values.get(active_name, "")
+raw_keys = values.get(keys_name, "")
+if not active or not raw_keys:
+    raise SystemExit(f"{label} keyring contains empty values")
+try:
+    keys = json.loads(raw_keys)
+    material = base64.b64decode(keys[active], validate=True)
+except Exception as exc:
+    raise SystemExit(f"{label} keyring is malformed: {exc}")
+if len(material) != 32:
+    raise SystemExit(f"{label} active key must decode to exactly 32 bytes")
+PY
+}
+
+# Create or preserve the external data-encryption root and systemd drop-in.
+# The key file is root-only and intentionally outside service-writable paths.
+ensure_runtime_secrets() {
+    local has_active=false has_keys=false has_backup_active=false has_backup_keys=false old_umask key key_json backup_key backup_key_json tmp_file dropin_dir
+
+    if [ -f "$RUNTIME_ENV_FILE" ]; then
+        grep -q '^SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID=' "$RUNTIME_ENV_FILE" && has_active=true
+        grep -q '^SUB2API_DATA_ENCRYPTION_KEYS_JSON=' "$RUNTIME_ENV_FILE" && has_keys=true
+        grep -q '^SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID=' "$RUNTIME_ENV_FILE" && has_backup_active=true
+        grep -q '^SUB2API_BACKUP_ENCRYPTION_KEYS_JSON=' "$RUNTIME_ENV_FILE" && has_backup_keys=true
+        if [ "$has_active" != "$has_keys" ]; then
+            print_error "$RUNTIME_ENV_FILE contains a partial data-encryption keyring; refusing to overwrite it"
+            exit 1
+        fi
+        if [ "$has_backup_active" != "$has_backup_keys" ]; then
+            print_error "$RUNTIME_ENV_FILE contains a partial backup-encryption keyring; refusing to overwrite it"
+            exit 1
+        fi
+    fi
+
+    if [ "$has_active" = false ]; then
+        key=$(openssl rand -base64 32 | tr -d '\r\n')
+        key_json="{\"data-v1\":\"${key}\"}"
+        old_umask=$(umask)
+        umask 077
+        tmp_file=$(mktemp /etc/.sub2api.env.XXXXXX)
+        if [ -f "$RUNTIME_ENV_FILE" ]; then
+            while IFS= read -r line || [ -n "$line" ]; do
+                printf '%s\n' "$line"
+            done < "$RUNTIME_ENV_FILE" > "$tmp_file"
+        fi
+        printf 'SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID=data-v1\n' >> "$tmp_file"
+        printf "SUB2API_DATA_ENCRYPTION_KEYS_JSON='%s'\n" "$key_json" >> "$tmp_file"
+        chown root:root "$tmp_file"
+        chmod 600 "$tmp_file"
+        mv -f "$tmp_file" "$RUNTIME_ENV_FILE"
+        umask "$old_umask"
+        unset key key_json
+        print_success "Generated root-only external data-encryption keyring"
+    else
+        chown root:root "$RUNTIME_ENV_FILE"
+        chmod 600 "$RUNTIME_ENV_FILE"
+        print_info "Preserving existing external data-encryption keyring"
+        validate_runtime_keyring SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID SUB2API_DATA_ENCRYPTION_KEYS_JSON data-encryption
+    fi
+
+    if [ "$has_backup_active" = false ]; then
+        backup_key=$(openssl rand -base64 32 | tr -d '\r\n')
+        backup_key_json="{\"backup-v1\":\"${backup_key}\"}"
+        printf 'SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID=backup-v1\n' >> "$RUNTIME_ENV_FILE"
+        printf "SUB2API_BACKUP_ENCRYPTION_KEYS_JSON='%s'\n" "$backup_key_json" >> "$RUNTIME_ENV_FILE"
+        chown root:root "$RUNTIME_ENV_FILE"
+        chmod 600 "$RUNTIME_ENV_FILE"
+        unset backup_key backup_key_json
+        print_success "Generated root-only external backup-encryption keyring"
+    else
+        print_info "Preserving existing external backup-encryption keyring"
+        validate_runtime_keyring SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID SUB2API_BACKUP_ENCRYPTION_KEYS_JSON backup-encryption
+    fi
+
+    dropin_dir="/etc/systemd/system/sub2api.service.d"
+    mkdir -p "$dropin_dir"
+    cat > "$dropin_dir/10-runtime-secrets.conf" << EOF
+[Service]
+EnvironmentFile=$RUNTIME_ENV_FILE
+EOF
+    chown root:root "$dropin_dir/10-runtime-secrets.conf"
+    chmod 644 "$dropin_dir/10-runtime-secrets.conf"
+}
+
 # Install systemd service
 install_service() {
     print_info "$(msg 'installing_service')"
+    ensure_runtime_secrets
 
     # Create service file with configured host and port
     cat > /etc/systemd/system/sub2api.service << EOF
@@ -835,6 +947,10 @@ upgrade() {
     # Set permissions
     chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/sub2api"
 
+    # Ensure upgraded installations receive and preserve the mandatory external keyring.
+    ensure_runtime_secrets
+    systemctl daemon-reload
+
     # Start service
     print_info "$(msg 'starting_service')"
     systemctl start sub2api
@@ -897,6 +1013,10 @@ install_version() {
     # Set permissions
     chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/sub2api"
 
+    # Ensure rollback/version installs retain the same external keyring.
+    ensure_runtime_secrets
+    systemctl daemon-reload
+
     # Start service
     print_info "$(msg 'starting_service')"
     if systemctl start sub2api; then
@@ -943,6 +1063,8 @@ uninstall() {
 
     print_info "$(msg 'removing_files')"
     rm -f /etc/systemd/system/sub2api.service
+    rm -f /etc/systemd/system/sub2api.service.d/10-runtime-secrets.conf
+    rmdir /etc/systemd/system/sub2api.service.d 2>/dev/null || true
     systemctl daemon-reload
 
     print_info "$(msg 'removing_install_dir')"
@@ -960,6 +1082,7 @@ uninstall() {
     # Ask about config directory removal (interactive mode only)
     local remove_config=false
     if [ "${PURGE:-}" = "true" ]; then
+        print_warning "PURGE=true 将删除外部加密密钥环。依赖该密钥环的数据库加密字段和备份将永久无法恢复。"
         remove_config=true
     elif is_interactive; then
         read -p "$(msg 'purge_prompt')" -n 1 -r < /dev/tty
@@ -972,8 +1095,13 @@ uninstall() {
     if [ "$remove_config" = true ]; then
         print_info "$(msg 'removing_config_dir')"
         rm -rf "$CONFIG_DIR"
+        # Purge means removing the external cryptographic root as well. Warn in
+        # the confirmation text because encrypted database fields and backups
+        # become unrecoverable once this file is deleted.
+        rm -f "$RUNTIME_ENV_FILE"
     else
         print_warning "$(msg 'config_not_removed'): $CONFIG_DIR"
+        print_warning "Preserving external cryptographic keyring: $RUNTIME_ENV_FILE"
         print_warning "$(msg 'remove_manually')"
     fi
 
@@ -1130,6 +1258,7 @@ main() {
             echo "Options:"
             echo "  -v, --version <ver>  $(msg 'opt_version')"
             echo "  -y, --yes            Skip confirmation prompts (for uninstall)"
+            echo "  --purge               同时删除配置和外部加密密钥环（不可逆）"
             echo ""
             echo "Examples:"
             echo "  $0                        # Install latest version"

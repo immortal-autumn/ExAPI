@@ -18,7 +18,7 @@ func TestGetErrorLogByID_DeletedKeyOwner(t *testing.T) {
 	ctx := context.Background()
 	_, _ = integrationDB.ExecContext(ctx, "TRUNCATE ops_error_logs RESTART IDENTITY CASCADE")
 
-	repo := NewOpsRepository(integrationDB).(*opsRepository)
+	repo := newOpsRepositoryWithDigester(integrationDB, mustGatewayAPIKeyDigesterForTest(t))
 
 	// ── Case 1: 带 deleted_key_owner 信息的记录 ──────────────────────────────
 	owner := mustCreateUser(t, integrationEntClient, &service.User{

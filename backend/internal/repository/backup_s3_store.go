@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -30,8 +29,14 @@ func NewS3BackupStoreFactory() service.BackupObjectStoreFactory {
 			region = "auto" // Cloudflare R2 默认 region
 		}
 
+		endpoint, err := validateBackupEndpoint(cfg.Endpoint)
+		if err != nil {
+			return nil, err
+		}
+
 		awsCfg, err := awsconfig.LoadDefaultConfig(ctx,
 			awsconfig.WithRegion(region),
+			awsconfig.WithHTTPClient(newBackupHTTPClient()),
 			awsconfig.WithCredentialsProvider(
 				credentials.NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
 			),
@@ -39,10 +44,15 @@ func NewS3BackupStoreFactory() service.BackupObjectStoreFactory {
 		if err != nil {
 			return nil, fmt.Errorf("load aws config: %w", err)
 		}
+		// Endpoint selection is application-controlled. Ignore generic/service SDK
+		// endpoint overrides from environment or shared config so they cannot bypass
+		// validateBackupEndpoint; an explicit cfg.Endpoint is applied below.
+		awsCfg.BaseEndpoint = nil
 
 		client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
-			if cfg.Endpoint != "" {
-				o.BaseEndpoint = &cfg.Endpoint
+			o.BaseEndpoint = nil
+			if endpoint != "" {
+				o.BaseEndpoint = &endpoint
 			}
 			if cfg.ForcePathStyle {
 				o.UsePathStyle = true
@@ -55,24 +65,21 @@ func NewS3BackupStoreFactory() service.BackupObjectStoreFactory {
 	}
 }
 
-func (s *S3BackupStore) Upload(ctx context.Context, key string, body io.Reader, contentType string) (int64, error) {
-	// 读取全部内容以获取大小（S3 PutObject 需要知道内容长度）
-	// 注意：阿里云 OSS 不兼容 s3manager 分片上传的签名方式，因此使用 PutObject
-	data, err := io.ReadAll(body)
-	if err != nil {
-		return 0, fmt.Errorf("read body: %w", err)
+func (s *S3BackupStore) Upload(ctx context.Context, key string, body io.Reader, sizeBytes int64, contentType string) (int64, error) {
+	if sizeBytes < 0 {
+		return 0, fmt.Errorf("invalid upload size %d", sizeBytes)
 	}
-
-	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:      &s.bucket,
-		Key:         &key,
-		Body:        bytes.NewReader(data),
-		ContentType: &contentType,
+	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:        &s.bucket,
+		Key:           &key,
+		Body:          body,
+		ContentLength: &sizeBytes,
+		ContentType:   &contentType,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("S3 PutObject: %w", err)
 	}
-	return int64(len(data)), nil
+	return sizeBytes, nil
 }
 
 func (s *S3BackupStore) Download(ctx context.Context, key string) (io.ReadCloser, error) {

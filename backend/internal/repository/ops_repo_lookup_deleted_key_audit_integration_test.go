@@ -13,14 +13,16 @@ import (
 func TestOpsRepositoryLookupDeletedKeyAudit(t *testing.T) {
 	ctx := context.Background()
 	_, _ = integrationDB.ExecContext(ctx, "TRUNCATE deleted_api_key_audits RESTART IDENTITY")
-	repo := NewOpsRepository(integrationDB).(*opsRepository)
+	repo := newOpsRepositoryWithDigester(integrationDB, mustGatewayAPIKeyDigesterForTest(t))
 
 	// 同一 key 两条审计,取最近一条(deleted_at DESC, id DESC)
-	_, err := integrationDB.ExecContext(ctx, `
-		INSERT INTO deleted_api_key_audits (key, api_key_id, user_id, key_name, deleted_at)
-		VALUES ('sk-lookup-1', 10, 100, 'old', $1),
-		       ('sk-lookup-1', 11, 200, 'new', $2)`,
-		time.Now().Add(-time.Hour), time.Now())
+	digest, err := repo.digester.Digest("sk-lookup-1")
+	require.NoError(t, err)
+	_, err = integrationDB.ExecContext(ctx, `
+		INSERT INTO deleted_api_key_audits (key, key_digest, api_key_id, user_id, key_name, deleted_at)
+		VALUES ('__hmac__old', $3, 10, 100, 'old', $1),
+		       ('__hmac__new', $3, 11, 200, 'new', $2)`,
+		time.Now().Add(-time.Hour), time.Now(), digest)
 	require.NoError(t, err)
 
 	res, err := repo.LookupDeletedKeyAudit(ctx, "sk-lookup-1")

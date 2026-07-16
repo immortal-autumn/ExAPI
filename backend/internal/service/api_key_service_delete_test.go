@@ -335,6 +335,17 @@ func TestApiKeyService_Delete_Success(t *testing.T) {
 	require.False(t, exists, "delete should clear touch debounce cache")
 }
 
+func TestApiKeyService_Delete_ProtectedStoredKeyUsesGenerationInvalidation(t *testing.T) {
+	repo := &apiKeyRepoStub{apiKey: &APIKey{ID: 42, UserID: 7, Key: "__hmac__0123456789abcdef"}}
+	cache := &apiKeyCacheStub{}
+	svc := &APIKeyService{apiKeyRepo: repo, cache: cache}
+	before := svc.authCacheKey("submitted-key")
+
+	require.NoError(t, svc.Delete(context.Background(), 42, 7))
+	require.NotEqual(t, before, svc.authCacheKey("submitted-key"), "deleting a protected row must invalidate generation because raw key is unrecoverable")
+	require.Empty(t, cache.deleteAuthKeys, "stored verifier placeholder must never be treated as reusable raw key material")
+}
+
 // TestApiKeyService_Delete_NotFound 测试删除不存在的 API Key 时返回正确的错误。
 // 预期行为：
 //   - GetKeyAndOwnerID 返回 ErrAPIKeyNotFound 错误

@@ -45,10 +45,10 @@ chmod +x docker-deploy.sh
 
 **What the script does:**
 - Downloads `docker-compose.local.yml` and `.env.example`
-- Automatically generates secure secrets (JWT_SECRET, TOTP_ENCRYPTION_KEY, POSTGRES_PASSWORD)
+- Automatically generates secure secrets (JWT, TOTP, external data encryption, PostgreSQL)
 - Creates `.env` file with generated secrets
 - Creates necessary data directories (data/, postgres_data/, redis_data/)
-- **Displays generated credentials** (POSTGRES_PASSWORD, JWT_SECRET, etc.)
+- Saves generated credentials to a mode-0600 `.env` without printing them
 
 **After running the script:**
 ```bash
@@ -81,8 +81,11 @@ nano .env  # Set POSTGRES_PASSWORD and other required variables
 # Generate secure secrets (recommended)
 JWT_SECRET=$(openssl rand -hex 32)
 TOTP_ENCRYPTION_KEY=$(openssl rand -hex 32)
+DATA_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr -d '\r\n')
 echo "JWT_SECRET=${JWT_SECRET}" >> .env
 echo "TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY}" >> .env
+echo 'SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID=data-v1' >> .env
+printf 'SUB2API_DATA_ENCRYPTION_KEYS_JSON={"data-v1":"%s"}\n' "$DATA_ENCRYPTION_KEY" >> .env
 
 # Create data directories
 mkdir -p data postgres_data redis_data
@@ -210,6 +213,9 @@ docker compose down -v
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `POSTGRES_PASSWORD` | **Yes** | - | PostgreSQL password |
+| `SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID` | **Yes** | - | Active external data-encryption key ID |
+| `SUB2API_DATA_ENCRYPTION_KEYS_JSON` | **Yes** | - | JSON keyring of base64-encoded 32-byte data keys; keep outside PostgreSQL/backups |
+| `SUB2API_ALLOW_LEGACY_PLAINTEXT_BACKUP_RESTORE` | No | `false` | Temporarily allow recognized pre-encryption `.sql.gz` records to restore; disable again after controlled recovery |
 | `JWT_SECRET` | **Recommended** | *(auto-generated)* | JWT secret (fixed for persistent sessions) |
 | `TOTP_ENCRYPTION_KEY` | **Recommended** | *(auto-generated)* | TOTP encryption key (fixed for persistent 2FA) |
 | `SERVER_PORT` | No | `8080` | Server port |
@@ -223,29 +229,42 @@ docker compose down -v
 
 See `.env.example` for all available options.
 
-> **Note:** The `docker-deploy.sh` script automatically generates `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, and `POSTGRES_PASSWORD` for you.
+> **Note:** `docker-deploy.sh` also generates the required external data-encryption keyring. Preserve `.env` securely: losing every retained data key makes protected secrets unrecoverable. During rotation, add the new key alongside old keys, switch the active ID, and remove old keys only after rewrap verification.
+
+Backups created by current releases carry an explicit authenticated-encryption format marker. Older records without that marker are restored only when both their file/object names end in `.sql.gz` and `SUB2API_ALLOW_LEGACY_PLAINTEXT_BACKUP_RESTORE=true`. This compatibility path fully validates and stages the legacy gzip before invoking PostgreSQL; it is never used as fallback after an encrypted backup fails authentication.
 
 ### Easy Migration (Local Directory Version)
 
 When using `docker-compose.local.yml`, all data is stored in local directories, making migration simple:
 
 ```bash
-# On source server: Stop services and create archive
+# On source server: stop services and archive data without external roots
 cd /path/to/deployment
 docker compose -f docker-compose.local.yml down
 cd ..
-tar czf sub2api-complete.tar.gz deployment/
+tar --exclude='deployment/.env' -czf sub2api-data.tar.gz deployment/
 
-# Transfer to new server
-scp sub2api-complete.tar.gz user@new-server:/path/to/destination/
+# Encrypt the key-bearing .env separately (prompts for a strong passphrase)
+openssl enc -aes-256-cbc -pbkdf2 -salt \
+  -in deployment/.env -out sub2api-keyring.env.enc
 
-# On new server: Extract and start
-tar xzf sub2api-complete.tar.gz
+# Transfer the data archive normally. Transfer the encrypted key bundle through
+# a separately controlled channel.
+scp sub2api-data.tar.gz user@new-server:/path/to/destination/
+
+# On new server: extract data, then restore the key bundle with mode 0600
+cd /path/to/destination
+tar xzf sub2api-data.tar.gz
+umask 077
+openssl enc -d -aes-256-cbc -pbkdf2 \
+  -in sub2api-keyring.env.enc -out deployment/.env
 cd deployment/
 docker compose -f docker-compose.local.yml up -d
 ```
 
-Your entire deployment (configuration + data) is migrated!
+The data archive alone cannot decrypt protected secrets. Treat the separately
+encrypted `.env` as disaster-recovery key material, restrict access, and retain
+old key IDs through rotation until all protected data has been rewrapped.
 
 ---
 
@@ -356,18 +375,31 @@ For production servers using systemd.
 curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install.sh | sudo bash
 ```
 
+The installer generates `/etc/sub2api.env` as `root:root` mode `0600`, loads it
+through a systemd drop-in, and preserves it across upgrades and rollbacks. Back
+it up separately from PostgreSQL; losing it makes encrypted roots unrecoverable.
+
 ### Manual Installation
 
 1. Download the latest release from [GitHub Releases](https://github.com/Wei-Shaw/sub2api/releases)
 2. Extract and copy the binary to `/opt/sub2api/`
-3. Copy `sub2api.service` to `/etc/systemd/system/`
-4. Run:
+3. Create the mandatory root-only keyring file:
+   ```bash
+   sudo bash
+   umask 077
+   key=$(openssl rand -base64 32 | tr -d '\r\n')
+   printf "SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID=data-v1\nSUB2API_DATA_ENCRYPTION_KEYS_JSON='{\"data-v1\":\"%s\"}'\n" "$key" > /etc/sub2api.env
+   unset key
+   exit
+   ```
+4. Copy `sub2api.service` to `/etc/systemd/system/`
+5. Run:
    ```bash
    sudo systemctl daemon-reload
    sudo systemctl enable sub2api
    sudo systemctl start sub2api
    ```
-5. Open the Setup Wizard in your browser to complete configuration
+6. Open the Setup Wizard in your browser to complete configuration
 
 ### Commands
 

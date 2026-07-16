@@ -15,6 +15,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +26,7 @@ import (
 	dbgroup "github.com/Wei-Shaw/sub2api/ent/group"
 	dbpredicate "github.com/Wei-Shaw/sub2api/ent/predicate"
 	dbproxy "github.com/Wei-Shaw/sub2api/ent/proxy"
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -42,8 +44,9 @@ import (
 //   - sql: 原生 SQL 执行器，用于复杂查询和批量操作
 //   - schedulerCache: 调度器缓存，用于在账号状态变更时同步快照
 type accountRepository struct {
-	client *dbent.Client // Ent ORM 客户端
-	sql    sqlExecutor   // 原生 SQL 执行接口
+	client    *dbent.Client // Ent ORM 客户端
+	sql       sqlExecutor   // 原生 SQL 执行接口
+	protector *accountCredentialProtector
 	// schedulerCache 用于在账号状态变更时主动同步快照到缓存，
 	// 确保粘性会话能及时感知账号不可用状态。
 	// Used to proactively sync account snapshot to cache when status changes,
@@ -68,27 +71,54 @@ const postgresParameterBatchSize = 50000
 
 // NewAccountRepository 创建账户仓储实例。
 // 这是对外暴露的构造函数，返回接口类型以便于依赖注入。
-func NewAccountRepository(client *dbent.Client, sqlDB *sql.DB, schedulerCache service.SchedulerCache) service.AccountRepository {
-	return newAccountRepositoryWithSQL(client, sqlDB, schedulerCache)
+func NewAccountRepository(client *dbent.Client, sqlDB *sql.DB, schedulerCache service.SchedulerCache) (service.AccountRepository, error) {
+	keyrings, err := config.LoadExternalKeyringsFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	protector, err := newAccountCredentialProtector(keyrings.DataEncryption)
+	if err != nil {
+		return nil, err
+	}
+	return newAccountRepositoryWithSQLAndProtector(client, sqlDB, schedulerCache, protector), nil
 }
 
-// newAccountRepositoryWithSQL 是内部构造函数，支持依赖注入 SQL 执行器。
-// 这种设计便于单元测试时注入 mock 对象。
+// newAccountRepositoryWithSQL 是内部兼容构造函数。凭据写入会失败关闭，
+// 需要凭据读写的测试应使用 newAccountRepositoryWithSQLAndProtector。
 func newAccountRepositoryWithSQL(client *dbent.Client, sqlq sqlExecutor, schedulerCache service.SchedulerCache) *accountRepository {
-	return &accountRepository{client: client, sql: sqlq, schedulerCache: schedulerCache}
+	return newAccountRepositoryWithSQLAndProtector(client, sqlq, schedulerCache, nil)
+}
+
+func newAccountRepositoryWithSQLAndProtector(client *dbent.Client, sqlq sqlExecutor, schedulerCache service.SchedulerCache, protector *accountCredentialProtector) *accountRepository {
+	return &accountRepository{client: client, sql: sqlq, schedulerCache: schedulerCache, protector: protector}
 }
 
 func (r *accountRepository) Create(ctx context.Context, account *service.Account) error {
 	if account == nil {
 		return service.ErrAccountNilInput
 	}
+	if r.protector == nil {
+		return errors.New("data-encryption keyring is required for account credentials")
+	}
 
-	builder := r.client.Account.Create().
+	exec := clientFromContext(ctx, r.client)
+	var tx *dbent.Tx
+	if dbent.TxFromContext(ctx) == nil {
+		var err error
+		tx, err = r.client.Tx(ctx)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback() }()
+		exec = tx.Client()
+	}
+
+	builder := exec.Account.Create().
 		SetName(account.Name).
 		SetNillableNotes(account.Notes).
 		SetPlatform(account.Platform).
 		SetType(account.Type).
-		SetCredentials(normalizeJSONMap(account.Credentials)).
+		SetCredentials(map[string]any{}).
 		SetExtra(normalizeJSONMap(account.Extra)).
 		SetConcurrency(account.Concurrency).
 		SetPriority(account.Priority).
@@ -143,6 +173,18 @@ func (r *accountRepository) Create(ctx context.Context, account *service.Account
 	}
 
 	account.ID = created.ID
+	sealedCredentials, err := r.protector.seal(created.ID, account.Credentials)
+	if err != nil {
+		return err
+	}
+	if _, err := exec.Account.UpdateOneID(created.ID).SetCredentials(sealedCredentials).Save(ctx); err != nil {
+		return translatePersistenceError(err, service.ErrAccountNotFound, nil)
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
 	account.CreatedAt = created.CreatedAt
 	account.UpdatedAt = created.UpdatedAt
 	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &account.ID, nil, buildSchedulerGroupPayload(account.GroupIDs)); err != nil {
@@ -215,7 +257,10 @@ func (r *accountRepository) GetByIDs(ctx context.Context, ids []int64) ([]*servi
 
 	outByID := make(map[int64]*service.Account, len(entAccounts))
 	for _, entAcc := range entAccounts {
-		out := accountEntityToService(entAcc)
+		out, err := r.accountEntityToService(entAcc)
+		if err != nil {
+			return nil, err
+		}
 		if out == nil {
 			continue
 		}
@@ -331,6 +376,10 @@ func (r *accountRepository) Update(ctx context.Context, account *service.Account
 	if account == nil {
 		return nil
 	}
+	sealedCredentials, err := r.sealAccountCredentials(account.ID, account.Credentials)
+	if err != nil {
+		return err
+	}
 	schedulable := account.Schedulable
 	if account.Status == service.StatusError {
 		schedulable = false
@@ -341,7 +390,7 @@ func (r *accountRepository) Update(ctx context.Context, account *service.Account
 		SetNillableNotes(account.Notes).
 		SetPlatform(account.Platform).
 		SetType(account.Type).
-		SetCredentials(normalizeJSONMap(account.Credentials)).
+		SetCredentials(sealedCredentials).
 		SetExtra(normalizeJSONMap(account.Extra)).
 		SetConcurrency(account.Concurrency).
 		SetPriority(account.Priority).
@@ -426,8 +475,12 @@ func (r *accountRepository) Update(ctx context.Context, account *service.Account
 }
 
 func (r *accountRepository) UpdateCredentials(ctx context.Context, id int64, credentials map[string]any) error {
-	_, err := r.client.Account.UpdateOneID(id).
-		SetCredentials(normalizeJSONMap(credentials)).
+	sealed, err := r.sealAccountCredentials(id, credentials)
+	if err != nil {
+		return err
+	}
+	_, err = r.client.Account.UpdateOneID(id).
+		SetCredentials(sealed).
 		Save(ctx)
 	if err != nil {
 		return translatePersistenceError(err, service.ErrAccountNotFound, nil)
@@ -1675,15 +1728,46 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 		args = append(args, *updates.Schedulable)
 		idx++
 	}
-	// JSONB 需要合并而非覆盖，使用 raw SQL 保持旧行为。
+	// Credential updates must decrypt, merge, and re-seal each row because the
+	// envelope is purpose-bound to the account ID. They are still applied in the
+	// single final UPDATE statement through a per-ID CASE expression.
 	if len(updates.Credentials) > 0 {
-		payload, err := json.Marshal(updates.Credentials)
+		accounts, err := r.GetByIDs(ctx, ids)
 		if err != nil {
 			return 0, err
 		}
-		setClauses = append(setClauses, "credentials = COALESCE(credentials, '{}'::jsonb) || $"+itoa(idx)+"::jsonb")
-		args = append(args, payload)
-		idx++
+		byID := make(map[int64]*service.Account, len(accounts))
+		for _, account := range accounts {
+			byID[account.ID] = account
+		}
+		caseParts := make([]string, 0, len(ids))
+		for _, id := range ids {
+			account := byID[id]
+			if account == nil {
+				continue
+			}
+			merged := copyJSONMap(account.Credentials)
+			if merged == nil {
+				merged = map[string]any{}
+			}
+			for key, value := range updates.Credentials {
+				merged[key] = value
+			}
+			sealed, err := r.sealAccountCredentials(id, merged)
+			if err != nil {
+				return 0, err
+			}
+			payload, err := json.Marshal(sealed)
+			if err != nil {
+				return 0, err
+			}
+			caseParts = append(caseParts, "WHEN $"+itoa(idx)+" THEN $"+itoa(idx+1)+"::jsonb")
+			args = append(args, id, payload)
+			idx += 2
+		}
+		if len(caseParts) > 0 {
+			setClauses = append(setClauses, "credentials = CASE id "+joinClauses(caseParts, " ")+" ELSE credentials END")
+		}
 	}
 	if len(updates.Extra) > 0 {
 		payload, err := json.Marshal(updates.Extra)
@@ -1827,7 +1911,10 @@ func (r *accountRepository) accountsToService(ctx context.Context, accounts []*d
 
 	outAccounts := make([]service.Account, 0, len(accounts))
 	for _, acc := range accounts {
-		out := accountEntityToService(acc)
+		out, err := r.accountEntityToService(acc)
+		if err != nil {
+			return nil, err
+		}
 		if out == nil {
 			continue
 		}
@@ -2044,9 +2131,23 @@ func buildSchedulerGroupPayload(groupIDs []int64) any {
 	return map[string]any{"group_ids": groupIDs}
 }
 
-func accountEntityToService(m *dbent.Account) *service.Account {
+func (r *accountRepository) sealAccountCredentials(id int64, credentials map[string]any) (map[string]any, error) {
+	if r == nil || r.protector == nil {
+		return nil, errors.New("data-encryption keyring is required for account credentials")
+	}
+	return r.protector.seal(id, credentials)
+}
+
+func (r *accountRepository) accountEntityToService(m *dbent.Account) (*service.Account, error) {
 	if m == nil {
-		return nil
+		return nil, nil
+	}
+	if r.protector == nil {
+		return nil, errors.New("data-encryption keyring is required for account credentials")
+	}
+	credentials, _, err := r.protector.openLegacy(m.ID, m.Credentials)
+	if err != nil {
+		return nil, fmt.Errorf("open account %d credentials: %w", m.ID, err)
 	}
 
 	rateMultiplier := m.RateMultiplier
@@ -2057,7 +2158,7 @@ func accountEntityToService(m *dbent.Account) *service.Account {
 		Notes:                   m.Notes,
 		Platform:                m.Platform,
 		Type:                    m.Type,
-		Credentials:             copyJSONMap(m.Credentials),
+		Credentials:             credentials,
 		Extra:                   copyJSONMap(m.Extra),
 		ProxyID:                 m.ProxyID,
 		ProxyFallbackOriginID:   m.ProxyFallbackOriginID,
@@ -2083,6 +2184,19 @@ func accountEntityToService(m *dbent.Account) *service.Account {
 		SessionWindowStatus:     derefString(m.SessionWindowStatus),
 		ParentAccountID:         m.ParentAccountID,
 		QuotaDimension:          string(m.QuotaDimension),
+	}, nil
+}
+
+func accountEntityToServiceRedacted(m *dbent.Account) *service.Account {
+	if m == nil {
+		return nil
+	}
+	rateMultiplier := m.RateMultiplier
+	return &service.Account{
+		ID: m.ID, Name: m.Name, Notes: m.Notes, Platform: m.Platform, Type: m.Type,
+		Credentials: map[string]any{}, Extra: copyJSONMap(m.Extra), ProxyID: m.ProxyID,
+		Concurrency: m.Concurrency, Priority: m.Priority, RateMultiplier: &rateMultiplier,
+		Status: m.Status, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
 }
 
@@ -2389,7 +2503,11 @@ func (r *accountRepository) ListShadowsByParent(ctx context.Context, parentID in
 	}
 	out := make([]*service.Account, 0, len(rows))
 	for _, m := range rows {
-		out = append(out, accountEntityToService(m))
+		account, err := r.accountEntityToService(m)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, account)
 	}
 	return out, nil
 }

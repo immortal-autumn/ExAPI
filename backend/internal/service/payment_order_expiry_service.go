@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,11 +24,15 @@ const (
 
 // PaymentOrderExpiryService periodically expires timed-out payment orders.
 type PaymentOrderExpiryService struct {
-	paymentSvc *PaymentService
-	interval   time.Duration
-	stopCh     chan struct{}
-	stopOnce   sync.Once
-	wg         sync.WaitGroup
+	paymentSvc  *PaymentService
+	interval    time.Duration
+	stopCh      chan struct{}
+	lifecycleMu sync.Mutex
+	started     bool
+	stopped     bool
+	stopOnce    sync.Once
+	wg          sync.WaitGroup
+	running     atomic.Bool
 
 	lockCache  LeaderLockCache
 	db         *sql.DB
@@ -58,12 +63,26 @@ func (s *PaymentOrderExpiryService) Start() {
 	if s == nil || s.paymentSvc == nil || s.interval <= 0 {
 		return
 	}
+	s.lifecycleMu.Lock()
+	if s.started || s.stopped {
+		s.lifecycleMu.Unlock()
+		return
+	}
+	s.started = true
 	s.wg.Add(1)
+	s.running.Store(true)
+	s.lifecycleMu.Unlock()
 	go func() {
 		defer s.wg.Done()
+		defer s.running.Store(false)
 		ticker := time.NewTicker(s.interval)
 		defer ticker.Stop()
 
+		select {
+		case <-s.stopCh:
+			return
+		default:
+		}
 		s.runOnce()
 		for {
 			select {
@@ -76,13 +95,25 @@ func (s *PaymentOrderExpiryService) Start() {
 	}()
 }
 
+// Running reports whether the periodic payment reconciliation loop is active.
+func (s *PaymentOrderExpiryService) Running() bool {
+	return s != nil && s.running.Load()
+}
+
 func (s *PaymentOrderExpiryService) Stop() {
 	if s == nil {
 		return
 	}
+	s.lifecycleMu.Lock()
+	if s.stopped {
+		s.lifecycleMu.Unlock()
+		return
+	}
+	s.stopped = true
 	s.stopOnce.Do(func() {
 		close(s.stopCh)
 	})
+	s.lifecycleMu.Unlock()
 	s.wg.Wait()
 }
 

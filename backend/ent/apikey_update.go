@@ -86,6 +86,40 @@ func (_u *APIKeyUpdate) SetNillableKey(v *string) *APIKeyUpdate {
 	return _u
 }
 
+// SetKeyDigest sets the "key_digest" field.
+func (_u *APIKeyUpdate) SetKeyDigest(v string) *APIKeyUpdate {
+	_u.mutation.SetKeyDigest(v)
+	return _u
+}
+
+// SetNillableKeyDigest sets the "key_digest" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableKeyDigest(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetKeyDigest(*v)
+	}
+	return _u
+}
+
+// ClearKeyDigest clears the value of the "key_digest" field.
+func (_u *APIKeyUpdate) ClearKeyDigest() *APIKeyUpdate {
+	_u.mutation.ClearKeyDigest()
+	return _u
+}
+
+// SetKeyPrefix sets the "key_prefix" field.
+func (_u *APIKeyUpdate) SetKeyPrefix(v string) *APIKeyUpdate {
+	_u.mutation.SetKeyPrefix(v)
+	return _u
+}
+
+// SetNillableKeyPrefix sets the "key_prefix" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableKeyPrefix(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetKeyPrefix(*v)
+	}
+	return _u
+}
+
 // SetName sets the "name" field.
 func (_u *APIKeyUpdate) SetName(v string) *APIKeyUpdate {
 	_u.mutation.SetName(v)
@@ -550,6 +584,16 @@ func (_u *APIKeyUpdate) check() error {
 			return &ValidationError{Name: "key", err: fmt.Errorf(`ent: validator failed for field "APIKey.key": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.KeyDigest(); ok {
+		if err := apikey.KeyDigestValidator(v); err != nil {
+			return &ValidationError{Name: "key_digest", err: fmt.Errorf(`ent: validator failed for field "APIKey.key_digest": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.KeyPrefix(); ok {
+		if err := apikey.KeyPrefixValidator(v); err != nil {
+			return &ValidationError{Name: "key_prefix", err: fmt.Errorf(`ent: validator failed for field "APIKey.key_prefix": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Name(); ok {
 		if err := apikey.NameValidator(v); err != nil {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "APIKey.name": %w`, err)}
@@ -589,6 +633,15 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Key(); ok {
 		_spec.SetField(apikey.FieldKey, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.KeyDigest(); ok {
+		_spec.SetField(apikey.FieldKeyDigest, field.TypeString, value)
+	}
+	if _u.mutation.KeyDigestCleared() {
+		_spec.ClearField(apikey.FieldKeyDigest, field.TypeString)
+	}
+	if value, ok := _u.mutation.KeyPrefix(); ok {
+		_spec.SetField(apikey.FieldKeyPrefix, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
@@ -869,6 +922,40 @@ func (_u *APIKeyUpdateOne) SetKey(v string) *APIKeyUpdateOne {
 func (_u *APIKeyUpdateOne) SetNillableKey(v *string) *APIKeyUpdateOne {
 	if v != nil {
 		_u.SetKey(*v)
+	}
+	return _u
+}
+
+// SetKeyDigest sets the "key_digest" field.
+func (_u *APIKeyUpdateOne) SetKeyDigest(v string) *APIKeyUpdateOne {
+	_u.mutation.SetKeyDigest(v)
+	return _u
+}
+
+// SetNillableKeyDigest sets the "key_digest" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableKeyDigest(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetKeyDigest(*v)
+	}
+	return _u
+}
+
+// ClearKeyDigest clears the value of the "key_digest" field.
+func (_u *APIKeyUpdateOne) ClearKeyDigest() *APIKeyUpdateOne {
+	_u.mutation.ClearKeyDigest()
+	return _u
+}
+
+// SetKeyPrefix sets the "key_prefix" field.
+func (_u *APIKeyUpdateOne) SetKeyPrefix(v string) *APIKeyUpdateOne {
+	_u.mutation.SetKeyPrefix(v)
+	return _u
+}
+
+// SetNillableKeyPrefix sets the "key_prefix" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableKeyPrefix(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetKeyPrefix(*v)
 	}
 	return _u
 }
@@ -1350,6 +1437,16 @@ func (_u *APIKeyUpdateOne) check() error {
 			return &ValidationError{Name: "key", err: fmt.Errorf(`ent: validator failed for field "APIKey.key": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.KeyDigest(); ok {
+		if err := apikey.KeyDigestValidator(v); err != nil {
+			return &ValidationError{Name: "key_digest", err: fmt.Errorf(`ent: validator failed for field "APIKey.key_digest": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.KeyPrefix(); ok {
+		if err := apikey.KeyPrefixValidator(v); err != nil {
+			return &ValidationError{Name: "key_prefix", err: fmt.Errorf(`ent: validator failed for field "APIKey.key_prefix": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Name(); ok {
 		if err := apikey.NameValidator(v); err != nil {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "APIKey.name": %w`, err)}
@@ -1406,6 +1503,15 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if value, ok := _u.mutation.Key(); ok {
 		_spec.SetField(apikey.FieldKey, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.KeyDigest(); ok {
+		_spec.SetField(apikey.FieldKeyDigest, field.TypeString, value)
+	}
+	if _u.mutation.KeyDigestCleared() {
+		_spec.ClearField(apikey.FieldKeyDigest, field.TypeString)
+	}
+	if value, ok := _u.mutation.KeyPrefix(); ok {
+		_spec.SetField(apikey.FieldKeyPrefix, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)

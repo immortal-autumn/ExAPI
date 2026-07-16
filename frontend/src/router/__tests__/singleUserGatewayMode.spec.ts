@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   SINGLE_USER_GATEWAY_RESTRICTED_PREFIXES,
   isSingleUserGatewayRestrictedPath,
+  isSingleUserPrivateControlPlaneBrowser,
   isSingleUserPrivateControlPlaneHost,
 } from '../singleUserGatewayMode'
 
@@ -34,7 +35,23 @@ describe('single-user gateway mode route restrictions', () => {
     }
   })
 
-  it('centralizes private control-plane host detection', () => {
+  it('uses the backend-injected product mode instead of browser hostname', () => {
+    window.__APP_CONFIG__ = { single_user_private_control_plane: true } as any
+    expect(isSingleUserPrivateControlPlaneBrowser()).toBe(true)
+
+    window.__APP_CONFIG__ = { single_user_private_control_plane: false } as any
+    expect(isSingleUserPrivateControlPlaneBrowser()).toBe(false)
+  })
+
+  it('fails closed when injected settings are absent or stale', () => {
+    delete window.__APP_CONFIG__
+    expect(isSingleUserPrivateControlPlaneBrowser()).toBe(true)
+
+    window.__APP_CONFIG__ = {} as any
+    expect(isSingleUserPrivateControlPlaneBrowser()).toBe(true)
+  })
+
+  it('keeps the legacy host classifier informational only', () => {
     for (const host of ['localhost', '127.0.0.1', '::1', '100.97.17.1']) {
       expect(isSingleUserPrivateControlPlaneHost(host)).toBe(true)
     }

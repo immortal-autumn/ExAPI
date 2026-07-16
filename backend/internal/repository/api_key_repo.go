@@ -23,16 +23,25 @@ import (
 )
 
 type apiKeyRepository struct {
-	client *dbent.Client
-	sql    sqlExecutor
+	client   *dbent.Client
+	sql      sqlExecutor
+	digester *gatewayAPIKeyDigester
 }
 
-func NewAPIKeyRepository(client *dbent.Client, sqlDB *sql.DB) service.APIKeyRepository {
-	return newAPIKeyRepositoryWithSQL(client, sqlDB)
+func NewAPIKeyRepository(client *dbent.Client, sqlDB *sql.DB) (service.APIKeyRepository, error) {
+	digester, err := loadGatewayAPIKeyDigester()
+	if err != nil {
+		return nil, err
+	}
+	return newAPIKeyRepositoryWithSQLAndDigester(client, sqlDB, digester), nil
 }
 
 func newAPIKeyRepositoryWithSQL(client *dbent.Client, sqlq sqlExecutor) *apiKeyRepository {
 	return &apiKeyRepository{client: client, sql: sqlq}
+}
+
+func newAPIKeyRepositoryWithSQLAndDigester(client *dbent.Client, sqlq sqlExecutor, digester *gatewayAPIKeyDigester) *apiKeyRepository {
+	return &apiKeyRepository{client: client, sql: sqlq, digester: digester}
 }
 
 func (r *apiKeyRepository) activeQuery() *dbent.APIKeyQuery {
@@ -41,9 +50,21 @@ func (r *apiKeyRepository) activeQuery() *dbent.APIKeyQuery {
 }
 
 func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) error {
+	if r.digester == nil {
+		return errGatewayAPIKeyDigestRequired
+	}
+	digest, err := r.digester.Digest(key.Key)
+	if err != nil {
+		return err
+	}
+	prefix := gatewayAPIKeyDisplayPrefix(key.Key)
+	storageKey := gatewayAPIKeyStoragePlaceholder(digest)
+
 	builder := r.client.APIKey.Create().
 		SetUserID(key.UserID).
-		SetKey(key.Key).
+		SetKey(storageKey).
+		SetKeyDigest(digest).
+		SetKeyPrefix(prefix).
 		SetName(key.Name).
 		SetStatus(key.Status).
 		SetNillableGroupID(key.GroupID).
@@ -84,7 +105,9 @@ func (r *apiKeyRepository) GetByID(ctx context.Context, id int64) (*service.APIK
 		}
 		return nil, err
 	}
-	return apiKeyEntityToService(m), nil
+	result := apiKeyEntityToService(m)
+	result.Key = ""
+	return result, nil
 }
 
 // GetKeyAndOwnerID 根据 API Key ID 获取其 key 与所有者（用户）ID。
@@ -107,115 +130,57 @@ func (r *apiKeyRepository) GetKeyAndOwnerID(ctx context.Context, id int64) (stri
 }
 
 func (r *apiKeyRepository) GetByKey(ctx context.Context, key string) (*service.APIKey, error) {
-	m, err := r.activeQuery().
-		Where(apikey.KeyEQ(key)).
-		WithUser(func(q *dbent.UserQuery) {
-			q.WithAllowedGroups(func(gq *dbent.GroupQuery) {
-				gq.Select(group.FieldID)
-			})
-		}).
-		WithGroup().
-		Only(ctx)
-	if err != nil {
-		if dbent.IsNotFound(err) {
-			return nil, service.ErrAPIKeyNotFound
-		}
-		return nil, err
-	}
-	return apiKeyEntityToService(m), nil
+	return r.getByKey(ctx, key, false)
 }
 
 func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*service.APIKey, error) {
-	m, err := r.activeQuery().
-		Where(apikey.KeyEQ(key)).
-		Select(
-			apikey.FieldID,
-			apikey.FieldUserID,
-			apikey.FieldGroupID,
-			apikey.FieldName,
-			apikey.FieldStatus,
-			apikey.FieldIPWhitelist,
-			apikey.FieldIPBlacklist,
-			apikey.FieldQuota,
-			apikey.FieldQuotaUsed,
-			apikey.FieldExpiresAt,
-			apikey.FieldRateLimit5h,
-			apikey.FieldRateLimit1d,
-			apikey.FieldRateLimit7d,
-		).
-		WithUser(func(q *dbent.UserQuery) {
+	return r.getByKey(ctx, key, true)
+}
+
+func (r *apiKeyRepository) getByKey(ctx context.Context, raw string, minimal bool) (*service.APIKey, error) {
+	if r.digester == nil {
+		return nil, errGatewayAPIKeyDigestRequired
+	}
+	digests, err := r.digester.CandidateDigests(raw)
+	if err != nil {
+		return nil, err
+	}
+
+	query := r.activeQuery().Where(
+		apikey.Or(
+			apikey.KeyDigestIn(digests...),
+			apikey.And(apikey.KeyDigestIsNil(), apikey.KeyEQ(raw)),
+		),
+	)
+	// Keep the full API-key row selected here. The repository clears Key before
+	// returning, and the auth cache snapshot excludes it; this avoids separate
+	// generated query types while preserving one lookup path for migration rows.
+	query = query.WithUser(func(q *dbent.UserQuery) {
+		if minimal {
 			q.Select(
-				user.FieldID,
-				user.FieldEmail,
-				user.FieldUsername,
-				user.FieldStatus,
-				user.FieldRole,
-				user.FieldBalance,
-				user.FieldConcurrency,
-				user.FieldBalanceNotifyEnabled,
-				user.FieldBalanceNotifyThresholdType,
-				user.FieldBalanceNotifyThreshold,
-				user.FieldBalanceNotifyExtraEmails,
-				user.FieldTotalRecharged,
-				user.FieldSignupSource,
-				user.FieldLastLoginAt,
-				user.FieldLastActiveAt,
-				user.FieldRpmLimit,
+				user.FieldID, user.FieldEmail, user.FieldUsername, user.FieldStatus,
+				user.FieldRole, user.FieldBalance, user.FieldConcurrency,
+				user.FieldBalanceNotifyEnabled, user.FieldBalanceNotifyThresholdType,
+				user.FieldBalanceNotifyThreshold, user.FieldBalanceNotifyExtraEmails,
+				user.FieldTotalRecharged, user.FieldSignupSource, user.FieldLastLoginAt,
+				user.FieldLastActiveAt, user.FieldRpmLimit,
 			)
-			q.WithAllowedGroups(func(gq *dbent.GroupQuery) {
-				gq.Select(group.FieldID)
-			})
-		}).
-		WithGroup(func(q *dbent.GroupQuery) {
-			q.Select(
-				group.FieldID,
-				group.FieldName,
-				group.FieldPlatform,
-				group.FieldIsExclusive,
-				group.FieldStatus,
-				group.FieldSubscriptionType,
-				group.FieldRateMultiplier,
-				group.FieldDailyLimitUsd,
-				group.FieldWeeklyLimitUsd,
-				group.FieldMonthlyLimitUsd,
-				group.FieldAllowImageGeneration,
-				group.FieldAllowBatchImageGeneration,
-				group.FieldImageRateIndependent,
-				group.FieldImageRateMultiplier,
-				group.FieldImagePrice1k,
-				group.FieldImagePrice2k,
-				group.FieldImagePrice4k,
-				group.FieldVideoRateIndependent,
-				group.FieldVideoRateMultiplier,
-				group.FieldVideoPrice480p,
-				group.FieldVideoPrice720p,
-				group.FieldVideoPrice1080p,
-				group.FieldClaudeCodeOnly,
-				group.FieldFallbackGroupID,
-				group.FieldFallbackGroupIDOnInvalidRequest,
-				group.FieldModelRoutingEnabled,
-				group.FieldModelRouting,
-				group.FieldMcpXMLInject,
-				group.FieldSupportedModelScopes,
-				group.FieldAllowMessagesDispatch,
-				group.FieldDefaultMappedModel,
-				group.FieldMessagesDispatchModelConfig,
-				group.FieldModelsListConfig,
-				group.FieldRpmLimit,
-				group.FieldPeakRateEnabled,
-				group.FieldPeakStart,
-				group.FieldPeakEnd,
-				group.FieldPeakRateMultiplier,
-			)
-		}).
-		Only(ctx)
+		}
+		q.WithAllowedGroups(func(gq *dbent.GroupQuery) { gq.Select(group.FieldID) })
+	}).WithGroup()
+
+	m, err := query.Only(ctx)
 	if err != nil {
 		if dbent.IsNotFound(err) {
 			return nil, service.ErrAPIKeyNotFound
 		}
 		return nil, err
 	}
-	return apiKeyEntityToService(m), nil
+	result := apiKeyEntityToService(m)
+	// The repository never returns reusable key material. The service injects
+	// the request candidate into its ephemeral auth object after lookup.
+	result.Key = ""
+	return result, nil
 }
 
 func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey) error {
@@ -360,8 +325,8 @@ func (r *apiKeyRepository) DeleteWithAudit(ctx context.Context, id int64) error 
 func (r *apiKeyRepository) deleteWithAudit(ctx context.Context, exec *dbent.Client, id int64, tombstoneKey string) error {
 	// 1. 审计:数据源即 api_keys 当前行;WHERE deleted_at IS NULL 保证只对未删除行写一次。
 	if _, err := exec.ExecContext(ctx, `
-		INSERT INTO deleted_api_key_audits (key, api_key_id, user_id, key_name, deleted_at)
-		SELECT key, id, user_id, name, NOW()
+		INSERT INTO deleted_api_key_audits (key, key_digest, api_key_id, user_id, key_name, deleted_at)
+		SELECT key, key_digest, id, user_id, name, NOW()
 		FROM api_keys
 		WHERE id = $1 AND deleted_at IS NULL`, id); err != nil {
 		return err
@@ -576,7 +541,19 @@ func (r *apiKeyRepository) CountByUserID(ctx context.Context, userID int64) (int
 }
 
 func (r *apiKeyRepository) ExistsByKey(ctx context.Context, key string) (bool, error) {
-	count, err := r.activeQuery().Where(apikey.KeyEQ(key)).Count(ctx)
+	if r.digester == nil {
+		return false, errGatewayAPIKeyDigestRequired
+	}
+	digests, err := r.digester.CandidateDigests(key)
+	if err != nil {
+		return false, err
+	}
+	count, err := r.activeQuery().Where(
+		apikey.Or(
+			apikey.KeyDigestIn(digests...),
+			apikey.And(apikey.KeyDigestIsNil(), apikey.KeyEQ(key)),
+		),
+	).Count(ctx)
 	return count > 0, err
 }
 
@@ -691,28 +668,6 @@ func (r *apiKeyRepository) UpdateGroupIDByUserAndGroup(ctx context.Context, user
 func (r *apiKeyRepository) CountByGroupID(ctx context.Context, groupID int64) (int64, error) {
 	count, err := r.activeQuery().Where(apikey.GroupIDEQ(groupID)).Count(ctx)
 	return int64(count), err
-}
-
-func (r *apiKeyRepository) ListKeysByUserID(ctx context.Context, userID int64) ([]string, error) {
-	keys, err := r.activeQuery().
-		Where(apikey.UserIDEQ(userID)).
-		Select(apikey.FieldKey).
-		Strings(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return keys, nil
-}
-
-func (r *apiKeyRepository) ListKeysByGroupID(ctx context.Context, groupID int64) ([]string, error) {
-	keys, err := r.activeQuery().
-		Where(apikey.GroupIDEQ(groupID)).
-		Select(apikey.FieldKey).
-		Strings(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return keys, nil
 }
 
 // IncrementQuotaUsed 使用 Ent 原子递增 quota_used 字段并返回新值
@@ -833,10 +788,16 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 	if m == nil {
 		return nil
 	}
+	prefix := m.KeyPrefix
+	if prefix == "" && m.KeyDigest == nil {
+		prefix = gatewayAPIKeyDisplayPrefix(m.Key)
+	}
 	out := &service.APIKey{
 		ID:            m.ID,
 		UserID:        m.UserID,
-		Key:           m.Key,
+		Key:           "",
+		KeyDigest:     m.KeyDigest,
+		KeyPrefix:     prefix,
 		Name:          m.Name,
 		Status:        m.Status,
 		IPWhitelist:   m.IPWhitelist,

@@ -37,11 +37,14 @@ func TestIsLocalAdminBypassRequest(t *testing.T) {
 		want       bool
 	}{
 		{name: "loopback host and loopback remote", host: "127.0.0.1:8027", remoteAddr: "127.0.0.1:55321", want: true},
-		{name: "localhost host and docker bridge remote", host: "localhost:8027", remoteAddr: "172.18.0.1:55321", want: true},
+		{name: "localhost host and loopback remote", host: "localhost:8027", remoteAddr: "127.0.0.1:55321", want: true},
 		{name: "ipv6 loopback host", host: "[::1]:8027", remoteAddr: "[::1]:55321", want: true},
-		{name: "wireguard host and docker bridge remote", host: "100.97.17.1:8027", remoteAddr: "172.18.0.1:55321", want: true},
-		{name: "wireguard subnet host and wireguard peer remote", host: "100.97.17.1:8027", remoteAddr: "100.97.17.23:55321", want: true},
-		{name: "public host rejected", host: "sub2api.research.for-immortal.cn", remoteAddr: "127.0.0.1:55321", want: false},
+		{name: "wireguard host and wireguard peer remote", host: "100.97.17.1:8027", remoteAddr: "100.97.17.23:55321", want: true},
+		{name: "forged localhost from docker bridge rejected", host: "localhost:8027", remoteAddr: "172.18.0.1:55321", want: false},
+		{name: "forged loopback from private lan rejected", host: "127.0.0.1:8027", remoteAddr: "192.168.1.20:55321", want: false},
+		{name: "trusted host does not authorize docker bridge source", host: "100.97.17.1:8027", remoteAddr: "172.18.0.1:55321", want: false},
+		{name: "untrusted host cannot deny configured source", host: "attacker.invalid:8027", remoteAddr: "100.97.17.23:55321", want: true},
+		{name: "public host rejected from loopback", host: "sub2api.research.for-immortal.cn", remoteAddr: "127.0.0.1:55321", want: false},
 		{name: "public remote rejected", host: "127.0.0.1:8027", remoteAddr: "203.0.113.10:55321", want: false},
 	}
 

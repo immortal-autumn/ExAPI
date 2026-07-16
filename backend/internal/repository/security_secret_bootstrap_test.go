@@ -1,8 +1,10 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -23,6 +25,7 @@ import (
 
 func newSecuritySecretTestClient(t *testing.T) *dbent.Client {
 	t.Helper()
+	configureSecuritySecretTestKeyring(t)
 	name := strings.ReplaceAll(t.Name(), "/", "_")
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared&_fk=1", name)
 
@@ -39,6 +42,29 @@ func newSecuritySecretTestClient(t *testing.T) *dbent.Client {
 	return client
 }
 
+func configureSecuritySecretTestKeyring(t *testing.T) {
+	t.Helper()
+	t.Setenv(config.EnvDataEncryptionActiveKeyID, "test-data-k1")
+	encoded := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0x6a}, 32))
+	t.Setenv(config.EnvDataEncryptionKeysJSON, fmt.Sprintf(`{"test-data-k1":%q}`, encoded))
+	t.Setenv(config.EnvGatewayKeyDigestActiveKeyID, "")
+	t.Setenv(config.EnvGatewayKeyDigestKeysJSON, "")
+	t.Setenv(config.EnvBackupEncryptionActiveKeyID, "")
+	t.Setenv(config.EnvBackupEncryptionKeysJSON, "")
+}
+
+func requireStoredSecuritySecret(t *testing.T, key, stored, want string) {
+	t.Helper()
+	require.True(t, strings.HasPrefix(stored, securitySecretEnvelopePrefix))
+	require.NotContains(t, stored, want)
+	protector, err := loadSecuritySecretProtector()
+	require.NoError(t, err)
+	plaintext, rewrite, err := protector.open(key, stored)
+	require.NoError(t, err)
+	require.False(t, rewrite)
+	require.Equal(t, want, plaintext)
+}
+
 func TestEnsureBootstrapSecretsNilInputs(t *testing.T) {
 	err := ensureBootstrapSecrets(context.Background(), nil, &config.Config{})
 	require.Error(t, err)
@@ -48,6 +74,29 @@ func TestEnsureBootstrapSecretsNilInputs(t *testing.T) {
 	err = ensureBootstrapSecrets(context.Background(), client, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "nil config")
+}
+
+func TestEnsureBootstrapSecretsFailsClosedWithoutDataKeyring(t *testing.T) {
+	client := newSecuritySecretTestClient(t)
+	t.Setenv(config.EnvDataEncryptionActiveKeyID, "")
+	t.Setenv(config.EnvDataEncryptionKeysJSON, "")
+
+	err := ensureBootstrapSecrets(context.Background(), client, &config.Config{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "data-encryption keyring is required")
+}
+
+func TestEnsureBootstrapSecretsRejectsMalformedEnvelope(t *testing.T) {
+	client := newSecuritySecretTestClient(t)
+	_, err := client.SecuritySecret.Create().
+		SetKey(securitySecretKeyJWT).
+		SetValue("enc:not-a-valid-envelope").
+		Save(context.Background())
+	require.NoError(t, err)
+
+	err = ensureBootstrapSecrets(context.Background(), client, &config.Config{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid encryption envelope")
 }
 
 func TestEnsureBootstrapSecretsGenerateAndPersistJWTSecret(t *testing.T) {
@@ -61,10 +110,40 @@ func TestEnsureBootstrapSecretsGenerateAndPersistJWTSecret(t *testing.T) {
 
 	stored, err := client.SecuritySecret.Query().Where(securitysecret.KeyEQ(securitySecretKeyJWT)).Only(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, cfg.JWT.Secret, stored.Value)
+	requireStoredSecuritySecret(t, securitySecretKeyJWT, stored.Value, cfg.JWT.Secret)
+}
+
+func TestEnsureBootstrapSecretsPreservesLegacyPlaintextByDefaultForRollback(t *testing.T) {
+	t.Setenv("SUB2API_MIGRATE_LEGACY_SECURITY_SECRETS", "false")
+	client := newSecuritySecretTestClient(t)
+	const legacy = "existing-jwt-secret-32bytes-long!!!!"
+	_, err := client.SecuritySecret.Create().SetKey(securitySecretKeyJWT).SetValue(legacy).Save(context.Background())
+	require.NoError(t, err)
+
+	cfg := &config.Config{}
+	require.NoError(t, ensureBootstrapSecrets(context.Background(), client, cfg))
+	stored, err := client.SecuritySecret.Query().Where(securitysecret.KeyEQ(securitySecretKeyJWT)).Only(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, legacy, stored.Value)
+	require.Equal(t, legacy, cfg.JWT.Secret)
+}
+
+func TestEnsureBootstrapSecretsMigratesLegacyPlaintextWhenExplicitlyEnabled(t *testing.T) {
+	t.Setenv("SUB2API_MIGRATE_LEGACY_SECURITY_SECRETS", "true")
+	client := newSecuritySecretTestClient(t)
+	const legacy = "existing-jwt-secret-32bytes-long!!!!"
+	_, err := client.SecuritySecret.Create().SetKey(securitySecretKeyJWT).SetValue(legacy).Save(context.Background())
+	require.NoError(t, err)
+
+	cfg := &config.Config{}
+	require.NoError(t, ensureBootstrapSecrets(context.Background(), client, cfg))
+	stored, err := client.SecuritySecret.Query().Where(securitysecret.KeyEQ(securitySecretKeyJWT)).Only(context.Background())
+	require.NoError(t, err)
+	requireStoredSecuritySecret(t, securitySecretKeyJWT, stored.Value, legacy)
 }
 
 func TestEnsureBootstrapSecretsLoadExistingJWTSecret(t *testing.T) {
+	t.Setenv("SUB2API_MIGRATE_LEGACY_SECURITY_SECRETS", "true")
 	client := newSecuritySecretTestClient(t)
 	_, err := client.SecuritySecret.Create().SetKey(securitySecretKeyJWT).SetValue("existing-jwt-secret-32bytes-long!!!!").Save(context.Background())
 	require.NoError(t, err)
@@ -73,6 +152,9 @@ func TestEnsureBootstrapSecretsLoadExistingJWTSecret(t *testing.T) {
 	err = ensureBootstrapSecrets(context.Background(), client, cfg)
 	require.NoError(t, err)
 	require.Equal(t, "existing-jwt-secret-32bytes-long!!!!", cfg.JWT.Secret)
+	stored, err := client.SecuritySecret.Query().Where(securitysecret.KeyEQ(securitySecretKeyJWT)).Only(context.Background())
+	require.NoError(t, err)
+	requireStoredSecuritySecret(t, securitySecretKeyJWT, stored.Value, cfg.JWT.Secret)
 }
 
 func TestEnsureBootstrapSecretsRejectInvalidStoredSecret(t *testing.T) {
@@ -97,7 +179,7 @@ func TestEnsureBootstrapSecretsPersistConfiguredJWTSecret(t *testing.T) {
 
 	stored, err := client.SecuritySecret.Query().Where(securitysecret.KeyEQ(securitySecretKeyJWT)).Only(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, "configured-jwt-secret-32bytes-long!!", stored.Value)
+	requireStoredSecuritySecret(t, securitySecretKeyJWT, stored.Value, "configured-jwt-secret-32bytes-long!!")
 }
 
 func TestEnsureBootstrapSecretsConfiguredSecretTooShort(t *testing.T) {
@@ -110,6 +192,7 @@ func TestEnsureBootstrapSecretsConfiguredSecretTooShort(t *testing.T) {
 }
 
 func TestEnsureBootstrapSecretsConfiguredSecretDuplicateIgnored(t *testing.T) {
+	t.Setenv("SUB2API_MIGRATE_LEGACY_SECURITY_SECRETS", "true")
 	client := newSecuritySecretTestClient(t)
 	_, err := client.SecuritySecret.Create().
 		SetKey(securitySecretKeyJWT).
@@ -123,11 +206,12 @@ func TestEnsureBootstrapSecretsConfiguredSecretDuplicateIgnored(t *testing.T) {
 
 	stored, err := client.SecuritySecret.Query().Where(securitysecret.KeyEQ(securitySecretKeyJWT)).Only(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, "existing-jwt-secret-32bytes-long!!!!", stored.Value)
+	requireStoredSecuritySecret(t, securitySecretKeyJWT, stored.Value, "existing-jwt-secret-32bytes-long!!!!")
 	require.Equal(t, "existing-jwt-secret-32bytes-long!!!!", cfg.JWT.Secret)
 }
 
 func TestGetOrCreateGeneratedSecuritySecretTrimmedExistingValue(t *testing.T) {
+	t.Setenv("SUB2API_MIGRATE_LEGACY_SECURITY_SECRETS", "true")
 	client := newSecuritySecretTestClient(t)
 	_, err := client.SecuritySecret.Create().
 		SetKey("trimmed_key").
@@ -139,6 +223,9 @@ func TestGetOrCreateGeneratedSecuritySecretTrimmedExistingValue(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, created)
 	require.Equal(t, "existing-trimmed-secret-32bytes-long!!", value)
+	stored, err := client.SecuritySecret.Query().Where(securitysecret.KeyEQ("trimmed_key")).Only(context.Background())
+	require.NoError(t, err)
+	requireStoredSecuritySecret(t, "trimmed_key", stored.Value, value)
 }
 
 func TestGetOrCreateGeneratedSecuritySecretQueryError(t *testing.T) {
@@ -196,6 +283,9 @@ func TestGetOrCreateGeneratedSecuritySecretConcurrentCreation(t *testing.T) {
 	count, err := client.SecuritySecret.Query().Where(securitysecret.KeyEQ(key)).Count(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
+	stored, err := client.SecuritySecret.Query().Where(securitysecret.KeyEQ(key)).Only(context.Background())
+	require.NoError(t, err)
+	requireStoredSecuritySecret(t, key, stored.Value, values[0])
 }
 
 func TestGetOrCreateGeneratedSecuritySecretGenerateError(t *testing.T) {
@@ -231,6 +321,9 @@ func TestCreateSecuritySecretIfAbsent(t *testing.T) {
 	count, err := client.SecuritySecret.Query().Where(securitysecret.KeyEQ("abc")).Count(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
+	record, err := client.SecuritySecret.Query().Where(securitysecret.KeyEQ("abc")).Only(context.Background())
+	require.NoError(t, err)
+	requireStoredSecuritySecret(t, "abc", record.Value, stored)
 }
 
 func TestCreateSecuritySecretIfAbsentValidationError(t *testing.T) {

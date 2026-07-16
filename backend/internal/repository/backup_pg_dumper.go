@@ -12,12 +12,20 @@ import (
 
 // PgDumper implements service.DBDumper using pg_dump/psql
 type PgDumper struct {
-	cfg *config.DatabaseConfig
+	cfg     *config.DatabaseConfig
+	command func(context.Context, string, ...string) *exec.Cmd
 }
 
 // NewPgDumper creates a new PgDumper
 func NewPgDumper(cfg *config.Config) service.DBDumper {
-	return &PgDumper{cfg: &cfg.Database}
+	return &PgDumper{cfg: &cfg.Database, command: exec.CommandContext}
+}
+
+func (d *PgDumper) commandContext(ctx context.Context, name string, args ...string) *exec.Cmd {
+	if d.command != nil {
+		return d.command(ctx, name, args...)
+	}
+	return exec.CommandContext(ctx, name, args...)
 }
 
 // Dump executes pg_dump and returns a streaming reader of the output
@@ -33,7 +41,7 @@ func (d *PgDumper) Dump(ctx context.Context) (io.ReadCloser, error) {
 		"--if-exists",
 	}
 
-	cmd := exec.CommandContext(ctx, "pg_dump", args...)
+	cmd := d.commandContext(ctx, "pg_dump", args...)
 	if d.cfg.Password != "" {
 		cmd.Env = append(cmd.Environ(), "PGPASSWORD="+d.cfg.Password)
 	}
@@ -62,9 +70,10 @@ func (d *PgDumper) Restore(ctx context.Context, data io.Reader) error {
 		"-U", d.cfg.User,
 		"-d", d.cfg.DBName,
 		"--single-transaction",
+		"--set", "ON_ERROR_STOP=on",
 	}
 
-	cmd := exec.CommandContext(ctx, "psql", args...)
+	cmd := d.commandContext(ctx, "psql", args...)
 	if d.cfg.Password != "" {
 		cmd.Env = append(cmd.Environ(), "PGPASSWORD="+d.cfg.Password)
 	}
@@ -74,9 +83,9 @@ func (d *PgDumper) Restore(ctx context.Context, data io.Reader) error {
 
 	cmd.Stdin = data
 
-	output, err := cmd.CombinedOutput()
+	_, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%v: %s", err, string(output))
+		return fmt.Errorf("psql restore failed: %w", err)
 	}
 	return nil
 }
@@ -88,9 +97,18 @@ type cmdReadCloser struct {
 }
 
 func (c *cmdReadCloser) Close() error {
-	// Close the pipe first
-	_ = c.ReadCloser.Close()
-	// Wait for the process to exit
+	if c == nil {
+		return nil
+	}
+	// Close the pipe first.
+	if c.ReadCloser != nil {
+		_ = c.ReadCloser.Close()
+	}
+	if c.cmd == nil {
+		return nil
+	}
+	// Wait for the producer so a late pg_dump failure cannot be reported as a
+	// successful backup after stdout reached EOF.
 	if err := c.cmd.Wait(); err != nil {
 		return fmt.Errorf("pg_dump exited with error: %w", err)
 	}

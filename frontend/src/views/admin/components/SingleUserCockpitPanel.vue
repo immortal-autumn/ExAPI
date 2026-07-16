@@ -5,55 +5,55 @@
         <div>
           <div class="flex items-center gap-2">
             <Icon name="fire" size="md" class="text-orange-500" />
-            <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Single-user cockpit</h2>
+            <h2 class="text-sm font-semibold text-gray-900 dark:text-white">单用户控制台</h2>
           </div>
           <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Private gateway control plane for quota monitoring, wakeup readiness, and upstream account switching.
+            用于监控额度、检查唤醒就绪状态和切换上游账号的私有网关控制台。
           </p>
         </div>
         <div class="flex gap-2">
           <button class="btn btn-secondary btn-sm" :disabled="loading" @click="loadAccounts">
             <Icon name="refresh" size="sm" :class="loading ? 'animate-spin' : ''" />
-            <span>Refresh</span>
+            <span>刷新</span>
           </button>
           <button class="btn btn-primary btn-sm" @click="router.push('/admin/accounts')">
             <Icon name="server" size="sm" />
-            <span>Accounts</span>
+            <span>账号管理</span>
           </button>
         </div>
       </div>
 
       <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-dark-800/60">
-          <p class="text-xs text-gray-500 dark:text-gray-400">Accounts</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">账号</p>
           <p class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{{ summary.totalAccounts }}</p>
-          <p class="text-xs text-green-600 dark:text-green-400">{{ summary.activeAccounts }} active</p>
+          <p class="text-xs text-green-600 dark:text-green-400">{{ summary.activeAccounts }} 个正常</p>
         </div>
         <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-dark-800/60">
-          <p class="text-xs text-gray-500 dark:text-gray-400">Wakeup ready</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">可唤醒</p>
           <p class="mt-1 text-2xl font-bold text-violet-600 dark:text-violet-400">{{ summary.wakeupReadyAccounts }}</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">active + schedulable</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">正常且可调度</p>
         </div>
         <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-dark-800/60">
-          <p class="text-xs text-gray-500 dark:text-gray-400">Quota watch</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">额度预警</p>
           <p class="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">{{ summary.quotaWatchAccounts.length }}</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">≥70% configured limit</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">已使用配置限额的 70% 以上</p>
         </div>
         <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-dark-800/60">
-          <p class="text-xs text-gray-500 dark:text-gray-400">Errors</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">异常账号</p>
           <p class="mt-1 text-2xl font-bold" :class="summary.errorAccounts ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'">
             {{ summary.errorAccounts }}
           </p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">needs attention</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">需要处理</p>
         </div>
       </div>
 
       <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
           <div class="mb-3 flex items-center justify-between">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Quota monitoring</h3>
+            <h3 class="text-xs font-semibold tracking-wide text-gray-500 dark:text-gray-400">额度监控</h3>
             <button class="text-xs text-primary-600 hover:text-primary-500 dark:text-primary-400" @click="router.push('/admin/accounts')">
-              Manage limits
+              管理限额
             </button>
           </div>
           <div v-if="summary.quotaWatchAccounts.length" class="space-y-3">
@@ -71,31 +71,31 @@
             </div>
           </div>
           <p v-else class="text-sm text-gray-500 dark:text-gray-400">
-            No configured quota window is above 70%. Add per-account limits on the Accounts page to make this card more useful.
+            暂无用量超过 70% 的额度周期。请前往账号管理为各账号设置限额。
           </p>
         </div>
 
         <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
           <div class="mb-3 flex items-center justify-between">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Upstream account routing</h3>
+            <h3 class="text-xs font-semibold tracking-wide text-gray-500 dark:text-gray-400">上游账号调度</h3>
             <button class="text-xs text-primary-600 hover:text-primary-500 dark:text-primary-400" @click="router.push('/admin/accounts')">
-              Open table
+              查看账号列表
             </button>
           </div>
           <div v-if="summary.platforms.length" class="space-y-2">
             <div v-for="platform in summary.platforms" :key="platform.platform" class="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2 text-sm dark:bg-dark-800/60">
               <div>
                 <p class="font-medium capitalize text-gray-900 dark:text-white">{{ platform.platform }}</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">{{ platform.schedulable }} wakeup-ready · {{ platform.error }} errors</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ platform.schedulable }} 个可唤醒 · {{ platform.error }} 个异常</p>
               </div>
               <div class="text-right">
                 <p class="font-semibold text-gray-900 dark:text-white">{{ platform.active }}/{{ platform.total }}</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">active</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">正常</p>
               </div>
             </div>
           </div>
           <p v-else class="text-sm text-gray-500 dark:text-gray-400">
-            No upstream accounts configured yet.
+            尚未配置上游账号。
           </p>
         </div>
       </div>
@@ -105,33 +105,33 @@
       <div class="mb-4 flex items-center gap-2">
         <Icon name="terminal" size="md" class="text-primary-500" />
         <div>
-          <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Local integration</h2>
-          <p class="text-xs text-gray-500 dark:text-gray-400">Copy endpoints for IDEs, local tools, and WireGuard admin.</p>
+          <h2 class="text-sm font-semibold text-gray-900 dark:text-white">本地集成</h2>
+          <p class="text-xs text-gray-500 dark:text-gray-400">复制供 IDE、本地工具及 WireGuard 管理使用的端点。</p>
         </div>
       </div>
 
       <div class="space-y-3">
-        <IntegrationCopyRow label="Public AI base URL" :value="links.publicGatewayBaseURL" @copy="copyValue" />
-        <IntegrationCopyRow label="WireGuard control panel" :value="links.privateControlPanelURL" @copy="copyValue" />
-        <IntegrationCopyRow label="Local control panel" :value="links.localControlPanelURL" @copy="copyValue" />
+        <IntegrationCopyRow label="公网 AI 基础地址" :value="links.publicGatewayBaseURL" @copy="copyValue" />
+        <IntegrationCopyRow label="WireGuard 控制台" :value="links.privateControlPanelURL" @copy="copyValue" />
+        <IntegrationCopyRow label="本地控制台" :value="links.localControlPanelURL" @copy="copyValue" />
       </div>
 
       <div class="mt-4 rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm dark:border-violet-800/60 dark:bg-violet-900/20">
         <div class="flex items-start gap-2">
           <Icon name="bolt" size="sm" class="mt-0.5 text-violet-600 dark:text-violet-300" />
           <div>
-            <p class="font-medium text-violet-900 dark:text-violet-100">Wakeup task heuristic</p>
+            <p class="font-medium text-violet-900 dark:text-violet-100">唤醒任务建议</p>
             <p class="mt-1 text-xs text-violet-700 dark:text-violet-200">
-              Use scheduled account tests as lightweight wakeup tasks. Keep them low-frequency and token-capped; this panel counts accounts that are active and schedulable.
+              可将定时账号测试用作轻量唤醒任务。建议降低执行频率并限制 Token 用量；此处统计正常且可调度的账号。
             </p>
             <button class="mt-2 text-xs font-medium text-violet-700 hover:text-violet-600 dark:text-violet-200" @click="router.push('/admin/accounts')">
-              Configure per account →
+              按账号配置 →
             </button>
           </div>
         </div>
       </div>
 
-      <p v-if="copiedLabel" class="mt-3 text-xs text-green-600 dark:text-green-400">Copied {{ copiedLabel }}</p>
+      <p v-if="copiedLabel" class="mt-3 text-xs text-green-600 dark:text-green-400">已复制：{{ copiedLabel }}</p>
       <p v-if="error" class="mt-3 text-xs text-red-600 dark:text-red-400">{{ error }}</p>
     </section>
   </div>
@@ -174,7 +174,7 @@ async function loadAccounts() {
     accounts.value = response.items || []
   } catch (err) {
     console.error('Failed to load single-user cockpit accounts:', err)
-    error.value = 'Failed to load account summary.'
+    error.value = '加载账号摘要失败。'
   } finally {
     loading.value = false
   }
@@ -190,7 +190,7 @@ async function copyValue(value: string, label: string) {
     }, 2000)
   } catch (err) {
     console.error('Failed to copy integration value:', err)
-    error.value = 'Clipboard copy failed.'
+    error.value = '复制到剪贴板失败。'
   }
 }
 
@@ -242,7 +242,7 @@ const IntegrationCopyRow = defineComponent({
           class: 'btn btn-secondary btn-sm px-2',
           type: 'button',
           onClick: () => emit('copy', props.value, props.label),
-        }, 'Copy'),
+        }, '复制'),
       ]),
     ])
   },

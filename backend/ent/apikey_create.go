@@ -79,6 +79,34 @@ func (_c *APIKeyCreate) SetKey(v string) *APIKeyCreate {
 	return _c
 }
 
+// SetKeyDigest sets the "key_digest" field.
+func (_c *APIKeyCreate) SetKeyDigest(v string) *APIKeyCreate {
+	_c.mutation.SetKeyDigest(v)
+	return _c
+}
+
+// SetNillableKeyDigest sets the "key_digest" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableKeyDigest(v *string) *APIKeyCreate {
+	if v != nil {
+		_c.SetKeyDigest(*v)
+	}
+	return _c
+}
+
+// SetKeyPrefix sets the "key_prefix" field.
+func (_c *APIKeyCreate) SetKeyPrefix(v string) *APIKeyCreate {
+	_c.mutation.SetKeyPrefix(v)
+	return _c
+}
+
+// SetNillableKeyPrefix sets the "key_prefix" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableKeyPrefix(v *string) *APIKeyCreate {
+	if v != nil {
+		_c.SetKeyPrefix(*v)
+	}
+	return _c
+}
+
 // SetName sets the "name" field.
 func (_c *APIKeyCreate) SetName(v string) *APIKeyCreate {
 	_c.mutation.SetName(v)
@@ -383,6 +411,10 @@ func (_c *APIKeyCreate) defaults() error {
 		v := apikey.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.KeyPrefix(); !ok {
+		v := apikey.DefaultKeyPrefix
+		_c.mutation.SetKeyPrefix(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := apikey.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -439,6 +471,19 @@ func (_c *APIKeyCreate) check() error {
 	if v, ok := _c.mutation.Key(); ok {
 		if err := apikey.KeyValidator(v); err != nil {
 			return &ValidationError{Name: "key", err: fmt.Errorf(`ent: validator failed for field "APIKey.key": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.KeyDigest(); ok {
+		if err := apikey.KeyDigestValidator(v); err != nil {
+			return &ValidationError{Name: "key_digest", err: fmt.Errorf(`ent: validator failed for field "APIKey.key_digest": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.KeyPrefix(); !ok {
+		return &ValidationError{Name: "key_prefix", err: errors.New(`ent: missing required field "APIKey.key_prefix"`)}
+	}
+	if v, ok := _c.mutation.KeyPrefix(); ok {
+		if err := apikey.KeyPrefixValidator(v); err != nil {
+			return &ValidationError{Name: "key_prefix", err: fmt.Errorf(`ent: validator failed for field "APIKey.key_prefix": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Name(); !ok {
@@ -526,6 +571,14 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Key(); ok {
 		_spec.SetField(apikey.FieldKey, field.TypeString, value)
 		_node.Key = value
+	}
+	if value, ok := _c.mutation.KeyDigest(); ok {
+		_spec.SetField(apikey.FieldKeyDigest, field.TypeString, value)
+		_node.KeyDigest = &value
+	}
+	if value, ok := _c.mutation.KeyPrefix(); ok {
+		_spec.SetField(apikey.FieldKeyPrefix, field.TypeString, value)
+		_node.KeyPrefix = value
 	}
 	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
@@ -748,6 +801,36 @@ func (u *APIKeyUpsert) SetKey(v string) *APIKeyUpsert {
 // UpdateKey sets the "key" field to the value that was provided on create.
 func (u *APIKeyUpsert) UpdateKey() *APIKeyUpsert {
 	u.SetExcluded(apikey.FieldKey)
+	return u
+}
+
+// SetKeyDigest sets the "key_digest" field.
+func (u *APIKeyUpsert) SetKeyDigest(v string) *APIKeyUpsert {
+	u.Set(apikey.FieldKeyDigest, v)
+	return u
+}
+
+// UpdateKeyDigest sets the "key_digest" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateKeyDigest() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldKeyDigest)
+	return u
+}
+
+// ClearKeyDigest clears the value of the "key_digest" field.
+func (u *APIKeyUpsert) ClearKeyDigest() *APIKeyUpsert {
+	u.SetNull(apikey.FieldKeyDigest)
+	return u
+}
+
+// SetKeyPrefix sets the "key_prefix" field.
+func (u *APIKeyUpsert) SetKeyPrefix(v string) *APIKeyUpsert {
+	u.Set(apikey.FieldKeyPrefix, v)
+	return u
+}
+
+// UpdateKeyPrefix sets the "key_prefix" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateKeyPrefix() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldKeyPrefix)
 	return u
 }
 
@@ -1168,6 +1251,41 @@ func (u *APIKeyUpsertOne) SetKey(v string) *APIKeyUpsertOne {
 func (u *APIKeyUpsertOne) UpdateKey() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.UpdateKey()
+	})
+}
+
+// SetKeyDigest sets the "key_digest" field.
+func (u *APIKeyUpsertOne) SetKeyDigest(v string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetKeyDigest(v)
+	})
+}
+
+// UpdateKeyDigest sets the "key_digest" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateKeyDigest() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateKeyDigest()
+	})
+}
+
+// ClearKeyDigest clears the value of the "key_digest" field.
+func (u *APIKeyUpsertOne) ClearKeyDigest() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearKeyDigest()
+	})
+}
+
+// SetKeyPrefix sets the "key_prefix" field.
+func (u *APIKeyUpsertOne) SetKeyPrefix(v string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetKeyPrefix(v)
+	})
+}
+
+// UpdateKeyPrefix sets the "key_prefix" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateKeyPrefix() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateKeyPrefix()
 	})
 }
 
@@ -1806,6 +1924,41 @@ func (u *APIKeyUpsertBulk) SetKey(v string) *APIKeyUpsertBulk {
 func (u *APIKeyUpsertBulk) UpdateKey() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.UpdateKey()
+	})
+}
+
+// SetKeyDigest sets the "key_digest" field.
+func (u *APIKeyUpsertBulk) SetKeyDigest(v string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetKeyDigest(v)
+	})
+}
+
+// UpdateKeyDigest sets the "key_digest" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateKeyDigest() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateKeyDigest()
+	})
+}
+
+// ClearKeyDigest clears the value of the "key_digest" field.
+func (u *APIKeyUpsertBulk) ClearKeyDigest() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearKeyDigest()
+	})
+}
+
+// SetKeyPrefix sets the "key_prefix" field.
+func (u *APIKeyUpsertBulk) SetKeyPrefix(v string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetKeyPrefix(v)
+	})
+}
+
+// UpdateKeyPrefix sets the "key_prefix" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateKeyPrefix() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateKeyPrefix()
 	})
 }
 

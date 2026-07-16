@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { createPinia } from 'pinia'
 import { nextTick } from 'vue'
 
 import type { ApiKey } from '@/types'
@@ -16,6 +17,7 @@ const {
   copyToClipboard,
   isCurrentStep,
   nextStep,
+  getDriverInstance,
 } = vi.hoisted(() => ({
   listKeys: vi.fn(),
   getPublicSettings: vi.fn(),
@@ -27,6 +29,7 @@ const {
   copyToClipboard: vi.fn(),
   isCurrentStep: vi.fn(),
   nextStep: vi.fn(),
+  getDriverInstance: vi.fn().mockReturnValue(null),
 }))
 
 const messages: Record<string, string> = {
@@ -74,6 +77,10 @@ vi.mock('@/api', () => ({
   },
 }))
 
+vi.mock('@/components/layout/AppLayout.vue', () => ({
+  default: { template: '<div><slot /></div>' },
+}))
+
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
     showError,
@@ -85,6 +92,12 @@ vi.mock('@/stores/onboarding', () => ({
   useOnboardingStore: () => ({
     isCurrentStep,
     nextStep,
+    getDriverInstance,
+    setDriverInstance: vi.fn(),
+    setControlMethods: vi.fn(),
+    clearControlMethods: vi.fn(),
+    setReplayCallback: vi.fn(),
+    isDriverActive: vi.fn().mockReturnValue(false),
   }),
 }))
 
@@ -172,6 +185,7 @@ const DataTableStub = {
         >
           <slot name="cell-last_used_ip" :value="row.last_used_ip" :row="row" />
         </div>
+        <div data-test="row-actions"><slot name="cell-actions" :row="row" /></div>
       </div>
       <slot name="empty" />
     </div>
@@ -211,6 +225,7 @@ const IconStub = {
 const mountView = async () => {
   const wrapper = mount(KeysView, {
     global: {
+      plugins: [createPinia()],
       stubs: {
         AppLayout: AppLayoutStub,
         TablePageLayout: TablePageLayoutStub,
@@ -265,7 +280,7 @@ describe('user KeysView column settings', () => {
     nextStep.mockReset()
 
     listKeys.mockResolvedValue({
-      items: [createApiKey()],
+      items: [{ ...createApiKey(), key: '', key_prefix: 'sk-test-' }],
       total: 1,
       page: 1,
       page_size: 20,
@@ -276,6 +291,13 @@ describe('user KeysView column settings', () => {
     getAvailableGroups.mockResolvedValue([])
     getUserGroupRates.mockResolvedValue({})
     isCurrentStep.mockReturnValue(false)
+  })
+
+  it('does not offer use or import actions for keys loaded from storage', async () => {
+    const wrapper = await mountView()
+
+    expect(wrapper.text()).not.toContain('keys.useKey')
+    expect(wrapper.text()).not.toContain('keys.importToCcSwitch')
   })
 
   it('uses the default API key columns with low-frequency columns hidden', async () => {

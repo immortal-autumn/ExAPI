@@ -12,10 +12,10 @@ describe('Chinese-only UI locale', () => {
 
     await initI18n()
 
-    expect(getLocale()).toBe('zh')
-    expect(i18n.global.locale.value).toBe('zh')
-    expect(document.documentElement.getAttribute('lang')).toBe('zh')
-    expect(availableLocales).toEqual([{ code: 'zh', name: '中文', flag: '🇨🇳' }])
+    expect(getLocale()).toBe('zh-CN')
+    expect(i18n.global.locale.value).toBe('zh-CN')
+    expect(document.documentElement.getAttribute('lang')).toBe('zh-CN')
+    expect(availableLocales).toEqual([{ code: 'zh-CN', name: '中文', flag: '🇨🇳' }])
   })
 
   it('does not switch the UI locale to English', async () => {
@@ -24,8 +24,8 @@ describe('Chinese-only UI locale', () => {
     await initI18n()
     await setLocale('en')
 
-    expect(getLocale()).toBe('zh')
-    expect(i18n.global.locale.value).toBe('zh')
-    expect(localStorage.getItem('sub2api_locale')).toBe('zh')
+    expect(getLocale()).toBe('zh-CN')
+    expect(i18n.global.locale.value).toBe('zh-CN')
+    expect(localStorage.getItem('sub2api_locale')).toBe('zh-CN')
   })
 })

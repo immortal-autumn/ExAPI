@@ -695,14 +695,6 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 }
 
 func (s *adminServiceImpl) DeleteGroup(ctx context.Context, id int64) error {
-	var groupKeys []string
-	if s.authCacheInvalidator != nil {
-		keys, err := s.apiKeyRepo.ListKeysByGroupID(ctx, id)
-		if err == nil {
-			groupKeys = keys
-		}
-	}
-
 	affectedUserIDs, err := s.groupRepo.DeleteCascade(ctx, id)
 	if err != nil {
 		return err
@@ -723,9 +715,7 @@ func (s *adminServiceImpl) DeleteGroup(ctx context.Context, id int64) error {
 		}()
 	}
 	if s.authCacheInvalidator != nil {
-		for _, key := range groupKeys {
-			s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, key)
-		}
+		s.authCacheInvalidator.InvalidateAuthCacheByGroupID(ctx, id)
 	}
 
 	return nil
@@ -984,14 +974,9 @@ func (s *adminServiceImpl) ReplaceUserGroup(ctx context.Context, userID, oldGrou
 		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
-	// 失效该用户所有 Key 的认证缓存
+	// 失效该用户所有 Key 的认证缓存，不枚举原始 Key。
 	if s.authCacheInvalidator != nil {
-		keys, keyErr := s.apiKeyRepo.ListKeysByUserID(ctx, userID)
-		if keyErr == nil {
-			for _, k := range keys {
-				s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, k)
-			}
-		}
+		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
 	}
 
 	return &ReplaceUserGroupResult{MigratedKeys: migrated}, nil

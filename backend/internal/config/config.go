@@ -2098,6 +2098,9 @@ func setDefaults() {
 }
 
 func (c *Config) Validate() error {
+	if SingleUserPrivateControlPlaneEnabled() && strings.TrimSpace(c.Redis.Password) == "" {
+		return fmt.Errorf("redis.password is required in private single-operator mode")
+	}
 	jwtSecret := strings.TrimSpace(c.JWT.Secret)
 	if jwtSecret == "" {
 		return fmt.Errorf("jwt.secret is required")

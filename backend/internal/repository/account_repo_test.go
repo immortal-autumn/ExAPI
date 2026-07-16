@@ -59,7 +59,8 @@ func newParameterLimitAccountRepo(t *testing.T) *accountRepository {
 	client := dbent.NewClient(dbent.Driver(drv))
 	t.Cleanup(func() { _ = client.Close() })
 
-	return newAccountRepositoryWithSQL(client, nil, nil)
+	protector := mustAccountCredentialProtectorForTest(t)
+	return newAccountRepositoryWithSQLAndProtector(client, nil, nil, protector)
 }
 
 type parameterLimitDriver struct{}

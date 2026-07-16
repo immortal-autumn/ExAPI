@@ -228,6 +228,7 @@ func TestAPIContracts(t *testing.T) {
 					"id": 100,
 					"user_id": 1,
 					"key": "sk_custom_1234567890",
+					"key_prefix": "",
 					"name": "Key One",
 					"group_id": null,
 					"status": "active",
@@ -278,7 +279,7 @@ func TestAPIContracts(t *testing.T) {
 						{
 							"id": 100,
 							"user_id": 1,
-							"key": "sk_custom_1234567890",
+							"key_prefix": "",
 							"name": "Key One",
 							"group_id": null,
 							"status": "active",

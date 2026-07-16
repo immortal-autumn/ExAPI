@@ -12,10 +12,10 @@ func TestSingleUserPrivateControlPlaneEnabled(t *testing.T) {
 		{name: "true mixed case", value: " TrUe ", want: true},
 		{name: "yes", value: "yes", want: true},
 		{name: "on", value: "ON", want: true},
-		{name: "zero", value: "0", want: false},
-		{name: "false", value: "false", want: false},
-		{name: "empty", value: "", want: false},
-		{name: "unknown", value: "enabled", want: false},
+		{name: "zero explicitly selects standard mode", value: "0", want: false},
+		{name: "false explicitly selects standard mode", value: "false", want: false},
+		{name: "empty fails closed to private mode", value: "", want: true},
+		{name: "unknown fails closed to private mode", value: "enabled", want: true},
 	}
 
 	for _, tt := range tests {
