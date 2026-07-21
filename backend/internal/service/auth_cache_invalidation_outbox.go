@@ -19,6 +19,11 @@ const (
 	authInvalidationRedisTimeout = 2 * time.Second
 	authInvalidationSafetyDelay  = 30 * time.Second
 	authInvalidationConcurrency  = 16
+
+	// AuthCacheInvalidateAllEventKey is a non-secret, schema-valid outbox sentinel.
+	// Database triggers emit it when the stored API-key row contains only a
+	// one-way verifier and therefore cannot reconstruct the request cache key.
+	AuthCacheInvalidateAllEventKey = "0000000000000000000000000000000000000000000000000000000000000000"
 )
 
 type AuthCacheInvalidationEvent struct {
@@ -175,13 +180,31 @@ func (w *AuthCacheInvalidationWorker) processBatch(ctx context.Context) error {
 }
 
 func (w *AuthCacheInvalidationWorker) processEvent(parent context.Context, event AuthCacheInvalidationEvent) {
+	global := event.CacheKey == AuthCacheInvalidateAllEventKey
 	if w.local != nil {
-		w.local.invalidateLocalAuthCache(event.CacheKey)
+		localKey := event.CacheKey
+		if global {
+			localKey = authCacheInvalidateAll
+		}
+		w.local.invalidateLocalAuthCache(localKey)
 	}
 	ctx, cancel := context.WithTimeout(parent, authInvalidationRedisTimeout)
-	err := w.cache.DeleteAuthCache(ctx, event.CacheKey)
-	if err == nil {
-		err = w.cache.PublishAuthCacheInvalidation(ctx, event.CacheKey)
+	var err error
+	if global {
+		generationStore, ok := w.cache.(APIKeyAuthCacheGenerationStore)
+		if !ok {
+			err = fmt.Errorf("auth cache does not provide durable generation invalidation")
+		} else {
+			_, err = generationStore.IncrementAuthCacheGeneration(ctx)
+			if err == nil {
+				err = w.cache.PublishAuthCacheInvalidation(ctx, authCacheInvalidateAll)
+			}
+		}
+	} else {
+		err = w.cache.DeleteAuthCache(ctx, event.CacheKey)
+		if err == nil {
+			err = w.cache.PublishAuthCacheInvalidation(ctx, event.CacheKey)
+		}
 	}
 	cancel()
 	if err != nil {

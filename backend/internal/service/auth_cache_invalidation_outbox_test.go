@@ -53,12 +53,14 @@ func (r *authInvalidationRepoStub) Stats(context.Context) (AuthCacheInvalidation
 }
 
 type authInvalidationCacheStub struct {
-	mu          sync.Mutex
-	deleteFn    func(context.Context, string) error
-	publishFn   func(context.Context, string) error
-	subscribeFn func(context.Context, func(string)) error
-	deleted     []string
-	published   []string
+	mu                   sync.Mutex
+	deleteFn             func(context.Context, string) error
+	publishFn            func(context.Context, string) error
+	subscribeFn          func(context.Context, func(string)) error
+	deleted              []string
+	published            []string
+	generation           uint64
+	generationIncrements int
 }
 
 func (*authInvalidationCacheStub) GetCreateAttemptCount(context.Context, int64) (int, error) {
@@ -101,6 +103,30 @@ func (c *authInvalidationCacheStub) SubscribeAuthCacheInvalidation(ctx context.C
 		return c.subscribeFn(ctx, handler)
 	}
 	return nil
+}
+func (c *authInvalidationCacheStub) GetAuthCacheGeneration(context.Context) (uint64, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.generation, nil
+}
+func (c *authInvalidationCacheStub) IncrementAuthCacheGeneration(context.Context) (uint64, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.generation++
+	c.generationIncrements++
+	return c.generation, nil
+}
+
+func TestAuthCacheInvalidationWorker_GlobalEventAdvancesDurableGeneration(t *testing.T) {
+	repo := &authInvalidationRepoStub{}
+	cache := &authInvalidationCacheStub{generation: 17}
+	worker := NewAuthCacheInvalidationWorker(repo, cache)
+	worker.processEvent(context.Background(), AuthCacheInvalidationEvent{ID: 6, CacheKey: AuthCacheInvalidateAllEventKey, Stage: 0})
+	require.Empty(t, cache.deleted)
+	require.Equal(t, []string{authCacheInvalidateAll}, cache.published)
+	require.Equal(t, 1, cache.generationIncrements)
+	require.Equal(t, uint64(18), cache.generation)
+	require.Equal(t, []int64{6}, repo.scheduled)
 }
 
 func TestAuthCacheInvalidationWorker_FirstPassSchedulesSafetyPass(t *testing.T) {

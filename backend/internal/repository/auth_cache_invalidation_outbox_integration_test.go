@@ -4,8 +4,6 @@ package repository
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"testing"
 	"time"
@@ -30,8 +28,7 @@ func TestAuthCacheInvalidationTriggers_CoverSecurityMutationsOnly(t *testing.T) 
 	key := &service.APIKey{UserID: user.ID, GroupID: &groupID, Key: keyValue, Name: "outbox", Status: service.StatusActive}
 	require.NoError(t, apiKeyRepo.Create(ctx, key))
 
-	sum := sha256.Sum256([]byte(keyValue))
-	cacheKey := hex.EncodeToString(sum[:])
+	cacheKey := service.AuthCacheInvalidateAllEventKey
 	clear := func() {
 		_, err := integrationDB.ExecContext(ctx, "DELETE FROM auth_cache_invalidation_outbox WHERE cache_key = $1", cacheKey)
 		require.NoError(t, err)
