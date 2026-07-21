@@ -1035,7 +1035,15 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				}
 			},
 			BeforeRelayCancel: func(exit openaiwsv2.RelayExit) {
-				if context.Cause(ctx) != nil {
+				if cause := context.Cause(ctx); cause != nil {
+					status := coderws.StatusGoingAway
+					reason := "websocket request canceled"
+					if errors.Is(cause, ErrOpenAIWSIngressLeaseLost) {
+						status = coderws.StatusTryAgainLater
+						reason = "websocket ingress capacity lease lost; please reconnect"
+					}
+					_ = clientConn.Close(status, reason)
+					_ = clientConn.CloseNow()
 					return
 				}
 				status, reason, ok := openAIWSPassthroughRelayClientClose(exit, int(completedTurns.Load()))

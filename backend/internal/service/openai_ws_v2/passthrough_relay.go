@@ -150,7 +150,12 @@ func Relay(
 	state := &relayState{requestModel: result.RequestModel}
 	onTrace := options.OnTrace
 
-	relayCtx, relayCancel := context.WithCancel(ctx)
+	// Keep the frame readers alive long enough to emit a protocol close when the
+	// outer request is canceled. The select below observes ctx.Done(), invokes
+	// BeforeRelayCancel while the socket is still writable, and only then
+	// cancels relayCtx. Deriving relayCtx directly from ctx races the client's
+	// canceled read against that close frame and can turn a 1013 close into EOF.
+	relayCtx, relayCancel := context.WithCancel(context.WithoutCancel(ctx))
 	defer relayCancel()
 
 	lastActivity := atomic.Int64{}
@@ -246,7 +251,15 @@ func Relay(
 	)
 	go runIdleWatchdog(relayCtx, nowFn, options.IdleTimeout, &lastActivity, onTrace, exitCh)
 
-	firstExit := <-exitCh
+	var firstExit relayExitSignal
+	select {
+	case firstExit = <-exitCh:
+	case <-ctx.Done():
+		firstExit = relayExitSignal{
+			stage: "context_canceled",
+			err:   context.Cause(ctx),
+		}
+	}
 	// An outer ingress cancellation is a control-plane close, not a graceful
 	// upstream disconnect. Leave the client connection open here so the
 	// adapter can emit the precise lease/request close code. Internal
