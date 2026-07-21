@@ -28,9 +28,13 @@ func apiKeyAuthCacheKey(key string) string {
 	return fmt.Sprintf("%s%s", apiKeyAuthCachePrefix, key)
 }
 
+const authCacheGenerationKey = apiKeyAuthCachePrefix + "__generation"
+
 type apiKeyCache struct {
 	rdb *redis.Client
 }
+
+var _ service.APIKeyAuthCacheGenerationStore = (*apiKeyCache)(nil)
 
 func NewAPIKeyCache(rdb *redis.Client) service.APIKeyCache {
 	return &apiKeyCache{rdb: rdb}
@@ -92,6 +96,37 @@ func (c *apiKeyCache) SetAuthCache(ctx context.Context, key string, entry *servi
 
 func (c *apiKeyCache) DeleteAuthCache(ctx context.Context, key string) error {
 	return c.rdb.Del(ctx, apiKeyAuthCacheKey(key)).Err()
+}
+
+func (c *apiKeyCache) GetAuthCacheGeneration(ctx context.Context) (uint64, error) {
+	generation, err := c.rdb.Get(ctx, authCacheGenerationKey).Uint64()
+	if err == nil {
+		return generation, nil
+	}
+	if !errors.Is(err, redis.Nil) {
+		return 0, err
+	}
+
+	// Never reuse the legacy process-local generation zero after an upgrade, and
+	// avoid collisions if Redis evicts only the generation key while old L2
+	// entries remain. SETNX makes concurrent instance startup converge on one
+	// high-entropy namespace.
+	initial := uint64(time.Now().UnixNano())
+	initialized, err := c.rdb.SetNX(ctx, authCacheGenerationKey, initial, 0).Result()
+	if err != nil {
+		return 0, err
+	}
+	if initialized {
+		return initial, nil
+	}
+	return c.rdb.Get(ctx, authCacheGenerationKey).Uint64()
+}
+
+func (c *apiKeyCache) IncrementAuthCacheGeneration(ctx context.Context) (uint64, error) {
+	if _, err := c.GetAuthCacheGeneration(ctx); err != nil {
+		return 0, err
+	}
+	return c.rdb.Incr(ctx, authCacheGenerationKey).Uint64()
 }
 
 // PublishAuthCacheInvalidation publishes a cache invalidation message to all instances

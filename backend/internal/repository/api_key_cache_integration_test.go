@@ -78,6 +78,25 @@ func (s *ApiKeyCacheSuite) TestCreateAttemptCount() {
 	}
 }
 
+func (s *ApiKeyCacheSuite) TestAuthCacheGeneration() {
+	rdb := testRedis(s.T())
+	cache := &apiKeyCache{rdb: rdb}
+	ctx := context.Background()
+	require.NoError(s.T(), rdb.Del(ctx, authCacheGenerationKey).Err())
+
+	initial, err := cache.GetAuthCacheGeneration(ctx)
+	require.NoError(s.T(), err)
+	require.Greater(s.T(), initial, uint64(1), "missing generation must not reuse a legacy low namespace")
+
+	again, err := cache.GetAuthCacheGeneration(ctx)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), initial, again)
+
+	next, err := cache.IncrementAuthCacheGeneration(ctx)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), initial+1, next)
+}
+
 func (s *ApiKeyCacheSuite) TestDailyUsage() {
 	tests := []struct {
 		name string

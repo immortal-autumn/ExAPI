@@ -131,6 +131,66 @@ type authCacheStub struct {
 	publishedKeys  []string
 }
 
+type sharedAuthCacheGenerationState struct {
+	mu         sync.Mutex
+	generation uint64
+	entries    map[string]*APIKeyAuthCacheEntry
+}
+
+type distributedAuthCacheStub struct {
+	*authCacheStub
+	shared     *sharedAuthCacheGenerationState
+	publishErr error
+}
+
+type unavailableAuthGenerationCache struct {
+	*authCacheStub
+}
+
+func (s *unavailableAuthGenerationCache) GetAuthCacheGeneration(context.Context) (uint64, error) {
+	return 0, errors.New("generation store unavailable")
+}
+
+func (s *unavailableAuthGenerationCache) IncrementAuthCacheGeneration(context.Context) (uint64, error) {
+	return 0, errors.New("generation store unavailable")
+}
+
+func (s *distributedAuthCacheStub) GetAuthCache(ctx context.Context, key string) (*APIKeyAuthCacheEntry, error) {
+	s.shared.mu.Lock()
+	defer s.shared.mu.Unlock()
+	entry, ok := s.shared.entries[key]
+	if !ok {
+		return nil, redis.Nil
+	}
+	clone := *entry
+	return &clone, nil
+}
+
+func (s *distributedAuthCacheStub) SetAuthCache(ctx context.Context, key string, entry *APIKeyAuthCacheEntry, ttl time.Duration) error {
+	s.shared.mu.Lock()
+	defer s.shared.mu.Unlock()
+	clone := *entry
+	s.shared.entries[key] = &clone
+	return nil
+}
+
+func (s *distributedAuthCacheStub) GetAuthCacheGeneration(ctx context.Context) (uint64, error) {
+	s.shared.mu.Lock()
+	defer s.shared.mu.Unlock()
+	return s.shared.generation, nil
+}
+
+func (s *distributedAuthCacheStub) IncrementAuthCacheGeneration(ctx context.Context) (uint64, error) {
+	s.shared.mu.Lock()
+	defer s.shared.mu.Unlock()
+	s.shared.generation++
+	return s.shared.generation, nil
+}
+
+func (s *distributedAuthCacheStub) PublishAuthCacheInvalidation(ctx context.Context, cacheKey string) error {
+	return s.publishErr
+}
+
 func (s *authCacheStub) GetCreateAttemptCount(ctx context.Context, userID int64) (int, error) {
 	return 0, nil
 }
@@ -490,6 +550,83 @@ func TestAPIKeyService_InvalidateAuthCacheByUserID(t *testing.T) {
 	require.NotEqual(t, before, svc.authCacheKey("test-key"))
 	require.Equal(t, []string{authCacheInvalidateAll}, cache.publishedKeys)
 	require.Empty(t, cache.deleteAuthKeys)
+}
+
+func TestAPIKeyService_DurableGenerationRejectsStaleProtectedKeyAfterMissedPubSubAndRestart(t *testing.T) {
+	ctx := context.Background()
+	shared := &sharedAuthCacheGenerationState{entries: make(map[string]*APIKeyAuthCacheEntry)}
+	var exhausted atomic.Bool
+	var repoCalls atomic.Int32
+	newService := func() *APIKeyService {
+		cache := &distributedAuthCacheStub{
+			authCacheStub: &authCacheStub{},
+			shared:        shared,
+			publishErr:    errors.New("simulated missed pubsub delivery"),
+		}
+		repo := &authRepoStub{getByKeyForAuth: func(context.Context, string) (*APIKey, error) {
+			repoCalls.Add(1)
+			status := StatusActive
+			if exhausted.Load() {
+				status = StatusAPIKeyQuotaExhausted
+			}
+			return &APIKey{
+				ID: 1, UserID: 7, Status: status,
+				User: &User{ID: 7, Status: StatusActive, Role: RoleUser},
+			}, nil
+		}}
+		return NewAPIKeyService(repo, nil, nil, nil, nil, cache, &config.Config{
+			APIKeyAuth: config.APIKeyAuthCacheConfig{L2TTLSeconds: 300},
+		})
+	}
+
+	instanceA := newService()
+	instanceB := newService()
+	instanceA.authCacheEpoch.Store(41)
+	instanceB.authCacheEpoch.Store(99)
+	active, err := instanceB.GetByKey(ctx, "protected-key")
+	require.NoError(t, err)
+	require.Equal(t, StatusActive, active.Status)
+	require.Equal(t, int32(1), repoCalls.Load())
+
+	exhausted.Store(true)
+	instanceA.InvalidateAuthCacheByUserID(ctx, 7)
+
+	reloaded, err := instanceB.GetByKey(ctx, "protected-key")
+	require.NoError(t, err)
+	require.Equal(t, StatusAPIKeyQuotaExhausted, reloaded.Status)
+	require.Equal(t, int32(2), repoCalls.Load(), "peer must reload despite missing Pub/Sub")
+
+	restartedB := newService()
+	restartedB.authCacheEpoch.Store(0)
+	afterRestart, err := restartedB.GetByKey(ctx, "protected-key")
+	require.NoError(t, err)
+	require.Equal(t, StatusAPIKeyQuotaExhausted, afterRestart.Status)
+	require.Equal(t, int32(2), repoCalls.Load(), "restart may reuse only the current durable-generation entry")
+}
+
+func TestAPIKeyService_GenerationReadFailureBypassesAuthenticationCaches(t *testing.T) {
+	cache := &unavailableAuthGenerationCache{authCacheStub: &authCacheStub{
+		getAuthCache: func(context.Context, string) (*APIKeyAuthCacheEntry, error) {
+			t.Fatal("generation failure must bypass L1/L2 cache reads")
+			return nil, nil
+		},
+	}}
+	var repoCalls atomic.Int32
+	repo := &authRepoStub{getByKeyForAuth: func(context.Context, string) (*APIKey, error) {
+		repoCalls.Add(1)
+		return &APIKey{
+			ID: 1, UserID: 7, Status: StatusAPIKeyQuotaExhausted,
+			User: &User{ID: 7, Status: StatusActive, Role: RoleUser},
+		}, nil
+	}}
+	svc := NewAPIKeyService(repo, nil, nil, nil, nil, cache, &config.Config{
+		APIKeyAuth: config.APIKeyAuthCacheConfig{L1Size: 100, L1TTLSeconds: 300, L2TTLSeconds: 300},
+	})
+
+	key, err := svc.GetByKey(context.Background(), "protected-key")
+	require.NoError(t, err)
+	require.Equal(t, StatusAPIKeyQuotaExhausted, key.Status)
+	require.Equal(t, int32(1), repoCalls.Load())
 }
 
 func TestAPIKeyService_InvalidateAuthCacheByGroupID(t *testing.T) {

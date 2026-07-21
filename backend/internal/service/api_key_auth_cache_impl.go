@@ -205,9 +205,25 @@ func (s *APIKeyService) StopAuthCacheInvalidationSubscriber() {
 	})
 }
 
-func (s *APIKeyService) authCacheKey(key string) string {
+func authCacheKeyAtGeneration(key string, generation uint64) string {
 	sum := sha256.Sum256([]byte(key))
-	return strconv.FormatUint(s.authCacheEpoch.Load(), 10) + ":" + hex.EncodeToString(sum[:])
+	return strconv.FormatUint(generation, 10) + ":" + hex.EncodeToString(sum[:])
+}
+
+func (s *APIKeyService) authCacheKey(key string) string {
+	return authCacheKeyAtGeneration(key, s.authCacheEpoch.Load())
+}
+
+func (s *APIKeyService) authCacheKeyForRequest(ctx context.Context, key string) (string, error) {
+	if generations, ok := s.cache.(APIKeyAuthCacheGenerationStore); ok {
+		generation, err := generations.GetAuthCacheGeneration(ctx)
+		if err != nil {
+			return "", fmt.Errorf("get durable auth cache generation: %w", err)
+		}
+		s.authCacheEpoch.Store(generation)
+		return authCacheKeyAtGeneration(key, generation), nil
+	}
+	return s.authCacheKey(key), nil
 }
 
 func (s *APIKeyService) getAuthCacheEntry(ctx context.Context, cacheKey string) (*APIKeyAuthCacheEntry, bool) {

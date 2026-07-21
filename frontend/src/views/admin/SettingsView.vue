@@ -269,7 +269,7 @@
           />
 
           <!-- Custom Menu Items -->
-          <div class="card">
+          <div v-if="!privateProduct" class="card">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -689,6 +689,7 @@ import { SETTINGS_TABS, getNextSettingsTab } from "./settings/useSettingsTabs";
 const { t, locale } = useI18n();
 const appStore = useAppStore();
 const adminSettingsStore = useAdminSettingsStore();
+const privateProduct = isSingleUserPrivateControlPlaneBrowser();
 const isZhLocale = computed(() => locale.value.startsWith("zh"));
 
 function localText(zh: string, en: string): string {

@@ -10,7 +10,7 @@ vi.mock('vue-i18n', () => ({
 import SecurityAccessControlsPanel from '../panels/SecurityAccessControlsPanel.vue'
 
 describe('SecurityAccessControlsPanel', () => {
-  it('renders API ACL and Turnstile controls', () => {
+  it('renders only the operator API ACL control', () => {
     const wrapper = mount(SecurityAccessControlsPanel, {
       props: {
         form: {
@@ -29,7 +29,7 @@ describe('SecurityAccessControlsPanel', () => {
     })
 
     expect(wrapper.text()).toContain('admin.settings.apiKeyAcl.title')
-    expect(wrapper.text()).toContain('admin.settings.turnstile.title')
-    expect(wrapper.find('input[placeholder="0x4AAAAAAA..."]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('admin.settings.turnstile.title')
+    expect(wrapper.find('input[placeholder="0x4AAAAAAA..."]').exists()).toBe(false)
   })
 })

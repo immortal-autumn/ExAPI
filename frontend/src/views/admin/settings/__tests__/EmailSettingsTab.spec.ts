@@ -17,7 +17,7 @@ vi.mock('@/views/admin/settings/email/AccountQuotaNotificationPanel.vue', () => 
 import EmailSettingsTab from '../tabs/EmailSettingsTab.vue'
 
 describe('EmailSettingsTab', () => {
-  it('renders disabled hint when email verification is off', () => {
+  it('does not render customer email-verification state', () => {
     const wrapper = mount(EmailSettingsTab, {
       props: {
         form: { email_verify_enabled: false },
@@ -35,7 +35,8 @@ describe('EmailSettingsTab', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('admin.settings.emailTabDisabledTitle')
+    expect(wrapper.text()).not.toContain('admin.settings.emailTabDisabledTitle')
+    expect(wrapper.text()).toContain('smtp-settings-panel')
   })
 
   it('renders only operator email panels when email is enabled', () => {

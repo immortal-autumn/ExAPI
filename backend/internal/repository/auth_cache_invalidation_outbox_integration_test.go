@@ -25,7 +25,8 @@ func TestAuthCacheInvalidationTriggers_CoverSecurityMutationsOnly(t *testing.T) 
 	})
 	groupID := group.ID
 	keyValue := fmt.Sprintf("sk-auth-outbox-%d", suffix)
-	apiKeyRepo := NewAPIKeyRepository(integrationEntClient, integrationDB)
+	apiKeyRepo, err := NewAPIKeyRepository(integrationEntClient, integrationDB)
+	require.NoError(t, err)
 	key := &service.APIKey{UserID: user.ID, GroupID: &groupID, Key: keyValue, Name: "outbox", Status: service.StatusActive}
 	require.NoError(t, apiKeyRepo.Create(ctx, key))
 
@@ -57,7 +58,7 @@ func TestAuthCacheInvalidationTriggers_CoverSecurityMutationsOnly(t *testing.T) 
 		require.NoError(t, err)
 	})
 
-	_, err := integrationDB.ExecContext(ctx, `
+	_, err = integrationDB.ExecContext(ctx, `
 		UPDATE api_keys
 		SET quota_used = quota_used + 1,
 			usage_5h = usage_5h + 1,

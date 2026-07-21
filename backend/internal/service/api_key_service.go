@@ -155,6 +155,14 @@ type APIKeyCache interface {
 	SubscribeAuthCacheInvalidation(ctx context.Context, handler func(cacheKey string)) error
 }
 
+// APIKeyAuthCacheGenerationStore provides a durable, globally allocated cache
+// generation. Production Redis caches implement this interface; test/minimal
+// caches may omit it and retain process-local cache behavior.
+type APIKeyAuthCacheGenerationStore interface {
+	GetAuthCacheGeneration(ctx context.Context) (uint64, error)
+	IncrementAuthCacheGeneration(ctx context.Context) (uint64, error)
+}
+
 type authCacheSubscriptionReadyKey struct{}
 
 func withAuthCacheSubscriptionReady(ctx context.Context, ready func()) context.Context {
@@ -642,7 +650,19 @@ func (s *APIKeyService) GetByKey(ctx context.Context, key string) (*APIKey, erro
 	if len(key) == 0 || len(key) > MaxAPIKeyCredentialBytes {
 		return nil, ErrAPIKeyNotFound
 	}
-	cacheKey := s.authCacheKey(key)
+	cacheKey, err := s.authCacheKeyForRequest(ctx, key)
+	if err != nil {
+		// The durable generation is the correctness boundary for L1/L2. If
+		// Redis is unavailable, reload from PostgreSQL rather than risk stale
+		// authentication state.
+		apiKey, lookupErr := s.lookupAPIKeyForAuth(ctx, key)
+		if lookupErr != nil {
+			return nil, fmt.Errorf("get api key: %w", lookupErr)
+		}
+		apiKey.Key = key
+		s.compileAPIKeyIPRules(apiKey)
+		return apiKey, nil
+	}
 
 	if entry, ok := s.getAuthCacheEntry(ctx, cacheKey); ok {
 		if apiKey, used, err := s.applyAuthCacheEntry(key, entry); used {

@@ -21,6 +21,8 @@ const PRIVATE_PRODUCT_FORBIDDEN_EXACT_KEYS = new Set([
   'subscription_expiry_notify_enabled',
   'available_channels_enabled',
   'affiliate_enabled',
+  'email_verify_enabled',
+  'custom_menu_items',
 ])
 
 const PRIVATE_PRODUCT_FORBIDDEN_PREFIXES = [
@@ -33,6 +35,7 @@ const PRIVATE_PRODUCT_FORBIDDEN_PREFIXES = [
   'oidc_connect_',
   'github_oauth_',
   'google_oauth_',
+  'turnstile_',
 ] as const
 
 export function stripPrivateProductSettings(payload: Record<string, unknown>): void {

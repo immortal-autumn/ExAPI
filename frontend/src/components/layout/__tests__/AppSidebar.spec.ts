@@ -56,6 +56,15 @@ describe('AppSidebar single-user gateway navigation', () => {
     expect(componentSource).not.toContain("window.location.hostname\n  return host === '100.97.17.1'")
   })
 
+  it('does not add custom-page links to the private route matrix', () => {
+    const privateBranch = componentSource.slice(
+      componentSource.indexOf('if (singleUserPrivateControlPlane.value)'),
+      componentSource.indexOf("visible.push({ path: '/admin/settings'"),
+    )
+    expect(privateBranch).not.toContain('customMenuItemsForAdmin')
+    expect(privateBranch).not.toContain('/custom/')
+  })
+
   it('fetches admin settings through one lifecycle path', () => {
     expect(componentSource.match(/adminSettingsStore\.fetch\(\)/g)).toHaveLength(1)
   })
