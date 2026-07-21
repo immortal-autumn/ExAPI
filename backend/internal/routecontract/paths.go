@@ -13,6 +13,7 @@ const (
 	ImagesEditsPath       = "/images/edits"
 	VideosGenerationsPath = "/videos/generations"
 	VideosStatusPath      = "/videos/:request_id"
+	AlphaSearchPath       = "/alpha/search"
 )
 
 func IsPublicGatewayPath(path string) bool {
@@ -22,7 +23,8 @@ func IsPublicGatewayPath(path string) bool {
 		path == EmbeddingsPath ||
 		path == ImagesGenerationsPath ||
 		path == ImagesEditsPath ||
-		path == VideosGenerationsPath {
+		path == VideosGenerationsPath ||
+		path == AlphaSearchPath {
 		return true
 	}
 	for _, prefix := range []string{"/v1", "/v1beta", "/backend-api/codex", "/antigravity", ResponsesPath} {
@@ -47,7 +49,8 @@ func IsAPIPath(path string) bool {
 		path == EmbeddingsPath ||
 		path == ImagesGenerationsPath ||
 		path == ImagesEditsPath ||
-		path == VideosGenerationsPath {
+		path == VideosGenerationsPath ||
+		path == AlphaSearchPath {
 		return true
 	}
 

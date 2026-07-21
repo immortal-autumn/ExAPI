@@ -32,5 +32,8 @@ module.exports = {
     "@typescript-eslint/no-explicit-any": "off",
     "vue/multi-word-component-names": "off",
     "vue/no-use-v-if-with-v-for": "off",
+    // Extracted settings panels intentionally bind nested fields on shared reactive form props.
+    // Keep direct prop replacement forbidden while allowing those nested v-model updates.
+    "vue/no-mutating-props": ["error", { shallowOnly: true }],
   },
 };

@@ -88,7 +88,7 @@ func newBackupHandlerResponseTest(t *testing.T) (*BackupHandler, service.BackupR
 	require.NoError(t, err)
 	repo := &backupHandlerSettingRepo{values: map[string]string{"backup_records": string(raw)}}
 	svc := service.NewBackupService(repo, &config.Config{}, backupHandlerEncryptor{}, nil, backupHandlerDumper{}, nil)
-	return NewBackupHandler(svc, nil), record
+	return NewBackupHandler(svc, nil, nil), record
 }
 
 func TestBackupRecordEndpointsDoNotExposeInternalTopologyOrDiagnostics(t *testing.T) {

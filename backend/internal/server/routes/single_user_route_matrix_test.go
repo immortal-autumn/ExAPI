@@ -24,7 +24,7 @@ func TestPrivateUserRouteMatrix(t *testing.T) {
 		AvailableChannel: &handler.AvailableChannelHandler{},
 	}
 	auth := servermiddleware.JWTAuthMiddleware(func(c *gin.Context) { c.Next() })
-	RegisterUserRoutes(v1, h, auth, nil)
+	RegisterUserRoutes(v1, h, auth, nil, nil)
 
 	paths := make(map[string]struct{})
 	for _, route := range router.Routes() {
@@ -90,7 +90,7 @@ func TestPrivateAdminRouteMatrix(t *testing.T) {
 		ContentModeration:      &adminhandler.ContentModerationHandler{},
 	}}
 	auth := servermiddleware.AdminAuthMiddleware(func(c *gin.Context) { c.Next() })
-	RegisterAdminRoutes(v1, h, auth, nil)
+	RegisterAdminRoutes(v1, h, auth, nil, nil, nil)
 
 	paths := make(map[string]struct{})
 	for _, route := range router.Routes() {
@@ -137,7 +137,7 @@ func TestPrivateAuthRouteMatrix(t *testing.T) {
 		Setting: &handler.SettingHandler{},
 	}
 	auth := servermiddleware.JWTAuthMiddleware(func(c *gin.Context) { c.Next() })
-	RegisterAuthRoutes(v1, h, auth, nil, nil)
+	RegisterAuthRoutes(v1, h, auth, nil, nil, nil)
 
 	paths := make(map[string]struct{})
 	for _, route := range router.Routes() {

@@ -12,6 +12,10 @@ describe('single-user product surface', () => {
       '/admin/ops',
       '/admin/accounts',
       '/admin/api-keys',
+      '/admin/channels/pricing',
+      '/admin/channels/monitor',
+      '/admin/proxies',
+      '/admin/risk-control',
       '/admin/usage',
       '/admin/settings',
     ])
