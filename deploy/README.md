@@ -33,7 +33,7 @@ This directory contains files for deploying ExAPI on Linux servers.
 
 ## Apple container Deployment
 
-Apple-silicon Macs running macOS 26 can run the complete Sub2API, PostgreSQL, and Redis stack with Apple `container` 1.1.0 or newer:
+Apple-silicon Macs running macOS 26 can run the complete ExAPI, PostgreSQL, and Redis stack with Apple `container` 1.1.0 or newer:
 
 ```bash
 ./apple-container.sh init

@@ -676,6 +676,7 @@ import {
 } from "@/utils/registrationEmailPolicy";
 import { getDefaultSiteName } from '@/config/brand'
 import { isSingleUserPrivateControlPlaneBrowser } from '@/router/singleUserGatewayMode'
+import { stripPrivateProductSettings } from '@/views/admin/settings/privateSettingsPayload'
 import {
   parseFingerprintSignalsToRows,
   serializeFingerprintRowsToJSON,
@@ -2504,6 +2505,7 @@ function findDuplicateDefaultSubscription(
 async function saveSettings() {
   saving.value = true;
   try {
+    const privateProduct = isSingleUserPrivateControlPlaneBrowser();
     const normalizedTableDefaultPageSize = Math.floor(
       Number(form.table_default_page_size),
     );
@@ -2539,7 +2541,7 @@ async function saveSettings() {
 
     const normalizedLoginAgreementDocuments =
       normalizeLoginAgreementDocumentsForSave();
-    if (form.login_agreement_enabled && normalizedLoginAgreementDocuments.length === 0) {
+    if (!privateProduct && form.login_agreement_enabled && normalizedLoginAgreementDocuments.length === 0) {
       appStore.showError(
         localText(
           "启用登录条款确认时，至少需要保留一份文档。",
@@ -2551,7 +2553,7 @@ async function saveSettings() {
     const emptyTitleDocument = normalizedLoginAgreementDocuments.find(
       (doc) => !doc.title,
     );
-    if (emptyTitleDocument) {
+    if (!privateProduct && emptyTitleDocument) {
       appStore.showError(
         localText(
           "登录条款文档名称不能为空。",
@@ -2562,7 +2564,7 @@ async function saveSettings() {
     }
     const duplicateLoginAgreementDocumentId =
       findDuplicateLoginAgreementDocumentId(normalizedLoginAgreementDocuments);
-    if (duplicateLoginAgreementDocumentId) {
+    if (!privateProduct && duplicateLoginAgreementDocumentId) {
       appStore.showError(
         localText(
           `登录条款文档路由不能重复：/legal/${duplicateLoginAgreementDocumentId}`,
@@ -2571,9 +2573,11 @@ async function saveSettings() {
       );
       return;
     }
-    form.login_agreement_mode =
-      form.login_agreement_mode === "checkbox" ? "checkbox" : "modal";
-    form.login_agreement_documents = normalizedLoginAgreementDocuments;
+    if (!privateProduct) {
+      form.login_agreement_mode =
+        form.login_agreement_mode === "checkbox" ? "checkbox" : "modal";
+      form.login_agreement_documents = normalizedLoginAgreementDocuments;
+    }
 
     const normalizedDefaultSubscriptions = normalizeDefaultSubscriptionSettings(
       form.default_subscriptions,
@@ -2581,7 +2585,7 @@ async function saveSettings() {
     const duplicateDefaultSubscription = findDuplicateDefaultSubscription(
       normalizedDefaultSubscriptions,
     );
-    if (duplicateDefaultSubscription) {
+    if (!privateProduct && duplicateDefaultSubscription) {
       appStore.showError(
         t("admin.settings.defaults.defaultSubscriptionsDuplicate", {
           groupId: duplicateDefaultSubscription.group_id,
@@ -2590,28 +2594,30 @@ async function saveSettings() {
       return;
     }
 
-    for (const authSource of authSourceDefaultsMeta.value) {
-      authSourceDefaults[authSource.source].subscriptions =
-        normalizeDefaultSubscriptionSettings(
+    if (!privateProduct) {
+      for (const authSource of authSourceDefaultsMeta.value) {
+        authSourceDefaults[authSource.source].subscriptions =
+          normalizeDefaultSubscriptionSettings(
+            authSourceDefaults[authSource.source].subscriptions,
+          );
+        const duplicate = findDuplicateDefaultSubscription(
           authSourceDefaults[authSource.source].subscriptions,
         );
-      const duplicate = findDuplicateDefaultSubscription(
-        authSourceDefaults[authSource.source].subscriptions,
-      );
-      if (duplicate) {
-        appStore.showError(
-          `${authSource.title}: ${t(
-            "admin.settings.defaults.defaultSubscriptionsDuplicate",
-            {
-              groupId: duplicate.group_id,
-            },
-          )}`,
-        );
-        return;
+        if (duplicate) {
+          appStore.showError(
+            `${authSource.title}: ${t(
+              "admin.settings.defaults.defaultSubscriptionsDuplicate",
+              {
+                groupId: duplicate.group_id,
+              },
+            )}`,
+          );
+          return;
+        }
       }
     }
 
-    if (form.wechat_connect_mp_enabled && form.wechat_connect_mobile_enabled) {
+    if (!privateProduct && form.wechat_connect_mp_enabled && form.wechat_connect_mobile_enabled) {
       appStore.showError(
         localText(
           "公众号和移动应用不能同时启用。",
@@ -2945,6 +2951,9 @@ async function saveSettings() {
 
     payload.default_platform_quotas = sanitizePlatformQuotasMap(form.default_platform_quotas);
     appendAuthSourceDefaultsToUpdateRequest(payload, authSourceDefaults);
+    if (privateProduct) {
+      stripPrivateProductSettings(payload as Record<string, unknown>);
+    }
 
     const updated = await adminAPI.settings.updateSettings(payload);
     for (const [key, value] of Object.entries(updated)) {

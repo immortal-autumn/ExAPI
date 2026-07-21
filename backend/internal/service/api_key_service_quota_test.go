@@ -32,6 +32,7 @@ func (s *quotaStateRepoStub) IncrementQuotaUsedAndGetState(ctx context.Context, 
 
 type quotaStateCacheStub struct {
 	deleteAuthKeys []string
+	publishedKeys  []string
 }
 
 func (s *quotaStateCacheStub) GetCreateAttemptCount(context.Context, int64) (int, error) {
@@ -67,7 +68,8 @@ func (s *quotaStateCacheStub) DeleteAuthCache(_ context.Context, key string) err
 	return nil
 }
 
-func (s *quotaStateCacheStub) PublishAuthCacheInvalidation(context.Context, string) error {
+func (s *quotaStateCacheStub) PublishAuthCacheInvalidation(_ context.Context, key string) error {
+	s.publishedKeys = append(s.publishedKeys, key)
 	return nil
 }
 
@@ -158,7 +160,7 @@ func TestAPIKeyService_UpdateQuotaUsed_UsesAtomicStatePath(t *testing.T) {
 		state: &APIKeyQuotaUsageState{
 			QuotaUsed: 12,
 			Quota:     10,
-			Key:       "sk-test-quota",
+			Key:       "test-quota-key",
 			Status:    StatusAPIKeyQuotaExhausted,
 		},
 	}
@@ -172,7 +174,29 @@ func TestAPIKeyService_UpdateQuotaUsed_UsesAtomicStatePath(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, repo.stateCalls)
 	require.Equal(t, 0, repo.getByIDCalls, "fast path should not re-read API key by id")
-	require.Equal(t, []string{svc.authCacheKey("sk-test-quota")}, cache.deleteAuthKeys)
+	require.Equal(t, []string{svc.authCacheKey("test-quota-key")}, cache.deleteAuthKeys)
+}
+
+func TestAPIKeyService_UpdateQuotaUsed_ProtectedKeyUsesGenerationInvalidation(t *testing.T) {
+	repo := &quotaStateRepoStub{
+		state: &APIKeyQuotaUsageState{
+			QuotaUsed: 12,
+			Quota:     10,
+			UserID:    7,
+			Key:       "__hmac__0123456789abcdef",
+			Status:    StatusAPIKeyQuotaExhausted,
+		},
+	}
+	cache := &quotaStateCacheStub{}
+	svc := &APIKeyService{apiKeyRepo: repo, cache: cache}
+	before := svc.authCacheKey("submitted-key")
+
+	err := svc.UpdateQuotaUsed(context.Background(), 101, 2)
+
+	require.NoError(t, err)
+	require.NotEqual(t, before, svc.authCacheKey("submitted-key"))
+	require.Equal(t, []string{authCacheInvalidateAll}, cache.publishedKeys)
+	require.Empty(t, cache.deleteAuthKeys)
 }
 
 func TestAPIKeyService_Update_ReactivatesQuotaExhaustedWhenQuotaUnlimited(t *testing.T) {

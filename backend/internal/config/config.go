@@ -3467,7 +3467,7 @@ func GetServerAddress() string {
 	// Support SERVER_HOST and SERVER_PORT environment variables
 	v.AutomaticEnv()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	v.SetDefault("server.host", "0.0.0.0")
+	v.SetDefault("server.host", "127.0.0.1")
 	v.SetDefault("server.port", 8080)
 
 	// Try to read config file (ignore errors if not found)

@@ -291,7 +291,7 @@ func newTestBackupServiceEphemeralKey(repo *mockSettingRepo) *BackupService {
 	factory := func(_ context.Context, _ *BackupS3Config) (BackupObjectStore, error) {
 		return newMockObjectStore(), nil
 	}
-	return NewBackupService(repo, cfg, &plainEncryptor{}, factory, &mockDumper{})
+	return NewBackupService(repo, cfg, &plainEncryptor{}, factory, &mockDumper{}, nil)
 }
 
 func seedS3Config(t *testing.T, repo *mockSettingRepo) {

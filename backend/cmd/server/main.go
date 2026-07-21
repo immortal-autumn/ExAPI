@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -98,6 +99,7 @@ func main() {
 func runSetupServer() {
 	r := gin.New()
 	r.Use(middleware.Recovery())
+	r.Use(middleware.SetupControlPlaneGuard())
 	r.Use(middleware.CORS(config.CORSConfig{}))
 	r.Use(middleware.SecurityHeaders(config.CSPConfig{Enabled: true, Policy: config.DefaultCSPPolicy}, nil))
 
@@ -164,28 +166,78 @@ func runMainServer() {
 		}
 	}
 
-	// 启动服务器
+	tracker := newActiveHandlerTracker(app.Server.Handler)
+	app.Server.Handler = tracker
+	serverErr := make(chan error, 1)
 	go func() {
-		if err := app.Server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("Failed to start server: %v", err)
-		}
+		serverErr <- app.Server.ListenAndServe()
 	}()
 
 	log.Printf("Server started on %s", app.Server.Addr)
 
-	// 等待中断信号
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	select {
+	case <-quit:
+	case serveErr := <-serverErr:
+		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			log.Printf("Server stopped unexpectedly: %v", serveErr)
+		}
+		tracker.StopAccepting()
+		tracker.Wait()
+		return
+	}
 
 	log.Println("Shutting down server...")
-
+	tracker.StopAccepting()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := app.Server.Shutdown(ctx); err != nil {
 		log.Printf("Server forced to shutdown: %v", err)
+		if closeErr := app.Server.Close(); closeErr != nil && !errors.Is(closeErr, http.ErrServerClosed) {
+			log.Printf("Server close failed: %v", closeErr)
+		}
 	}
-
+	if serveErr := <-serverErr; serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+		log.Printf("Server exited with error: %v", serveErr)
+	}
+	tracker.Wait()
 	log.Println("Server exited")
+}
+
+type activeHandlerTracker struct {
+	next http.Handler
+
+	mu      sync.Mutex
+	closing bool
+	active  sync.WaitGroup
+}
+
+func newActiveHandlerTracker(next http.Handler) *activeHandlerTracker {
+	return &activeHandlerTracker{next: next}
+}
+
+func (t *activeHandlerTracker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	t.mu.Lock()
+	if t.closing {
+		t.mu.Unlock()
+		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+		return
+	}
+	t.active.Add(1)
+	t.mu.Unlock()
+
+	defer t.active.Done()
+	t.next.ServeHTTP(w, r)
+}
+
+func (t *activeHandlerTracker) StopAccepting() {
+	t.mu.Lock()
+	t.closing = true
+	t.mu.Unlock()
+}
+
+func (t *activeHandlerTracker) Wait() {
+	t.active.Wait()
 }

@@ -1,13 +1,14 @@
 <template>
   <AppLayout>
     <div class="space-y-6">
+      <SingleUserCockpitPanel v-if="privateGatewayControlPlane" />
+      <template v-else>
       <!-- Loading State -->
       <div v-if="loading" class="flex items-center justify-center py-12">
         <LoadingSpinner />
       </div>
 
       <template v-else-if="stats">
-        <SingleUserCockpitPanel />
 
         <!-- Row 1: Core Stats -->
         <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -320,6 +321,7 @@
           </div>
         </div>
       </template>
+      </template>
     </div>
   </AppLayout>
 </template>
@@ -348,6 +350,7 @@ import ModelDistributionChart from '@/components/charts/ModelDistributionChart.v
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import SingleUserCockpitPanel from './components/SingleUserCockpitPanel.vue'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
+import { isSingleUserPrivateControlPlaneBrowser } from '@/router/singleUserGatewayMode'
 
 import {
   Chart as ChartJS,
@@ -374,6 +377,7 @@ ChartJS.register(
 
 const appStore = useAppStore()
 const router = useRouter()
+const privateGatewayControlPlane = isSingleUserPrivateControlPlaneBrowser()
 const { canUseBatchImage, refreshBatchImageAccess } = useBatchImageAccess()
 const stats = ref<DashboardStats | null>(null)
 const loading = ref(false)
@@ -734,6 +738,7 @@ const loadChartData = async () => {
 }
 
 onMounted(() => {
+  if (privateGatewayControlPlane) return
   void refreshBatchImageAccess()
   loadDashboardStats()
 })

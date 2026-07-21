@@ -132,6 +132,7 @@ func (d *APIKeyRateLimitData) EffectiveUsage7d() float64 {
 type APIKeyQuotaUsageState struct {
 	QuotaUsed float64
 	Quota     float64
+	UserID    int64
 	Key       string
 	Status    string
 }
@@ -1032,7 +1033,11 @@ func (s *APIKeyService) UpdateQuotaUsed(ctx context.Context, apiKeyID int64, cos
 			return fmt.Errorf("increment quota used: %w", err)
 		}
 		if state != nil && state.Status == StatusAPIKeyQuotaExhausted && strings.TrimSpace(state.Key) != "" {
-			s.InvalidateAuthCacheByKey(ctx, state.Key)
+			if strings.HasPrefix(state.Key, "__hmac__") {
+				s.InvalidateAuthCacheByUserID(ctx, state.UserID)
+			} else {
+				s.InvalidateAuthCacheByKey(ctx, state.Key)
+			}
 		}
 		return nil
 	}

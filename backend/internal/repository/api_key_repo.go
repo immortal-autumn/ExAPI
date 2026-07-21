@@ -742,11 +742,11 @@ func (r *apiKeyRepository) IncrementQuotaUsedAndGetState(ctx context.Context, id
 			END,
 			updated_at = NOW()
 		WHERE id = $3 AND deleted_at IS NULL
-		RETURNING quota_used, quota, key, status
+		RETURNING quota_used, quota, user_id, key, status
 	`
 
 	state := &service.APIKeyQuotaUsageState{}
-	if err := scanSingleRow(ctx, r.sql, query, []any{amount, service.StatusAPIKeyQuotaExhausted, id}, &state.QuotaUsed, &state.Quota, &state.Key, &state.Status); err != nil {
+	if err := scanSingleRow(ctx, r.sql, query, []any{amount, service.StatusAPIKeyQuotaExhausted, id}, &state.QuotaUsed, &state.Quota, &state.UserID, &state.Key, &state.Status); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, service.ErrAPIKeyNotFound
 		}

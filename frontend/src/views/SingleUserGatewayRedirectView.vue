@@ -1,6 +1,6 @@
 <template>
   <div class="flex min-h-[40vh] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-    Redirecting to the private gateway cockpit…
+    正在跳转到私有网关控制台…
   </div>
 </template>
 

@@ -29,6 +29,7 @@ import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 import { useOnboardingTour } from '@/composables/useOnboardingTour'
 import { useOnboardingStore } from '@/stores/onboarding'
+import { isSingleUserPrivateControlPlaneBrowser } from '@/router/singleUserGatewayMode'
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
 
@@ -36,16 +37,19 @@ const appStore = useAppStore()
 const authStore = useAuthStore()
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
 const isAdmin = computed(() => authStore.user?.role === 'admin')
+const privateGatewayControlPlane = isSingleUserPrivateControlPlaneBrowser()
 
 const { replayTour } = useOnboardingTour({
   storageKey: isAdmin.value ? 'admin_guide' : 'user_guide',
-  autoStart: true
+  autoStart: !privateGatewayControlPlane
 })
 
 const onboardingStore = useOnboardingStore()
 
 onMounted(() => {
-  onboardingStore.setReplayCallback(replayTour)
+  if (!privateGatewayControlPlane) {
+    onboardingStore.setReplayCallback(replayTour)
+  }
 })
 
 defineExpose({ replayTour })

@@ -325,7 +325,7 @@ export default {
       },
       upstreamBillingProbe: {
         title: 'Upstream Rate Auto Detection',
-        description: 'Periodically retrieve billing rates declared by upstream Sub2API sites connected to OpenAI API keys.',
+        description: 'Periodically retrieve billing rates declared by upstream ExAPI sites connected to OpenAI API keys.',
         enabled: 'Enable global auto detection',
         enabledHint: 'When enabled, scheduled detection runs only for accounts that also enable automatic detection. Disabling stops all scheduled detection; manual detection remains available.',
         intervalMinutes: 'Detection interval (minutes)',
@@ -1049,7 +1049,7 @@ export default {
         scopeAPIKey: 'API Key only',
         scopeBedrock: 'Bedrock only',
         userIds: 'Specific users',
-        userIdsHint: 'Type any part of a user email to search. Leave empty to apply to all Sub2API users. Selected users match requests from their API keys and take precedence over global rules.',
+        userIdsHint: 'Type any part of a user email to search. Leave empty to apply to all ExAPI users. Selected users match requests from their API keys and take precedence over global rules.',
         userSearchPlaceholder: 'Search by user email',
         userSearchEmpty: 'No matching users found',
         userDeleted: '(deleted)',

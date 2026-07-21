@@ -2,9 +2,6 @@
 package routes
 
 import (
-	"os"
-	"strings"
-
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
@@ -600,7 +597,7 @@ func registerSystemRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	system := admin.Group("/system")
 	{
 		system.GET("/version", h.Admin.System.GetVersion)
-		if singleUserPrivateControlPlaneEnabled() {
+		if !config.SaaSFeaturesEnabled() {
 			return
 		}
 		system.GET("/check-updates", h.Admin.System.CheckUpdates)
@@ -608,15 +605,6 @@ func registerSystemRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		system.POST("/update", h.Admin.System.PerformUpdate)
 		system.POST("/rollback", h.Admin.System.Rollback)
 		system.POST("/restart", h.Admin.System.RestartService)
-	}
-}
-
-func singleUserPrivateControlPlaneEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE"))) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
 	}
 }
 

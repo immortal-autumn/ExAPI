@@ -1180,6 +1180,17 @@ func TestGetServerAddressFromEnv(t *testing.T) {
 	}
 }
 
+func TestGetServerAddressDefaultsToLoopbackForFirstRunSetup(t *testing.T) {
+	t.Setenv("SERVER_HOST", "")
+	t.Setenv("SERVER_PORT", "")
+	t.Chdir(t.TempDir())
+
+	address := GetServerAddress()
+	if address != "127.0.0.1:8080" {
+		t.Fatalf("GetServerAddress() = %q, want loopback-only setup listener", address)
+	}
+}
+
 func TestValidateAbsoluteHTTPURL(t *testing.T) {
 	if err := ValidateAbsoluteHTTPURL("https://example.com/path"); err != nil {
 		t.Fatalf("ValidateAbsoluteHTTPURL valid url error: %v", err)

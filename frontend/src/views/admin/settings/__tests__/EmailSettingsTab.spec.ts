@@ -38,7 +38,7 @@ describe('EmailSettingsTab', () => {
     expect(wrapper.text()).toContain('admin.settings.emailTabDisabledTitle')
   })
 
-  it('renders all email panels when email verification is enabled', () => {
+  it('renders only operator email panels when email is enabled', () => {
     const wrapper = mount(EmailSettingsTab, {
       props: {
         form: { email_verify_enabled: true },
@@ -58,9 +58,9 @@ describe('EmailSettingsTab', () => {
 
     expect(wrapper.text()).toContain('smtp-settings-panel')
     expect(wrapper.text()).toContain('test-email-panel')
-    expect(wrapper.text()).toContain('subscription-expiry-panel')
-    expect(wrapper.text()).toContain('email-template-editor')
-    expect(wrapper.text()).toContain('balance-low-panel')
     expect(wrapper.text()).toContain('account-quota-panel')
+    expect(wrapper.text()).not.toContain('subscription-expiry-panel')
+    expect(wrapper.text()).not.toContain('email-template-editor')
+    expect(wrapper.text()).not.toContain('balance-low-panel')
   })
 })

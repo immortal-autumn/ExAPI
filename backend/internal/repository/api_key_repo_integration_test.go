@@ -551,6 +551,7 @@ func (s *APIKeyRepoSuite) TestIncrementQuotaUsedAndGetState() {
 	s.Require().NotNil(state)
 	s.Require().Equal(3.5, state.QuotaUsed)
 	s.Require().Equal(3.0, state.Quota)
+	s.Require().Equal(user.ID, state.UserID)
 	s.Require().Equal(service.StatusAPIKeyQuotaExhausted, state.Status)
 	s.Require().Equal(key.Key, state.Key)
 

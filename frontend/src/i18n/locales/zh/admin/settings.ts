@@ -318,7 +318,7 @@ export default {
       },
       upstreamBillingProbe: {
         title: '上游倍率自动探测',
-        description: '定期获取 OpenAI API Key 所连接上游 Sub2API 站点声明的计费倍率。',
+        description: '定期获取 OpenAI API Key 所连接上游 ExAPI 站点声明的计费倍率。',
         enabled: '启用全局自动探测',
         enabledHint: '开启后，仅对账号自身已启用自动检测的账号执行定时探测；关闭后停止所有定时探测，手动探测不受影响。',
         intervalMinutes: '探测周期（分钟）',
@@ -1043,7 +1043,7 @@ export default {
         scopeAPIKey: '仅 API Key 账号',
         scopeBedrock: '仅 Bedrock 账号',
         userIds: '指定用户',
-        userIdsHint: '输入任意邮箱关键词进行模糊搜索。留空表示对全部 Sub2API 用户生效；选中用户的 API Key 请求优先匹配用户规则。',
+        userIdsHint: '输入任意邮箱关键词进行模糊搜索。留空表示对全部 ExAPI 用户生效；选中用户的 API Key 请求优先匹配用户规则。',
         userSearchPlaceholder: '输入用户邮箱搜索',
         userSearchEmpty: '未找到匹配用户',
         userDeleted: '（已删除）',

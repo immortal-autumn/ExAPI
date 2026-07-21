@@ -37,6 +37,42 @@ func PublicControlPlaneGuard() gin.HandlerFunc {
 	}
 }
 
+// SetupControlPlaneGuard protects first-run setup before administrator
+// authentication exists. Loopback requires both a loopback peer and Host;
+// explicitly configured private hosts/CIDRs use the same fail-closed policy as
+// the authenticated private control plane.
+func SetupControlPlaneGuard() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if isLoopbackHost(c.Request.Host) && isLoopbackPeer(c.Request.RemoteAddr) {
+			c.Next()
+			return
+		}
+		if isConfiguredPrivateControlHost(c.Request.Host) && isConfiguredPrivateControlPeer(c.Request.RemoteAddr) {
+			c.Next()
+			return
+		}
+		c.AbortWithStatus(http.StatusNotFound)
+	}
+}
+
+func isLoopbackHost(rawHost string) bool {
+	host := normalizeHost(rawHost)
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func isLoopbackPeer(remoteAddr string) bool {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(remoteAddr))
+	if err != nil {
+		host = strings.Trim(strings.TrimSpace(remoteAddr), "[]")
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 func isConfiguredPrivateControlHost(rawHost string) bool {
 	host := normalizeHost(rawHost)
 	if host == "" {

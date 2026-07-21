@@ -381,7 +381,7 @@ const (
 	SettingKeyAvailableChannelsEnabled = "available_channels_enabled"
 
 	// SettingKeyUpstreamBillingProbeSettings stores the global enable switch and interval
-	// for probing remote Sub2API API-key billing metadata.
+	// for probing remote ExAPI API-key billing metadata.
 	SettingKeyUpstreamBillingProbeSettings = "upstream_billing_probe_settings"
 
 	// =========================

@@ -38,15 +38,6 @@
       :update-test-email-address="updateTestEmailAddress"
     />
 
-    <SubscriptionExpiryNotificationPanel :form="form" />
-
-    <EmailTemplateEditor />
-
-    <BalanceLowNotificationPanel
-      :form="form"
-      :current-origin="currentOrigin"
-    />
-
     <AccountQuotaNotificationPanel
       :form="form"
       :add-quota-notify-email="addQuotaNotifyEmail"
@@ -60,9 +51,6 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import SmtpSettingsPanel from '@/views/admin/settings/email/SmtpSettingsPanel.vue'
 import TestEmailPanel from '@/views/admin/settings/email/TestEmailPanel.vue'
-import SubscriptionExpiryNotificationPanel from '@/views/admin/settings/email/SubscriptionExpiryNotificationPanel.vue'
-import EmailTemplateEditor from '@/views/admin/settings/EmailTemplateEditor.vue'
-import BalanceLowNotificationPanel from '@/views/admin/settings/email/BalanceLowNotificationPanel.vue'
 import AccountQuotaNotificationPanel from '@/views/admin/settings/email/AccountQuotaNotificationPanel.vue'
 
 const { t } = useI18n()

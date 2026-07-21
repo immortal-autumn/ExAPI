@@ -10,7 +10,7 @@ vi.mock('vue-i18n', () => ({
 import SecuritySettingsTab from '../tabs/SecuritySettingsTab.vue'
 
 describe('SecuritySettingsTab', () => {
-  it('renders the full security settings panel stack', () => {
+  it('renders only operator security panels in the private product', () => {
     const noop = vi.fn()
     const localText = (zh: string, _en: string) => zh
 
@@ -63,12 +63,12 @@ describe('SecuritySettingsTab', () => {
     })
 
     expect(wrapper.text()).toContain('admin-api-key-panel')
-    expect(wrapper.text()).toContain('registration-panel')
     expect(wrapper.text()).toContain('access-controls-panel')
-    expect(wrapper.text()).toContain('linuxdo-panel')
-    expect(wrapper.text()).toContain('email-oauth-panel')
-    expect(wrapper.text()).toContain('wechat-panel')
-    expect(wrapper.text()).toContain('dingtalk-panel')
-    expect(wrapper.text()).toContain('oidc-panel')
+    expect(wrapper.text()).not.toContain('admin.settings.registration.title')
+    expect(wrapper.text()).not.toContain('admin.settings.linuxdo.title')
+    expect(wrapper.text()).not.toContain('邮箱快捷登录')
+    expect(wrapper.text()).not.toContain('admin.settings.wechatConnect.title')
+    expect(wrapper.text()).not.toContain('admin.settings.dingtalk.title')
+    expect(wrapper.text()).not.toContain('admin.settings.oidc.title')
   })
 })

@@ -698,6 +698,7 @@ describe("admin SettingsView payment visible method controls", () => {
     );
   });
 
+
   it("submits Claude OAuth system prompt injection gateway settings", async () => {
     const blocks = `[{"type":"text","text":"custom block","cache_control":true}]`;
     getSettings.mockResolvedValueOnce({
@@ -995,118 +996,6 @@ describe("admin SettingsView wechat connect controls", () => {
     adminSettingsFetch.mockResolvedValue(undefined);
   });
 
-  it("loads and echoes WeChat Connect fields from the backend payload", async () => {
-    const wrapper = mountView();
-
-    await flushPromises();
-    await openSecurityTab(wrapper);
-
-    expect(
-      (
-        wrapper.get('[data-testid="wechat-connect-mp-app-id"]')
-          .element as HTMLInputElement
-      ).value,
-    ).toBe("wx-app-id-123");
-    expect(
-      (
-        wrapper.get('[data-testid="wechat-connect-open-enabled"]')
-          .element as HTMLInputElement
-      ).checked,
-    ).toBe(false);
-    expect(
-      (
-        wrapper.get('[data-testid="wechat-connect-mp-enabled"]')
-          .element as HTMLInputElement
-      ).checked,
-    ).toBe(true);
-    expect(wrapper.find('[data-testid="wechat-connect-scopes"]').exists()).toBe(
-      false,
-    );
-    expect(
-      wrapper
-        .get('[data-testid="wechat-connect-mp-app-secret"]')
-        .attributes("placeholder"),
-    ).toContain("密钥已配置");
-    expect(
-      (
-        wrapper.get('[data-testid="wechat-connect-frontend-redirect-url"]')
-          .element as HTMLInputElement
-      ).value,
-    ).toBe("/auth/wechat/callback");
-  });
-
-  it("links GitHub OAuth Apps guide to GitHub developer settings", async () => {
-    getSettings.mockResolvedValueOnce({
-      ...baseSettingsResponse,
-      github_oauth_enabled: true,
-    });
-
-    const wrapper = mountView();
-
-    await flushPromises();
-    await openSecurityTab(wrapper);
-
-    const link = wrapper.get('[data-testid="github-oauth-apps-guide-link"]');
-    expect(link.text()).toContain("OAuth Apps");
-    expect(link.attributes("href")).toBe("https://github.com/settings/developers");
-    expect(link.attributes("target")).toBe("_blank");
-    expect(link.attributes("rel")).toContain("noopener");
-  });
-
-  it("saves WeChat Connect fields using the backend contract and clears the secret after save", async () => {
-    const wrapper = mountView();
-
-    await flushPromises();
-    await openSecurityTab(wrapper);
-
-    await wrapper
-      .get('[data-testid="wechat-connect-mp-app-id"]')
-      .setValue("wx-app-id-updated");
-    await wrapper
-      .get('[data-testid="wechat-connect-mp-app-secret"]')
-      .setValue("new-secret");
-    await wrapper
-      .get('[data-testid="wechat-connect-open-enabled"]')
-      .setValue(true);
-    await wrapper
-      .get('[data-testid="wechat-connect-mp-enabled"]')
-      .setValue(true);
-    await wrapper
-      .get('[data-testid="wechat-connect-redirect-url"]')
-      .setValue("https://admin.example.com/api/v1/auth/oauth/wechat/callback");
-    await wrapper
-      .get('[data-testid="wechat-connect-frontend-redirect-url"]')
-      .setValue("/auth/wechat/callback");
-    await wrapper.find("form").trigger("submit.prevent");
-    await flushPromises();
-
-    expect(updateSettings).toHaveBeenCalledTimes(1);
-    expect(updateSettings).toHaveBeenCalledWith(
-      expect.objectContaining({
-        wechat_connect_enabled: true,
-        wechat_connect_app_id: "wx-app-id-updated",
-        wechat_connect_open_enabled: true,
-        wechat_connect_mp_enabled: true,
-        wechat_connect_mp_app_id: "wx-app-id-updated",
-        wechat_connect_mp_app_secret: "new-secret",
-        wechat_connect_redirect_url:
-          "https://admin.example.com/api/v1/auth/oauth/wechat/callback",
-        wechat_connect_frontend_redirect_url: "/auth/wechat/callback",
-      }),
-    );
-    expect(
-      (
-        wrapper.get('[data-testid="wechat-connect-mp-app-secret"]')
-          .element as HTMLInputElement
-      ).value,
-    ).toBe("");
-    expect(
-      wrapper
-        .get('[data-testid="wechat-connect-mp-app-secret"]')
-        .attributes("placeholder"),
-    ).toContain("密钥已配置");
-  });
-
   it.skip("collapses auth source defaults until the source is enabled", async () => {
     const wrapper = mountView();
 
@@ -1134,7 +1023,7 @@ describe("admin SettingsView wechat connect controls", () => {
     expect(wrapper.text()).toContain("首次绑定时授权");
   });
 
-  it("preserves optional OIDC compatibility flags instead of forcing them on save", async () => {
+  it("omits customer identity-provider settings from private save payloads", async () => {
     getSettings.mockResolvedValueOnce({
       ...baseSettingsResponse,
       oidc_connect_enabled: true,
@@ -1146,16 +1035,15 @@ describe("admin SettingsView wechat connect controls", () => {
 
     await flushPromises();
     await openSecurityTab(wrapper);
+    expect(wrapper.find('[data-testid="oidc-connect-enabled"]').exists()).toBe(false);
     await wrapper.find("form").trigger("submit.prevent");
     await flushPromises();
 
     expect(updateSettings).toHaveBeenCalledTimes(1);
-    expect(updateSettings).toHaveBeenCalledWith(
-      expect.objectContaining({
-        oidc_connect_use_pkce: false,
-        oidc_connect_validate_id_token: false,
-      }),
-    );
+    const payload = updateSettings.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty("oidc_connect_enabled");
+    expect(payload).not.toHaveProperty("oidc_connect_use_pkce");
+    expect(payload).not.toHaveProperty("oidc_connect_validate_id_token");
   });
 });
 
