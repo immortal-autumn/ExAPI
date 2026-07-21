@@ -6,6 +6,7 @@ package routecontract
 import "strings"
 
 const (
+	ModelsPath            = "/models"
 	ResponsesPath         = "/responses"
 	ChatCompletionsPath   = "/chat/completions"
 	EmbeddingsPath        = "/embeddings"
@@ -19,6 +20,7 @@ const (
 func IsPublicGatewayPath(path string) bool {
 	path = strings.TrimSpace(path)
 	if path == "/health" ||
+		path == ModelsPath ||
 		path == ChatCompletionsPath ||
 		path == EmbeddingsPath ||
 		path == ImagesGenerationsPath ||
@@ -45,6 +47,7 @@ func IsAPIPath(path string) bool {
 	path = strings.TrimSpace(path)
 
 	if path == "/health" ||
+		path == ModelsPath ||
 		path == ChatCompletionsPath ||
 		path == EmbeddingsPath ||
 		path == ImagesGenerationsPath ||

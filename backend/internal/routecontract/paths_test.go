@@ -2,11 +2,44 @@ package routecontract
 
 import "testing"
 
+func TestIsPublicGatewayPath(t *testing.T) {
+	t.Parallel()
+
+	accepted := []string{
+		"/models",
+		"/v1/models",
+		"/responses",
+		"/chat/completions",
+		"/alpha/search",
+		"/videos/request-123",
+	}
+	for _, path := range accepted {
+		path := path
+		t.Run("accept_"+path, func(t *testing.T) {
+			t.Parallel()
+			if !IsPublicGatewayPath(path) {
+				t.Fatalf("expected public gateway path: %s", path)
+			}
+		})
+	}
+
+	for _, path := range []string{"/", "/admin/dashboard", "/models-extra", "/videos/request-123/extra"} {
+		path := path
+		t.Run("reject_"+path, func(t *testing.T) {
+			t.Parallel()
+			if IsPublicGatewayPath(path) {
+				t.Fatalf("expected non-gateway path: %s", path)
+			}
+		})
+	}
+}
+
 func TestIsAPIPath(t *testing.T) {
 	t.Parallel()
 
 	accepted := []string{
 		"/api/v1/settings",
+		"/models",
 		"/v1/models",
 		"/v1beta/models/gemini:generateContent",
 		"/backend-api/codex/responses",
