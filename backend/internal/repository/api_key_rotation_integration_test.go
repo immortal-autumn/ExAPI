@@ -19,11 +19,11 @@ func TestGatewayAPIKeyLookupSurvivesDigestKeyRotation(t *testing.T) {
 	oldRepo := newAPIKeyRepositoryWithSQLAndDigester(client, integrationDB, oldDigester)
 
 	user := mustCreateUser(t, client, &service.User{
-		Email:       "digest-rotation@example.com",
-		Username:    "digest-rotation",
+		Email:        "digest-rotation@example.com",
+		Username:     "digest-rotation",
 		PasswordHash: "not-used",
-		Role:        service.RoleUser,
-		Status:      service.StatusActive,
+		Role:         service.RoleUser,
+		Status:       service.StatusActive,
 	})
 	const raw = "test-key-created-before-rotation"
 	key := &service.APIKey{UserID: user.ID, Key: raw, Name: "old digest", Status: service.StatusActive}

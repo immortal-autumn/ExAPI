@@ -3,6 +3,7 @@ import {
   SINGLE_USER_ADMIN_ROUTES,
   SINGLE_USER_SETTINGS_TABS,
   isSingleUserLegacyPath,
+  singleUserPostLoginRedirect,
 } from '../singleUserProduct'
 
 describe('single-user product surface', () => {
@@ -45,5 +46,28 @@ describe('single-user product surface', () => {
     for (const path of SINGLE_USER_ADMIN_ROUTES) {
       expect(isSingleUserLegacyPath(path)).toBe(false)
     }
+  })
+
+  it.each([
+    [undefined, '/admin/dashboard'],
+    ['/dashboard', '/admin/dashboard'],
+    ['/unknown', '/admin/dashboard'],
+    ['/register', '/admin/dashboard'],
+    ['/login', '/admin/dashboard'],
+    ['/setup', '/admin/dashboard'],
+    ['/', '/admin/dashboard'],
+    ['/admin/users', '/admin/dashboard'],
+    ['/admin/settings?tab=backup', '/admin/settings?tab=backup'],
+    ['/admin/accounts?status=active#table', '/admin/accounts?status=active#table'],
+  ])('maps private login redirect %s to %s', (requested, expected) => {
+    expect(singleUserPostLoginRedirect(requested)).toBe(expected)
+  })
+
+  it.each([
+    'https://evil.example/admin/dashboard',
+    '//evil.example/admin/dashboard',
+    '/admin/settings%3Ftab=backup',
+  ])('rejects unsafe private login redirect %s', (requested) => {
+    expect(singleUserPostLoginRedirect(requested)).toBe('/admin/dashboard')
   })
 })

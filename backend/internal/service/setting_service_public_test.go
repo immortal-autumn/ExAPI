@@ -48,7 +48,13 @@ func (s *settingPublicRepoStub) Delete(ctx context.Context, key string) error {
 	panic("unexpected Delete call")
 }
 
+func enableSaaSProduct(t *testing.T) {
+	t.Helper()
+	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "false")
+}
+
 func TestSettingService_GetPublicSettings_ExposesRegistrationEmailSuffixWhitelist(t *testing.T) {
+	enableSaaSProduct(t)
 	repo := &settingPublicRepoStub{
 		values: map[string]string{
 			SettingKeyRegistrationEnabled:              "true",
@@ -64,6 +70,7 @@ func TestSettingService_GetPublicSettings_ExposesRegistrationEmailSuffixWhitelis
 }
 
 func TestSettingService_GetPublicSettings_ExposesTablePreferences(t *testing.T) {
+	enableSaaSProduct(t)
 	repo := &settingPublicRepoStub{
 		values: map[string]string{
 			SettingKeyTableDefaultPageSize: "50",
@@ -79,6 +86,7 @@ func TestSettingService_GetPublicSettings_ExposesTablePreferences(t *testing.T) 
 }
 
 func TestSettingService_GetPublicSettings_ExposesForceEmailOnThirdPartySignup(t *testing.T) {
+	enableSaaSProduct(t)
 	repo := &settingPublicRepoStub{
 		values: map[string]string{
 			SettingKeyForceEmailOnThirdPartySignup: "true",
@@ -92,6 +100,7 @@ func TestSettingService_GetPublicSettings_ExposesForceEmailOnThirdPartySignup(t 
 }
 
 func TestSettingService_GetPublicSettings_ExposesAllowUserViewErrorRequests(t *testing.T) {
+	enableSaaSProduct(t)
 	repo := &settingPublicRepoStub{
 		values: map[string]string{
 			SettingKeyAllowUserViewErrorRequests: "true",
@@ -105,6 +114,7 @@ func TestSettingService_GetPublicSettings_ExposesAllowUserViewErrorRequests(t *t
 }
 
 func TestSettingService_GetPublicSettings_ExposesWeChatOAuthModeCapabilities(t *testing.T) {
+	enableSaaSProduct(t)
 	svc := NewSettingService(&settingPublicRepoStub{
 		values: map[string]string{
 			SettingKeyWeChatConnectEnabled:             "true",
@@ -127,6 +137,7 @@ func TestSettingService_GetPublicSettings_ExposesWeChatOAuthModeCapabilities(t *
 }
 
 func TestSettingService_GetPublicSettings_DoesNotExposeMobileOnlyWeChatAsWebOAuthAvailable(t *testing.T) {
+	enableSaaSProduct(t)
 	svc := NewSettingService(&settingPublicRepoStub{
 		values: map[string]string{
 			SettingKeyWeChatConnectEnabled:             "true",
@@ -146,7 +157,61 @@ func TestSettingService_GetPublicSettings_DoesNotExposeMobileOnlyWeChatAsWebOAut
 	require.True(t, settings.WeChatOAuthMobileEnabled)
 }
 
+func TestSettingService_GetPublicSettings_PrivateProductSuppressesDormantCustomerAuth(t *testing.T) {
+	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "true")
+	svc := NewSettingService(&settingPublicRepoStub{values: map[string]string{
+		SettingKeyRegistrationEnabled:         "true",
+		SettingKeyEmailVerifyEnabled:          "true",
+		SettingKeyPasswordResetEnabled:        "true",
+		SettingKeyTurnstileEnabled:            "true",
+		SettingKeyTurnstileSiteKey:            "stale-site-key",
+		SettingKeyBackendModeEnabled:          "false",
+		SettingKeyLinuxDoConnectEnabled:       "true",
+		SettingKeyOIDCConnectEnabled:          "true",
+		SettingKeyGitHubOAuthEnabled:          "true",
+		SettingKeyGoogleOAuthEnabled:          "true",
+		SettingPaymentEnabled:                 "true",
+		SettingKeyPurchaseSubscriptionEnabled: "true",
+		SettingKeyPurchaseSubscriptionURL:     "https://stale.example",
+		SettingKeyCustomMenuItems:             `[{"title":"stale"}]`,
+		SettingKeyLoginAgreementEnabled:       "true",
+		SettingKeyLoginAgreementMode:          "checkbox",
+		SettingKeyLoginAgreementUpdatedAt:     "2099-01-01",
+		SettingKeyLoginAgreementDocuments:     `[{"id":"terms","title":"Stale","content_md":"stale"}]`,
+		SettingKeyBalanceLowNotifyEnabled:     "true",
+		SettingKeyBalanceLowNotifyThreshold:   "99",
+		SettingKeyBalanceLowNotifyRechargeURL: "https://stale.example/recharge",
+		SettingKeyAvailableChannelsEnabled:    "true",
+	}}, &config.Config{})
+
+	settings, err := svc.GetPublicSettings(context.Background())
+	require.NoError(t, err)
+	require.False(t, settings.RegistrationEnabled)
+	require.False(t, settings.EmailVerifyEnabled)
+	require.False(t, settings.PasswordResetEnabled)
+	require.False(t, settings.TurnstileEnabled)
+	require.Empty(t, settings.TurnstileSiteKey)
+	require.False(t, settings.LinuxDoOAuthEnabled)
+	require.False(t, settings.OIDCOAuthEnabled)
+	require.False(t, settings.GitHubOAuthEnabled)
+	require.False(t, settings.GoogleOAuthEnabled)
+	require.False(t, settings.PaymentEnabled)
+	require.False(t, settings.PurchaseSubscriptionEnabled)
+	require.Empty(t, settings.PurchaseSubscriptionURL)
+	require.Empty(t, settings.CustomMenuItems)
+	require.False(t, settings.LoginAgreementEnabled)
+	require.Empty(t, settings.LoginAgreementMode)
+	require.Empty(t, settings.LoginAgreementUpdatedAt)
+	require.Empty(t, settings.LoginAgreementRevision)
+	require.Empty(t, settings.LoginAgreementDocuments)
+	require.False(t, settings.BalanceLowNotifyEnabled)
+	require.Zero(t, settings.BalanceLowNotifyThreshold)
+	require.Empty(t, settings.BalanceLowNotifyRechargeURL)
+	require.False(t, settings.AvailableChannelsEnabled)
+}
+
 func TestSettingService_GetPublicSettings_FallsBackToConfigForWeChatOAuthCapabilities(t *testing.T) {
+	enableSaaSProduct(t)
 	svc := NewSettingService(&settingPublicRepoStub{values: map[string]string{}}, &config.Config{
 		WeChat: config.WeChatConnectConfig{
 			Enabled:             true,

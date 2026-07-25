@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -33,6 +34,7 @@ func (s *quotaStateRepoStub) IncrementQuotaUsedAndGetState(ctx context.Context, 
 type quotaStateCacheStub struct {
 	deleteAuthKeys []string
 	publishedKeys  []string
+	generation     uint64
 }
 
 func (s *quotaStateCacheStub) GetCreateAttemptCount(context.Context, int64) (int, error) {
@@ -75,6 +77,27 @@ func (s *quotaStateCacheStub) PublishAuthCacheInvalidation(_ context.Context, ke
 
 func (s *quotaStateCacheStub) SubscribeAuthCacheInvalidation(context.Context, func(string)) error {
 	return nil
+}
+
+func (s *quotaStateCacheStub) GetAuthCacheGeneration(context.Context) (uint64, error) {
+	return s.generation, nil
+}
+
+func (s *quotaStateCacheStub) IncrementAuthCacheGeneration(context.Context) (uint64, error) {
+	s.generation++
+	return s.generation, nil
+}
+
+type failingQuotaGenerationCache struct {
+	*quotaStateCacheStub
+}
+
+func (s *failingQuotaGenerationCache) GetAuthCacheGeneration(context.Context) (uint64, error) {
+	return 7, nil
+}
+
+func (s *failingQuotaGenerationCache) IncrementAuthCacheGeneration(context.Context) (uint64, error) {
+	return 0, errors.New("generation increment failed")
 }
 
 type quotaBaseAPIKeyRepoStub struct {
@@ -197,6 +220,23 @@ func TestAPIKeyService_UpdateQuotaUsed_ProtectedKeyUsesGenerationInvalidation(t 
 	require.NotEqual(t, before, svc.authCacheKey("submitted-key"))
 	require.Equal(t, []string{authCacheInvalidateAll}, cache.publishedKeys)
 	require.Empty(t, cache.deleteAuthKeys)
+}
+
+func TestAPIKeyService_UpdateQuotaUsed_ProtectedKeyFailsWhenGenerationCannotAdvance(t *testing.T) {
+	repo := &quotaStateRepoStub{state: &APIKeyQuotaUsageState{
+		QuotaUsed: 12,
+		Quota:     10,
+		UserID:    7,
+		Key:       "__hmac__0123456789abcdef",
+		Status:    StatusAPIKeyQuotaExhausted,
+	}}
+	cache := &failingQuotaGenerationCache{quotaStateCacheStub: &quotaStateCacheStub{}}
+	svc := &APIKeyService{apiKeyRepo: repo, cache: cache}
+
+	err := svc.UpdateQuotaUsed(context.Background(), 101, 2)
+
+	require.ErrorContains(t, err, "establish API key cache invalidation boundary")
+	require.Equal(t, 1, repo.stateCalls)
 }
 
 func TestAPIKeyService_Update_ReactivatesQuotaExhaustedWhenQuotaUnlimited(t *testing.T) {

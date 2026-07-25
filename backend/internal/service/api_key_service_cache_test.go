@@ -18,7 +18,12 @@ import (
 )
 
 type authRepoStub struct {
-	getByKeyForAuth   func(ctx context.Context, key string) (*APIKey, error)
+	getByKeyForAuth func(ctx context.Context, key string) (*APIKey, error)
+	getByID         func(ctx context.Context, id int64) (*APIKey, error)
+	getKeyAndOwner  func(ctx context.Context, id int64) (string, int64, error)
+	update          func(ctx context.Context, key *APIKey) error
+	deleteWithAudit func(ctx context.Context, id int64) error
+
 	listKeysByUserID  func(ctx context.Context, userID int64) ([]string, error)
 	listKeysByGroupID func(ctx context.Context, groupID int64) ([]string, error)
 }
@@ -28,10 +33,16 @@ func (s *authRepoStub) Create(ctx context.Context, key *APIKey) error {
 }
 
 func (s *authRepoStub) GetByID(ctx context.Context, id int64) (*APIKey, error) {
+	if s.getByID != nil {
+		return s.getByID(ctx, id)
+	}
 	panic("unexpected GetByID call")
 }
 
 func (s *authRepoStub) GetKeyAndOwnerID(ctx context.Context, id int64) (string, int64, error) {
+	if s.getKeyAndOwner != nil {
+		return s.getKeyAndOwner(ctx, id)
+	}
 	panic("unexpected GetKeyAndOwnerID call")
 }
 
@@ -47,6 +58,9 @@ func (s *authRepoStub) GetByKeyForAuth(ctx context.Context, key string) (*APIKey
 }
 
 func (s *authRepoStub) Update(ctx context.Context, key *APIKey) error {
+	if s.update != nil {
+		return s.update(ctx, key)
+	}
 	panic("unexpected Update call")
 }
 
@@ -55,6 +69,9 @@ func (s *authRepoStub) Delete(ctx context.Context, id int64) error {
 }
 
 func (s *authRepoStub) DeleteWithAudit(ctx context.Context, id int64) error {
+	if s.deleteWithAudit != nil {
+		return s.deleteWithAudit(ctx, id)
+	}
 	panic("unexpected DeleteWithAudit call")
 }
 
@@ -153,6 +170,19 @@ func (s *unavailableAuthGenerationCache) GetAuthCacheGeneration(context.Context)
 
 func (s *unavailableAuthGenerationCache) IncrementAuthCacheGeneration(context.Context) (uint64, error) {
 	return 0, errors.New("generation store unavailable")
+}
+
+type failedIncrementAuthGenerationCache struct {
+	*authCacheStub
+	generation uint64
+}
+
+func (s *failedIncrementAuthGenerationCache) GetAuthCacheGeneration(context.Context) (uint64, error) {
+	return s.generation, nil
+}
+
+func (s *failedIncrementAuthGenerationCache) IncrementAuthCacheGeneration(context.Context) (uint64, error) {
+	return 0, errors.New("generation increment failed")
 }
 
 func (s *distributedAuthCacheStub) GetAuthCache(ctx context.Context, key string) (*APIKeyAuthCacheEntry, error) {
@@ -604,6 +634,118 @@ func TestAPIKeyService_DurableGenerationRejectsStaleProtectedKeyAfterMissedPubSu
 	require.Equal(t, int32(2), repoCalls.Load(), "restart may reuse only the current durable-generation entry")
 }
 
+func TestAPIKeyService_ProtectedUpdateCannotCachePreMutationSnapshotInNewGeneration(t *testing.T) {
+	ctx := context.Background()
+	shared := &sharedAuthCacheGenerationState{entries: make(map[string]*APIKeyAuthCacheEntry)}
+	updateEntered := make(chan struct{})
+	allowUpdate := make(chan struct{})
+	var disabled atomic.Bool
+	var peerRepoCalls atomic.Int32
+
+	mutationRepo := &authRepoStub{
+		getByID: func(context.Context, int64) (*APIKey, error) {
+			return &APIKey{ID: 1, UserID: 7, Key: "__hmac__protected", Status: StatusAPIKeyActive}, nil
+		},
+		update: func(_ context.Context, key *APIKey) error {
+			close(updateEntered)
+			<-allowUpdate
+			disabled.Store(key.Status == StatusAPIKeyDisabled)
+			return nil
+		},
+	}
+	peerRepo := &authRepoStub{getByKeyForAuth: func(context.Context, string) (*APIKey, error) {
+		peerRepoCalls.Add(1)
+		status := StatusAPIKeyActive
+		if disabled.Load() {
+			status = StatusAPIKeyDisabled
+		}
+		return &APIKey{
+			ID: 1, UserID: 7, Status: status,
+			User: &User{ID: 7, Status: StatusActive, Role: RoleUser},
+		}, nil
+	}}
+	newCache := func() *distributedAuthCacheStub {
+		return &distributedAuthCacheStub{authCacheStub: &authCacheStub{}, shared: shared}
+	}
+	mutator := NewAPIKeyService(mutationRepo, nil, nil, nil, nil, newCache(), &config.Config{})
+	peer := NewAPIKeyService(peerRepo, nil, nil, nil, nil, newCache(), &config.Config{
+		APIKeyAuth: config.APIKeyAuthCacheConfig{L2TTLSeconds: 300},
+	})
+
+	status := StatusAPIKeyDisabled
+	updateDone := make(chan error, 1)
+	go func() {
+		_, err := mutator.Update(ctx, 1, 7, UpdateAPIKeyRequest{Status: &status})
+		updateDone <- err
+	}()
+	<-updateEntered
+
+	beforeCommit, err := peer.GetByKey(ctx, "protected-key")
+	require.NoError(t, err)
+	require.Equal(t, StatusAPIKeyActive, beforeCommit.Status)
+	require.Equal(t, int32(1), peerRepoCalls.Load())
+
+	close(allowUpdate)
+	require.NoError(t, <-updateDone)
+	afterCommit, err := peer.GetByKey(ctx, "protected-key")
+	require.NoError(t, err)
+	require.Equal(t, StatusAPIKeyDisabled, afterCommit.Status)
+	require.Equal(t, int32(2), peerRepoCalls.Load(), "post-mutation generation must make the raced snapshot unreachable")
+}
+
+func TestAPIKeyService_ProtectedDeleteCannotCachePreMutationSnapshotInNewGeneration(t *testing.T) {
+	ctx := context.Background()
+	shared := &sharedAuthCacheGenerationState{entries: make(map[string]*APIKeyAuthCacheEntry)}
+	deleteEntered := make(chan struct{})
+	allowDelete := make(chan struct{})
+	var deleted atomic.Bool
+	var peerRepoCalls atomic.Int32
+
+	mutationRepo := &authRepoStub{
+		getKeyAndOwner: func(context.Context, int64) (string, int64, error) {
+			return "__hmac__protected", 7, nil
+		},
+		deleteWithAudit: func(context.Context, int64) error {
+			close(deleteEntered)
+			<-allowDelete
+			deleted.Store(true)
+			return nil
+		},
+	}
+	peerRepo := &authRepoStub{getByKeyForAuth: func(context.Context, string) (*APIKey, error) {
+		peerRepoCalls.Add(1)
+		if deleted.Load() {
+			return nil, ErrAPIKeyNotFound
+		}
+		return &APIKey{
+			ID: 1, UserID: 7, Status: StatusAPIKeyActive,
+			User: &User{ID: 7, Status: StatusActive, Role: RoleUser},
+		}, nil
+	}}
+	newCache := func() *distributedAuthCacheStub {
+		return &distributedAuthCacheStub{authCacheStub: &authCacheStub{}, shared: shared}
+	}
+	mutator := NewAPIKeyService(mutationRepo, nil, nil, nil, nil, newCache(), &config.Config{})
+	peer := NewAPIKeyService(peerRepo, nil, nil, nil, nil, newCache(), &config.Config{
+		APIKeyAuth: config.APIKeyAuthCacheConfig{L2TTLSeconds: 300},
+	})
+
+	deleteDone := make(chan error, 1)
+	go func() { deleteDone <- mutator.Delete(ctx, 1, 7) }()
+	<-deleteEntered
+
+	beforeCommit, err := peer.GetByKey(ctx, "protected-key")
+	require.NoError(t, err)
+	require.Equal(t, StatusAPIKeyActive, beforeCommit.Status)
+	require.Equal(t, int32(1), peerRepoCalls.Load())
+
+	close(allowDelete)
+	require.NoError(t, <-deleteDone)
+	_, err = peer.GetByKey(ctx, "protected-key")
+	require.ErrorIs(t, err, ErrAPIKeyNotFound)
+	require.Equal(t, int32(2), peerRepoCalls.Load(), "post-delete generation must make the raced snapshot unreachable")
+}
+
 func TestAPIKeyService_GenerationReadFailureBypassesAuthenticationCaches(t *testing.T) {
 	cache := &unavailableAuthGenerationCache{authCacheStub: &authCacheStub{
 		getAuthCache: func(context.Context, string) (*APIKeyAuthCacheEntry, error) {
@@ -627,6 +769,42 @@ func TestAPIKeyService_GenerationReadFailureBypassesAuthenticationCaches(t *test
 	require.NoError(t, err)
 	require.Equal(t, StatusAPIKeyQuotaExhausted, key.Status)
 	require.Equal(t, int32(1), repoCalls.Load())
+}
+
+func TestAPIKeyService_FiniteQuotaCacheCannotReauthorizeAfterGenerationIncrementFailure(t *testing.T) {
+	stale := &APIKeyAuthCacheEntry{Snapshot: &APIKeyAuthSnapshot{
+		Version:   apiKeyAuthSnapshotVersion,
+		APIKeyID:  1,
+		UserID:    7,
+		Status:    StatusActive,
+		Quota:     10,
+		QuotaUsed: 9,
+		User:      APIKeyAuthUserSnapshot{ID: 7, Status: StatusActive, Role: RoleUser},
+	}}
+	cache := &failedIncrementAuthGenerationCache{
+		authCacheStub: &authCacheStub{getAuthCache: func(context.Context, string) (*APIKeyAuthCacheEntry, error) {
+			return stale, nil
+		}},
+		generation: 7,
+	}
+	var repoCalls atomic.Int32
+	repo := &authRepoStub{getByKeyForAuth: func(context.Context, string) (*APIKey, error) {
+		repoCalls.Add(1)
+		return &APIKey{
+			ID: 1, UserID: 7, Status: StatusAPIKeyQuotaExhausted, Quota: 10, QuotaUsed: 10,
+			User: &User{ID: 7, Status: StatusActive, Role: RoleUser},
+		}, nil
+	}}
+	mutationInstance := NewAPIKeyService(repo, nil, nil, nil, nil, cache, &config.Config{})
+	peerInstance := NewAPIKeyService(repo, nil, nil, nil, nil, cache, &config.Config{
+		APIKeyAuth: config.APIKeyAuthCacheConfig{L1Size: 100, L1TTLSeconds: 300, L2TTLSeconds: 300},
+	})
+
+	require.Error(t, mutationInstance.invalidateAllAuthCache(context.Background()))
+	key, err := peerInstance.GetByKey(context.Background(), "protected-key")
+	require.NoError(t, err)
+	require.Equal(t, StatusAPIKeyQuotaExhausted, key.Status)
+	require.Equal(t, int32(1), repoCalls.Load(), "finite-quota credentials must bypass stale authentication snapshots")
 }
 
 func TestAPIKeyService_InvalidateAuthCacheByGroupID(t *testing.T) {

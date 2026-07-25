@@ -21,6 +21,7 @@ import (
 const authRouteRedisImageTag = "redis:8.4-alpine"
 
 func TestAuthRegisterRateLimitThresholdHitReturns429(t *testing.T) {
+	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "false")
 	ctx := context.Background()
 	rdb := startAuthRouteRedis(t, ctx)
 

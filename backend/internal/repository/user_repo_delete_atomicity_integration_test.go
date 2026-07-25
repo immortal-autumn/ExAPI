@@ -30,12 +30,17 @@ func TestUserRepository_DeleteUser_AtomicWithAPIKeys(t *testing.T) {
 	client := testEntClient(t)
 
 	userRepo := NewUserRepository(client, integrationDB)
-	apiKeyRepo := newAPIKeyRepositoryWithSQL(client, integrationDB)
+	apiKeyRepo, err := NewAPIKeyRepository(client, integrationDB)
+	require.NoError(t, err)
 
-	// 已提交的初始数据：1 个用户 + 2 个 active API Key。
+	// 已提交的初始数据：1 个用户 + 2 个 active API Key，使用生产构造器确保持久化为单向摘要。
 	user := mustCreateUser(t, client, &service.User{})
-	key1 := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: fmt.Sprintf("sk-atomic-a-%d", user.ID)})
-	key2 := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: fmt.Sprintf("sk-atomic-b-%d", user.ID)})
+	rawKey1 := fmt.Sprintf("sk-atomic-a-%d", user.ID)
+	rawKey2 := fmt.Sprintf("sk-atomic-b-%d", user.ID)
+	key1 := &service.APIKey{UserID: user.ID, Key: rawKey1, Name: "atomic-a", Status: service.StatusAPIKeyActive}
+	key2 := &service.APIKey{UserID: user.ID, Key: rawKey2, Name: "atomic-b", Status: service.StatusAPIKeyActive}
+	require.NoError(t, apiKeyRepo.Create(ctx, key1))
+	require.NoError(t, apiKeyRepo.Create(ctx, key2))
 
 	t.Cleanup(func() {
 		// testEntClient 的写入不会自动回滚，best-effort 清理避免污染共享库。
@@ -91,5 +96,13 @@ func TestUserRepository_DeleteUser_AtomicWithAPIKeys(t *testing.T) {
 
 	require.NoError(t, integrationDB.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM deleted_api_key_audits WHERE user_id = $1`, user.ID).Scan(&auditCount))
-	require.Zero(t, auditCount, "提交后也不得保留被删 Key 的凭据材料")
+	require.Equal(t, 2, auditCount, "提交后应保留两条不含明文凭据的删除审计")
+
+	var exposedRawKeys int
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM deleted_api_key_audits
+		WHERE user_id = $1 AND key IN ($2, $3)`, user.ID, rawKey1, rawKey2,
+	).Scan(&exposedRawKeys))
+	require.Zero(t, exposedRawKeys, "提交后的删除审计不得保留原始 API Key")
 }

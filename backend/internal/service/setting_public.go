@@ -281,7 +281,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		balanceLowNotifyThreshold = v
 	}
 
-	return &PublicSettings{
+	public := &PublicSettings{
 		RegistrationEnabled:              settings[SettingKeyRegistrationEnabled] == "true",
 		EmailVerifyEnabled:               emailVerifyEnabled,
 		ForceEmailOnThirdPartySignup:     settings[SettingKeyForceEmailOnThirdPartySignup] == "true",
@@ -338,7 +338,44 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		RiskControlEnabled: settings[SettingKeyRiskControlEnabled] == "true",
 
 		AllowUserViewErrorRequests: settings[SettingKeyAllowUserViewErrorRequests] == "true",
-	}, nil
+	}
+	if config.SingleUserPrivateControlPlaneEnabled() {
+		// Persisted settings can predate private-product mode. Do not let stale
+		// customer/SaaS flags revive routes or login controls that are absent.
+		public.RegistrationEnabled = false
+		public.EmailVerifyEnabled = false
+		public.ForceEmailOnThirdPartySignup = false
+		public.RegistrationEmailSuffixWhitelist = nil
+		public.PromoCodeEnabled = false
+		public.PasswordResetEnabled = false
+		public.InvitationCodeEnabled = false
+		public.TurnstileEnabled = false
+		public.TurnstileSiteKey = ""
+		public.PurchaseSubscriptionEnabled = false
+		public.PurchaseSubscriptionURL = ""
+		public.CustomMenuItems = ""
+		public.LoginAgreementEnabled = false
+		public.LoginAgreementMode = ""
+		public.LoginAgreementUpdatedAt = ""
+		public.LoginAgreementRevision = ""
+		public.LoginAgreementDocuments = nil
+		public.LinuxDoOAuthEnabled = false
+		public.DingTalkOAuthEnabled = false
+		public.WeChatOAuthEnabled = false
+		public.WeChatOAuthOpenEnabled = false
+		public.WeChatOAuthMPEnabled = false
+		public.WeChatOAuthMobileEnabled = false
+		public.OIDCOAuthEnabled = false
+		public.GitHubOAuthEnabled = false
+		public.GoogleOAuthEnabled = false
+		public.PaymentEnabled = false
+		public.AffiliateEnabled = false
+		public.BalanceLowNotifyEnabled = false
+		public.BalanceLowNotifyThreshold = 0
+		public.BalanceLowNotifyRechargeURL = ""
+		public.AvailableChannelsEnabled = false
+	}
+	return public, nil
 }
 
 // channelMonitorIntervalMin / channelMonitorIntervalMax bound the default interval

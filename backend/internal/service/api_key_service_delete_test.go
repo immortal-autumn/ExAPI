@@ -17,7 +17,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// apiKeyRepoStub 是 APIKeyRepository 接口的测试桩实现。
+func TestAPIKeyService_Delete_ProtectedKeyGenerationFailureAbortsBeforeDelete(t *testing.T) {
+	repo := &apiKeyRepoStub{apiKey: &APIKey{
+		ID: 91, UserID: 7, Key: "__hmac__0123456789abcdef",
+	}}
+	cache := &failedIncrementAuthGenerationCache{authCacheStub: &authCacheStub{}}
+	svc := NewAPIKeyService(repo, nil, nil, nil, nil, cache, nil)
+
+	err := svc.Delete(context.Background(), 91, 7)
+
+	require.ErrorContains(t, err, "establish API key cache invalidation boundary")
+	require.Empty(t, repo.deletedIDs, "delete must not commit without a durable generation boundary")
+}
+
 // 用于隔离测试 APIKeyService.Delete 方法，避免依赖真实数据库。
 //
 // 设计说明：
@@ -240,6 +252,7 @@ func (s *apiKeyRepoStub) GetRateLimitData(ctx context.Context, id int64) (*APIKe
 type apiKeyCacheStub struct {
 	invalidated    []int64  // 记录调用 DeleteCreateAttemptCount 时传入的用户 ID
 	deleteAuthKeys []string // 记录调用 DeleteAuthCache 时传入的缓存 key
+	generation     uint64
 }
 
 // GetCreateAttemptCount 返回 0，表示用户未超过创建次数限制
@@ -288,6 +301,15 @@ func (s *apiKeyCacheStub) PublishAuthCacheInvalidation(ctx context.Context, cach
 
 func (s *apiKeyCacheStub) SubscribeAuthCacheInvalidation(ctx context.Context, handler func(cacheKey string)) error {
 	return nil
+}
+
+func (s *apiKeyCacheStub) GetAuthCacheGeneration(context.Context) (uint64, error) {
+	return s.generation, nil
+}
+
+func (s *apiKeyCacheStub) IncrementAuthCacheGeneration(context.Context) (uint64, error) {
+	s.generation++
+	return s.generation, nil
 }
 
 // TestApiKeyService_Delete_OwnerMismatch 测试非所有者尝试删除时返回权限错误。

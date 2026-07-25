@@ -69,7 +69,7 @@
           <div class="mt-1 flex items-center justify-between">
             <span></span>
             <router-link
-              v-if="passwordResetEnabled && !backendModeEnabled"
+              v-if="!privateProduct && passwordResetEnabled && !backendModeEnabled"
               to="/forgot-password"
               class="text-sm font-medium text-primary-600 transition-colors hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
             >
@@ -79,7 +79,7 @@
         </div>
 
         <!-- Turnstile Widget -->
-        <div v-if="turnstileEnabled && turnstileSiteKey">
+        <div v-if="!privateProduct && turnstileEnabled && turnstileSiteKey">
           <TurnstileWidget
             ref="turnstileRef"
             :site-key="turnstileSiteKey"
@@ -92,7 +92,7 @@
         <!-- Submit Button -->
         <button
           type="submit"
-          :disabled="authActionDisabled || (turnstileEnabled && !turnstileToken)"
+          :disabled="authActionDisabled || (!privateProduct && turnstileEnabled && !turnstileToken)"
           class="btn btn-primary w-full"
         >
           <svg
@@ -120,7 +120,7 @@
         </button>
 
         <LoginAgreementPrompt
-          v-if="loginAgreementEnabled"
+          v-if="!privateProduct && loginAgreementEnabled"
           :accepted="agreementAccepted"
           :documents="loginAgreementDocuments"
           :mode="loginAgreementMode"
@@ -173,7 +173,7 @@
     </div>
 
     <!-- Footer -->
-    <template v-if="!backendModeEnabled" #footer>
+    <template v-if="!privateProduct && !backendModeEnabled" #footer>
       <p class="text-gray-500 dark:text-dark-400">
         {{ t('auth.dontHaveAccount') }}
         <router-link
@@ -216,6 +216,10 @@ import { getPublicSettings, isTotp2FARequired, isWeChatWebOAuthEnabled } from '@
 import type { LoginAgreementDocument, TotpLoginResponse } from '@/types'
 import { extractI18nErrorMessage } from '@/utils/apiError'
 import { clearAllAffiliateReferralCodes } from '@/utils/oauthAffiliate'
+import {
+  isSingleUserPrivateControlPlaneBrowser
+} from '@/router/singleUserGatewayMode'
+import { singleUserPostLoginRedirect } from '@/config/singleUserProduct'
 
 const { t } = useI18n()
 const LOGIN_AGREEMENT_STORAGE_KEY = 'sub2api_login_agreement_consent'
@@ -225,6 +229,7 @@ const LOGIN_AGREEMENT_STORAGE_KEY = 'sub2api_login_agreement_consent'
 const router = useRouter()
 const authStore = useAuthStore()
 const appStore = useAppStore()
+const privateProduct = isSingleUserPrivateControlPlaneBrowser()
 
 // ==================== State ====================
 
@@ -288,6 +293,7 @@ const authActionDisabled = computed(
 
 const showOAuthLogin = computed(
   () =>
+    !privateProduct &&
     !backendModeEnabled.value &&
     (linuxdoOAuthEnabled.value ||
       dingtalkOAuthEnabled.value ||
@@ -316,18 +322,17 @@ onMounted(async () => {
 
   try {
     const settings = await getPublicSettings()
-    turnstileEnabled.value = settings.turnstile_enabled
-    turnstileSiteKey.value = settings.turnstile_site_key || ''
-    linuxdoOAuthEnabled.value = settings.linuxdo_oauth_enabled
-    dingtalkOAuthEnabled.value = settings.dingtalk_oauth_enabled ?? false
-    wechatOAuthEnabled.value = isWeChatWebOAuthEnabled(settings)
-    backendModeEnabled.value = settings.backend_mode_enabled
-    oidcOAuthEnabled.value = settings.oidc_oauth_enabled
+    turnstileEnabled.value = !privateProduct && settings.turnstile_enabled
+    turnstileSiteKey.value = privateProduct ? '' : settings.turnstile_site_key || ''
+    linuxdoOAuthEnabled.value = !privateProduct && settings.linuxdo_oauth_enabled
+    dingtalkOAuthEnabled.value = !privateProduct && (settings.dingtalk_oauth_enabled ?? false)
+    wechatOAuthEnabled.value = !privateProduct && isWeChatWebOAuthEnabled(settings)
+    backendModeEnabled.value = privateProduct || settings.backend_mode_enabled
+    oidcOAuthEnabled.value = !privateProduct && settings.oidc_oauth_enabled
     oidcOAuthProviderName.value = settings.oidc_oauth_provider_name || 'OIDC'
-    githubOAuthEnabled.value = settings.github_oauth_enabled
-    googleOAuthEnabled.value = settings.google_oauth_enabled
-    backendModeEnabled.value = settings.backend_mode_enabled
-    passwordResetEnabled.value = settings.password_reset_enabled
+    githubOAuthEnabled.value = !privateProduct && settings.github_oauth_enabled
+    googleOAuthEnabled.value = !privateProduct && settings.google_oauth_enabled
+    passwordResetEnabled.value = !privateProduct && settings.password_reset_enabled
     applyLoginAgreementSettings(settings)
   } catch (error) {
     console.error('Failed to load public settings:', error)
@@ -347,6 +352,14 @@ function applyLoginAgreementSettings(settings: {
   login_agreement_revision?: string
   login_agreement_documents?: LoginAgreementDocument[]
 }): void {
+  if (privateProduct) {
+    loginAgreementEnabled.value = false
+    loginAgreementDocuments.value = []
+    loginAgreementRevision.value = ''
+    agreementAccepted.value = true
+    showAgreementModal.value = false
+    return
+  }
   const documents = Array.isArray(settings.login_agreement_documents)
     ? settings.login_agreement_documents.filter((doc) => doc.title?.trim())
     : []
@@ -454,7 +467,7 @@ function validateForm(): boolean {
   }
 
   // Turnstile validation
-  if (turnstileEnabled.value && !turnstileToken.value) {
+  if (!privateProduct && turnstileEnabled.value && !turnstileToken.value) {
     errors.turnstile = t('auth.completeVerification')
     isValid = false
   }
@@ -463,6 +476,11 @@ function validateForm(): boolean {
 }
 
 // ==================== Form Handlers ====================
+
+function postLoginRedirect(): string {
+  const requested = router.currentRoute.value.query.redirect as string | undefined
+  return privateProduct ? singleUserPostLoginRedirect(requested) : requested || '/dashboard'
+}
 
 async function handleLogin(): Promise<void> {
   // Clear previous error
@@ -480,7 +498,7 @@ async function handleLogin(): Promise<void> {
     const response = await authStore.login({
       email: formData.email,
       password: formData.password,
-      turnstile_token: turnstileEnabled.value ? turnstileToken.value : undefined
+      turnstile_token: !privateProduct && turnstileEnabled.value ? turnstileToken.value : undefined
     })
 
     // Check if 2FA is required
@@ -497,9 +515,8 @@ async function handleLogin(): Promise<void> {
     clearAllAffiliateReferralCodes()
     appStore.showSuccess(t('auth.loginSuccess'))
 
-    // Redirect to dashboard or intended route
-    const redirectTo = (router.currentRoute.value.query.redirect as string) || '/dashboard'
-    await router.push(redirectTo)
+    // Redirect to the intended route or the product's registered dashboard.
+    await router.push(postLoginRedirect())
   } catch (error: unknown) {
     // Reset Turnstile on error
     if (turnstileRef.value) {
@@ -531,9 +548,8 @@ async function handle2FAVerify(code: string): Promise<void> {
     clearAllAffiliateReferralCodes()
     appStore.showSuccess(t('auth.loginSuccess'))
 
-    // Redirect to dashboard or intended route
-    const redirectTo = (router.currentRoute.value.query.redirect as string) || '/dashboard'
-    await router.push(redirectTo)
+    // Redirect to the intended route or the product's registered dashboard.
+    await router.push(postLoginRedirect())
   } catch (error: unknown) {
     const err = error as { message?: string; response?: { data?: { message?: string } } }
     const message = err.response?.data?.message || err.message || t('profile.totp.loginFailed')

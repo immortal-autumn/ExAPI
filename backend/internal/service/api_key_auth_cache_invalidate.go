@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 )
 
 // InvalidateAuthCacheByKey 清除指定 API Key 的认证缓存
@@ -11,7 +12,7 @@ func (s *APIKeyService) InvalidateAuthCacheByKey(ctx context.Context, key string
 	}
 	cacheKey, err := s.authCacheKeyForRequest(ctx, key)
 	if err != nil {
-		s.invalidateAllAuthCache(ctx)
+		_ = s.invalidateAllAuthCache(ctx)
 		return
 	}
 	s.deleteAuthCache(ctx, cacheKey)
@@ -23,7 +24,7 @@ func (s *APIKeyService) InvalidateAuthCacheByUserID(ctx context.Context, userID 
 	if userID <= 0 {
 		return
 	}
-	s.invalidateAllAuthCache(ctx)
+	_ = s.invalidateAllAuthCache(ctx)
 }
 
 // InvalidateAuthCacheByGroupID uses the same generation boundary. Group/user
@@ -33,21 +34,24 @@ func (s *APIKeyService) InvalidateAuthCacheByGroupID(ctx context.Context, groupI
 	if groupID <= 0 {
 		return
 	}
-	s.invalidateAllAuthCache(ctx)
+	_ = s.invalidateAllAuthCache(ctx)
 }
 
-func (s *APIKeyService) invalidateAllAuthCache(ctx context.Context) {
+func (s *APIKeyService) invalidateAllAuthCache(ctx context.Context) error {
+	var durableErr error
 	if generations, ok := s.cache.(APIKeyAuthCacheGenerationStore); ok {
 		generation, err := generations.IncrementAuthCacheGeneration(ctx)
 		if err != nil {
-			// Locally stop reusing old entries. Other instances consult the durable
-			// generation on every request and bypass caches if it is unavailable.
+			// Locally stop reusing old entries, but report the missing distributed
+			// boundary so security-sensitive callers can fail before committing.
 			s.authCacheEpoch.Add(1)
+			durableErr = err
 		} else {
 			s.authCacheEpoch.Store(generation)
 		}
 	} else {
 		s.authCacheEpoch.Add(1)
+		durableErr = errors.New("authentication cache does not support durable generations")
 	}
 	if s.authCacheL1 != nil {
 		s.authCacheL1.Clear()
@@ -58,4 +62,5 @@ func (s *APIKeyService) invalidateAllAuthCache(ctx context.Context) {
 	if s.cache != nil {
 		_ = s.cache.PublishAuthCacheInvalidation(ctx, authCacheInvalidateAll)
 	}
+	return durableErr
 }

@@ -655,16 +655,16 @@ func (s *APIKeyService) GetByKey(ctx context.Context, key string) (*APIKey, erro
 		// The durable generation is the correctness boundary for L1/L2. If
 		// Redis is unavailable, reload from PostgreSQL rather than risk stale
 		// authentication state.
-		apiKey, lookupErr := s.lookupAPIKeyForAuth(ctx, key)
-		if lookupErr != nil {
-			return nil, fmt.Errorf("get api key: %w", lookupErr)
-		}
-		apiKey.Key = key
-		s.compileAPIKeyIPRules(apiKey)
-		return apiKey, nil
+		return s.loadAPIKeyForAuthUncached(ctx, key)
 	}
 
 	if entry, ok := s.getAuthCacheEntry(ctx, cacheKey); ok {
+		if entry.Snapshot != nil && entry.Snapshot.Quota > 0 {
+			// Finite quota changes after every charged request. Never trust a
+			// retained L1/L2 snapshot for authorization, even if a generation
+			// increment failed while another process could still read Redis.
+			return s.loadAPIKeyForAuthUncached(ctx, key)
+		}
 		if apiKey, used, err := s.applyAuthCacheEntry(key, entry); used {
 			if err != nil {
 				return nil, fmt.Errorf("get api key: %w", err)
@@ -703,6 +703,10 @@ func (s *APIKeyService) GetByKey(ctx context.Context, key string) (*APIKey, erro
 		}
 	}
 
+	return s.loadAPIKeyForAuthUncached(ctx, key)
+}
+
+func (s *APIKeyService) loadAPIKeyForAuthUncached(ctx context.Context, key string) (*APIKey, error) {
 	apiKey, err := s.lookupAPIKeyForAuth(ctx, key)
 	if err != nil {
 		return nil, fmt.Errorf("get api key: %w", err)
@@ -827,11 +831,26 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 		apiKey.Window7dStart = nil
 	}
 
+	protectedKey := strings.HasPrefix(apiKey.Key, "__hmac__")
+	if protectedKey {
+		if err := s.invalidateAllAuthCache(ctx); err != nil {
+			return nil, fmt.Errorf("establish API key cache invalidation boundary: %w", err)
+		}
+	}
 	if err := s.apiKeyRepo.Update(ctx, apiKey); err != nil {
 		return nil, fmt.Errorf("update api key: %w", err)
 	}
+	if protectedKey {
+		// Close the pre-mutation generation race: a peer may have populated the
+		// first new generation while the database update was still in flight.
+		if err := s.invalidateAllAuthCache(ctx); err != nil {
+			return nil, fmt.Errorf("complete API key cache invalidation boundary: %w", err)
+		}
+	}
 
-	s.InvalidateAuthCacheByKey(ctx, apiKey.Key)
+	if !protectedKey {
+		s.InvalidateAuthCacheByKey(ctx, apiKey.Key)
+	}
 	s.compileAPIKeyIPRules(apiKey)
 
 	// Invalidate Redis rate limit cache so reset takes effect immediately
@@ -854,21 +873,33 @@ func (s *APIKeyService) Delete(ctx context.Context, id int64, userID int64) erro
 		return ErrInsufficientPerms
 	}
 
+	protectedKey := strings.HasPrefix(key, "__hmac__")
+	if protectedKey {
+		if err := s.invalidateAllAuthCache(ctx); err != nil {
+			return fmt.Errorf("establish API key cache invalidation boundary: %w", err)
+		}
+	}
+
 	// 事务内:写审计 + 软删除(tombstone)。
 	if err := s.apiKeyRepo.DeleteWithAudit(ctx, id); err != nil {
 		return fmt.Errorf("delete api key: %w", err)
+	}
+	if protectedKey {
+		// A peer can cache the still-active row after the pre-delete generation
+		// advance. Advance again only after the tombstone is durable.
+		if err := s.invalidateAllAuthCache(ctx); err != nil {
+			return fmt.Errorf("complete API key cache invalidation boundary: %w", err)
+		}
 	}
 
 	// 删除成功后再清理缓存,避免"缓存已清但删除失败"的竞态。
 	if s.cache != nil {
 		_ = s.cache.DeleteCreateAttemptCount(ctx, userID)
 	}
-	// Protected rows store only a non-secret placeholder, so exact invalidation
-	// cannot reconstruct the submitted key. Advance the user/global generation;
-	// legacy plaintext rows may still use exact invalidation during migration.
-	if strings.HasPrefix(key, "__hmac__") {
-		s.InvalidateAuthCacheByUserID(ctx, userID)
-	} else {
+	// Protected rows were invalidated before deletion so a Redis failure cannot
+	// commit a deletion while peers retain the old generation. Legacy plaintext
+	// rows can still use exact invalidation during migration.
+	if !protectedKey {
 		s.InvalidateAuthCacheByKey(ctx, key)
 	}
 	s.lastUsedTouchL1.Delete(id)
@@ -1054,7 +1085,9 @@ func (s *APIKeyService) UpdateQuotaUsed(ctx context.Context, apiKeyID int64, cos
 		}
 		if state != nil && state.Status == StatusAPIKeyQuotaExhausted && strings.TrimSpace(state.Key) != "" {
 			if strings.HasPrefix(state.Key, "__hmac__") {
-				s.InvalidateAuthCacheByUserID(ctx, state.UserID)
+				if err := s.invalidateAllAuthCache(ctx); err != nil {
+					return fmt.Errorf("establish API key cache invalidation boundary: %w", err)
+				}
 			} else {
 				s.InvalidateAuthCacheByKey(ctx, state.Key)
 			}

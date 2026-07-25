@@ -65,6 +65,27 @@ export function isSingleUserProductRouteAllowed(path: string): boolean {
   )
 }
 
+const SINGLE_USER_POST_LOGIN_ROUTES = [
+  ...SINGLE_USER_ADMIN_ROUTES,
+  '/key-usage',
+] as readonly string[]
+
+export function singleUserPostLoginRedirect(requested?: string): string {
+  const fallback = '/admin/dashboard'
+  if (!requested || !requested.startsWith('/') || requested.startsWith('//') || requested.includes('\\')) {
+    return fallback
+  }
+  try {
+    const parsed = new URL(requested, 'http://private.invalid')
+    if (parsed.origin !== 'http://private.invalid' || !SINGLE_USER_POST_LOGIN_ROUTES.includes(parsed.pathname)) {
+      return fallback
+    }
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`
+  } catch {
+    return fallback
+  }
+}
+
 export function filterSingleUserProductRoutes<T extends { path: string }>(routes: readonly T[]): T[] {
   return routes.filter((route) =>
     route.path === '/:pathMatch(.*)*' || isSingleUserProductRouteAllowed(route.path),
