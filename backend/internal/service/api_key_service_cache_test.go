@@ -18,11 +18,12 @@ import (
 )
 
 type authRepoStub struct {
-	getByKeyForAuth func(ctx context.Context, key string) (*APIKey, error)
-	getByID         func(ctx context.Context, id int64) (*APIKey, error)
-	getKeyAndOwner  func(ctx context.Context, id int64) (string, int64, error)
-	update          func(ctx context.Context, key *APIKey) error
-	deleteWithAudit func(ctx context.Context, id int64) error
+	getByKeyForAuth            func(ctx context.Context, key string) (*APIKey, error)
+	getByID                    func(ctx context.Context, id int64) (*APIKey, error)
+	getKeyAndOwner             func(ctx context.Context, id int64) (string, int64, error)
+	update                     func(ctx context.Context, key *APIKey) error
+	deleteWithAudit            func(ctx context.Context, id int64) error
+	hasPendingAuthInvalidation func(ctx context.Context) (bool, error)
 
 	listKeysByUserID  func(ctx context.Context, userID int64) ([]string, error)
 	listKeysByGroupID func(ctx context.Context, groupID int64) ([]string, error)
@@ -73,6 +74,13 @@ func (s *authRepoStub) DeleteWithAudit(ctx context.Context, id int64) error {
 		return s.deleteWithAudit(ctx, id)
 	}
 	panic("unexpected DeleteWithAudit call")
+}
+
+func (s *authRepoStub) HasPendingAuthCacheInvalidation(ctx context.Context) (bool, error) {
+	if s.hasPendingAuthInvalidation == nil {
+		return false, nil
+	}
+	return s.hasPendingAuthInvalidation(ctx)
 }
 
 func (s *authRepoStub) ListByUserID(ctx context.Context, userID int64, params pagination.PaginationParams, filters APIKeyListFilters) ([]APIKey, *pagination.PaginationResult, error) {
@@ -156,8 +164,10 @@ type sharedAuthCacheGenerationState struct {
 
 type distributedAuthCacheStub struct {
 	*authCacheStub
-	shared     *sharedAuthCacheGenerationState
-	publishErr error
+	shared          *sharedAuthCacheGenerationState
+	publishErr      error
+	incrementCalls  int
+	failIncrementAt int
 }
 
 type unavailableAuthGenerationCache struct {
@@ -213,6 +223,10 @@ func (s *distributedAuthCacheStub) GetAuthCacheGeneration(ctx context.Context) (
 func (s *distributedAuthCacheStub) IncrementAuthCacheGeneration(ctx context.Context) (uint64, error) {
 	s.shared.mu.Lock()
 	defer s.shared.mu.Unlock()
+	s.incrementCalls++
+	if s.incrementCalls == s.failIncrementAt {
+		return 0, errors.New("generation increment failed")
+	}
 	s.shared.generation++
 	return s.shared.generation, nil
 }
@@ -642,9 +656,10 @@ func TestAPIKeyService_ProtectedUpdateCannotCachePreMutationSnapshotInNewGenerat
 	var disabled atomic.Bool
 	var peerRepoCalls atomic.Int32
 
+	digest := strings.Repeat("a", 64)
 	mutationRepo := &authRepoStub{
 		getByID: func(context.Context, int64) (*APIKey, error) {
-			return &APIKey{ID: 1, UserID: 7, Key: "__hmac__protected", Status: StatusAPIKeyActive}, nil
+			return &APIKey{ID: 1, UserID: 7, KeyDigest: &digest, Status: StatusAPIKeyActive}, nil
 		},
 		update: func(_ context.Context, key *APIKey) error {
 			close(updateEntered)
@@ -691,6 +706,63 @@ func TestAPIKeyService_ProtectedUpdateCannotCachePreMutationSnapshotInNewGenerat
 	require.NoError(t, err)
 	require.Equal(t, StatusAPIKeyDisabled, afterCommit.Status)
 	require.Equal(t, int32(2), peerRepoCalls.Load(), "post-mutation generation must make the raced snapshot unreachable")
+}
+
+func TestAPIKeyService_ProtectedUpdateSecondGenerationFailureCannotReauthorizeRacedSnapshot(t *testing.T) {
+	ctx := context.Background()
+	shared := &sharedAuthCacheGenerationState{entries: make(map[string]*APIKeyAuthCacheEntry)}
+	updateEntered := make(chan struct{})
+	allowUpdate := make(chan struct{})
+	var disabled atomic.Bool
+	var pending atomic.Bool
+	var peerRepoCalls atomic.Int32
+	digest := strings.Repeat("b", 64)
+
+	mutationRepo := &authRepoStub{
+		getByID: func(context.Context, int64) (*APIKey, error) {
+			return &APIKey{ID: 1, UserID: 7, KeyDigest: &digest, Status: StatusAPIKeyActive}, nil
+		},
+		update: func(_ context.Context, key *APIKey) error {
+			close(updateEntered)
+			<-allowUpdate
+			disabled.Store(key.Status == StatusAPIKeyDisabled)
+			pending.Store(true)
+			return nil
+		},
+	}
+	peerRepo := &authRepoStub{
+		getByKeyForAuth: func(context.Context, string) (*APIKey, error) {
+			peerRepoCalls.Add(1)
+			status := StatusAPIKeyActive
+			if disabled.Load() {
+				status = StatusAPIKeyDisabled
+			}
+			return &APIKey{ID: 1, UserID: 7, Status: status, User: &User{ID: 7, Status: StatusActive, Role: RoleUser}}, nil
+		},
+		hasPendingAuthInvalidation: func(context.Context) (bool, error) { return pending.Load(), nil },
+	}
+	mutatorCache := &distributedAuthCacheStub{authCacheStub: &authCacheStub{}, shared: shared, failIncrementAt: 2}
+	peerCache := &distributedAuthCacheStub{authCacheStub: &authCacheStub{}, shared: shared}
+	mutator := NewAPIKeyService(mutationRepo, nil, nil, nil, nil, mutatorCache, &config.Config{})
+	peer := NewAPIKeyService(peerRepo, nil, nil, nil, nil, peerCache, &config.Config{APIKeyAuth: config.APIKeyAuthCacheConfig{L2TTLSeconds: 300}})
+
+	status := StatusAPIKeyDisabled
+	updateDone := make(chan error, 1)
+	go func() {
+		_, err := mutator.Update(ctx, 1, 7, UpdateAPIKeyRequest{Status: &status})
+		updateDone <- err
+	}()
+	<-updateEntered
+	beforeCommit, err := peer.GetByKey(ctx, "protected-key")
+	require.NoError(t, err)
+	require.Equal(t, StatusAPIKeyActive, beforeCommit.Status)
+	close(allowUpdate)
+	require.ErrorContains(t, <-updateDone, "complete API key cache invalidation boundary")
+
+	afterRecovery, err := peer.GetByKey(ctx, "protected-key")
+	require.NoError(t, err)
+	require.Equal(t, StatusAPIKeyDisabled, afterRecovery.Status)
+	require.Equal(t, int32(2), peerRepoCalls.Load(), "pending durable outbox event must bypass the raced current-generation snapshot")
 }
 
 func TestAPIKeyService_ProtectedDeleteCannotCachePreMutationSnapshotInNewGeneration(t *testing.T) {
@@ -744,6 +816,84 @@ func TestAPIKeyService_ProtectedDeleteCannotCachePreMutationSnapshotInNewGenerat
 	_, err = peer.GetByKey(ctx, "protected-key")
 	require.ErrorIs(t, err, ErrAPIKeyNotFound)
 	require.Equal(t, int32(2), peerRepoCalls.Load(), "post-delete generation must make the raced snapshot unreachable")
+}
+
+func TestAPIKeyService_ProtectedDeleteSecondGenerationFailureCannotReauthorizeRacedSnapshot(t *testing.T) {
+	ctx := context.Background()
+	shared := &sharedAuthCacheGenerationState{entries: make(map[string]*APIKeyAuthCacheEntry)}
+	deleteEntered := make(chan struct{})
+	allowDelete := make(chan struct{})
+	var deleted atomic.Bool
+	var pending atomic.Bool
+	var peerRepoCalls atomic.Int32
+	mutationRepo := &authRepoStub{
+		getKeyAndOwner: func(context.Context, int64) (string, int64, error) { return "__hmac__protected", 7, nil },
+		deleteWithAudit: func(context.Context, int64) error {
+			close(deleteEntered)
+			<-allowDelete
+			deleted.Store(true)
+			pending.Store(true)
+			return nil
+		},
+	}
+	peerRepo := &authRepoStub{
+		getByKeyForAuth: func(context.Context, string) (*APIKey, error) {
+			peerRepoCalls.Add(1)
+			if deleted.Load() {
+				return nil, ErrAPIKeyNotFound
+			}
+			return &APIKey{ID: 1, UserID: 7, Status: StatusAPIKeyActive, User: &User{ID: 7, Status: StatusActive, Role: RoleUser}}, nil
+		},
+		hasPendingAuthInvalidation: func(context.Context) (bool, error) { return pending.Load(), nil },
+	}
+	mutatorCache := &distributedAuthCacheStub{authCacheStub: &authCacheStub{}, shared: shared, failIncrementAt: 2}
+	peerCache := &distributedAuthCacheStub{authCacheStub: &authCacheStub{}, shared: shared}
+	mutator := NewAPIKeyService(mutationRepo, nil, nil, nil, nil, mutatorCache, &config.Config{})
+	peer := NewAPIKeyService(peerRepo, nil, nil, nil, nil, peerCache, &config.Config{APIKeyAuth: config.APIKeyAuthCacheConfig{L2TTLSeconds: 300}})
+
+	deleteDone := make(chan error, 1)
+	go func() { deleteDone <- mutator.Delete(ctx, 1, 7) }()
+	<-deleteEntered
+	beforeCommit, err := peer.GetByKey(ctx, "protected-key")
+	require.NoError(t, err)
+	require.Equal(t, StatusAPIKeyActive, beforeCommit.Status)
+	close(allowDelete)
+	require.ErrorContains(t, <-deleteDone, "complete API key cache invalidation boundary")
+
+	_, err = peer.GetByKey(ctx, "protected-key")
+	require.ErrorIs(t, err, ErrAPIKeyNotFound)
+	require.Equal(t, int32(2), peerRepoCalls.Load(), "pending durable outbox event must bypass the raced current-generation snapshot")
+}
+
+func TestAPIKeyService_AuthInvalidationBarrierReadFailureBypassesStaleCaches(t *testing.T) {
+	stale := &APIKeyAuthCacheEntry{Snapshot: &APIKeyAuthSnapshot{
+		Version: apiKeyAuthSnapshotVersion, APIKeyID: 1, UserID: 7, Status: StatusAPIKeyActive,
+		User: APIKeyAuthUserSnapshot{ID: 7, Status: StatusActive, Role: RoleUser},
+	}}
+	cache := &authCacheStub{getAuthCache: func(context.Context, string) (*APIKeyAuthCacheEntry, error) {
+		return stale, nil
+	}}
+	var repoCalls atomic.Int32
+	repo := &authRepoStub{
+		getByKeyForAuth: func(context.Context, string) (*APIKey, error) {
+			repoCalls.Add(1)
+			return &APIKey{
+				ID: 1, UserID: 7, Status: StatusAPIKeyDisabled,
+				User: &User{ID: 7, Status: StatusActive, Role: RoleUser},
+			}, nil
+		},
+		hasPendingAuthInvalidation: func(context.Context) (bool, error) {
+			return false, errors.New("barrier query unavailable")
+		},
+	}
+	service := NewAPIKeyService(repo, nil, nil, nil, nil, cache, &config.Config{
+		APIKeyAuth: config.APIKeyAuthCacheConfig{L1Size: 100, L1TTLSeconds: 300, L2TTLSeconds: 300},
+	})
+
+	loaded, err := service.GetByKey(context.Background(), "sk-barrier")
+	require.NoError(t, err)
+	require.Equal(t, StatusAPIKeyDisabled, loaded.Status)
+	require.Equal(t, int32(1), repoCalls.Load(), "barrier errors must fail closed instead of authorizing cached state")
 }
 
 func TestAPIKeyService_GenerationReadFailureBypassesAuthenticationCaches(t *testing.T) {

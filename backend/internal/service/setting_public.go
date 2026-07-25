@@ -366,6 +366,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		public.WeChatOAuthMPEnabled = false
 		public.WeChatOAuthMobileEnabled = false
 		public.OIDCOAuthEnabled = false
+		public.OIDCOAuthProviderName = ""
 		public.GitHubOAuthEnabled = false
 		public.GoogleOAuthEnabled = false
 		public.PaymentEnabled = false

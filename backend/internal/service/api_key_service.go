@@ -665,7 +665,7 @@ func (s *APIKeyService) GetByKey(ctx context.Context, key string) (*APIKey, erro
 			// increment failed while another process could still read Redis.
 			return s.loadAPIKeyForAuthUncached(ctx, key)
 		}
-		if apiKey, used, err := s.applyAuthCacheEntry(key, entry); used {
+		if apiKey, used, err := s.applyAuthCacheEntryWithBarrier(ctx, key, entry); used {
 			if err != nil {
 				return nil, fmt.Errorf("get api key: %w", err)
 			}
@@ -682,7 +682,7 @@ func (s *APIKeyService) GetByKey(ctx context.Context, key string) (*APIKey, erro
 			return nil, err
 		}
 		entry, _ := value.(*APIKeyAuthCacheEntry)
-		if apiKey, used, err := s.applyAuthCacheEntry(key, entry); used {
+		if apiKey, used, err := s.applyAuthCacheEntryWithBarrier(ctx, key, entry); used {
 			if err != nil {
 				return nil, fmt.Errorf("get api key: %w", err)
 			}
@@ -694,7 +694,7 @@ func (s *APIKeyService) GetByKey(ctx context.Context, key string) (*APIKey, erro
 		if err != nil {
 			return nil, err
 		}
-		if apiKey, used, err := s.applyAuthCacheEntry(key, entry); used {
+		if apiKey, used, err := s.applyAuthCacheEntryWithBarrier(ctx, key, entry); used {
 			if err != nil {
 				return nil, fmt.Errorf("get api key: %w", err)
 			}
@@ -831,7 +831,7 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 		apiKey.Window7dStart = nil
 	}
 
-	protectedKey := strings.HasPrefix(apiKey.Key, "__hmac__")
+	protectedKey := apiKey.KeyDigest != nil || strings.HasPrefix(apiKey.Key, "__hmac__")
 	if protectedKey {
 		if err := s.invalidateAllAuthCache(ctx); err != nil {
 			return nil, fmt.Errorf("establish API key cache invalidation boundary: %w", err)

@@ -50,6 +50,8 @@ describe('single-user product surface', () => {
 
   it.each([
     [undefined, '/admin/dashboard'],
+    [null, '/admin/dashboard'],
+    [['/admin/settings', '//evil.example'], '/admin/dashboard'],
     ['/dashboard', '/admin/dashboard'],
     ['/unknown', '/admin/dashboard'],
     ['/register', '/admin/dashboard'],
@@ -60,7 +62,7 @@ describe('single-user product surface', () => {
     ['/admin/settings?tab=backup', '/admin/settings?tab=backup'],
     ['/admin/accounts?status=active#table', '/admin/accounts?status=active#table'],
   ])('maps private login redirect %s to %s', (requested, expected) => {
-    expect(singleUserPostLoginRedirect(requested)).toBe(expected)
+    expect(singleUserPostLoginRedirect(requested as never)).toBe(expected)
   })
 
   it.each([

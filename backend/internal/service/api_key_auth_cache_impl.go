@@ -347,6 +347,24 @@ func (s *APIKeyService) lookupAPIKeyForAuth(ctx context.Context, key string) (*A
 	return s.apiKeyRepo.GetByKeyForAuth(ctx, key)
 }
 
+type APIKeyAuthCacheInvalidationBarrier interface {
+	HasPendingAuthCacheInvalidation(ctx context.Context) (bool, error)
+}
+
+func (s *APIKeyService) applyAuthCacheEntryWithBarrier(ctx context.Context, key string, entry *APIKeyAuthCacheEntry) (*APIKey, bool, error) {
+	if entry == nil {
+		return nil, false, nil
+	}
+	if barrier, ok := s.apiKeyRepo.(APIKeyAuthCacheInvalidationBarrier); ok {
+		pending, err := barrier.HasPendingAuthCacheInvalidation(ctx)
+		if err != nil || pending {
+			apiKey, loadErr := s.loadAPIKeyForAuthUncached(ctx, key)
+			return apiKey, true, loadErr
+		}
+	}
+	return s.applyAuthCacheEntry(key, entry)
+}
+
 func (s *APIKeyService) applyAuthCacheEntry(key string, entry *APIKeyAuthCacheEntry) (*APIKey, bool, error) {
 	if entry == nil {
 		return nil, false, nil

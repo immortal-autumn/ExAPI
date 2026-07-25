@@ -64,6 +64,11 @@ func TestAuthCacheInvalidationTriggers_CoverSecurityMutationsOnly(t *testing.T) 
 	require.NoError(t, err)
 	require.Zero(t, count(), "usage-only key updates must not enqueue")
 
+	_, err = integrationDB.ExecContext(ctx, "UPDATE api_keys SET quota = quota + 1 WHERE id = $1", key.ID)
+	require.NoError(t, err)
+	require.Equal(t, 1, count(), "quota changes must create a durable authentication-cache barrier")
+	clear()
+
 	_, err = integrationDB.ExecContext(ctx, "UPDATE api_keys SET status = 'disabled' WHERE id = $1", key.ID)
 	require.NoError(t, err)
 	require.Equal(t, 1, count(), "key disable must enqueue")

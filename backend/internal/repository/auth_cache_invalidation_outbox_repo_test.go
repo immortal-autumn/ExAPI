@@ -99,6 +99,20 @@ func TestAuthCacheInvalidationOutboxRepository_StatsExposeDurableLagAndFailures(
 	require.NotNil(t, stats.OldestCreatedAt)
 }
 
+func TestAuthCacheInvalidationBarrierMigration_CoversEveryMutableAPIKeyAuthorizationField(t *testing.T) {
+	content, err := migrations.FS.ReadFile("214_auth_cache_invalidation_barrier_coverage.sql")
+	require.NoError(t, err)
+	sqlText := string(content)
+	for _, required := range []string{
+		"OLD.key", "OLD.key_digest", "OLD.status", "OLD.deleted_at", "OLD.user_id", "OLD.group_id",
+		"OLD.ip_whitelist", "OLD.ip_blacklist", "OLD.expires_at", "OLD.quota",
+		"OLD.rate_limit_5h", "OLD.rate_limit_1d", "OLD.rate_limit_7d",
+	} {
+		require.Contains(t, sqlText, required)
+	}
+	require.Contains(t, sqlText, "enqueue_auth_cache_invalidation")
+}
+
 func TestAuthCacheInvalidationMigration_SecurityCoverageAndNoPlaintextPayload(t *testing.T) {
 	content, err := migrations.FS.ReadFile("184_auth_cache_invalidation_outbox.sql")
 	require.NoError(t, err)

@@ -168,6 +168,7 @@ func TestSettingService_GetPublicSettings_PrivateProductSuppressesDormantCustome
 		SettingKeyBackendModeEnabled:          "false",
 		SettingKeyLinuxDoConnectEnabled:       "true",
 		SettingKeyOIDCConnectEnabled:          "true",
+		SettingKeyOIDCConnectProviderName:     "Stale Corp Login",
 		SettingKeyGitHubOAuthEnabled:          "true",
 		SettingKeyGoogleOAuthEnabled:          "true",
 		SettingPaymentEnabled:                 "true",
@@ -193,6 +194,7 @@ func TestSettingService_GetPublicSettings_PrivateProductSuppressesDormantCustome
 	require.Empty(t, settings.TurnstileSiteKey)
 	require.False(t, settings.LinuxDoOAuthEnabled)
 	require.False(t, settings.OIDCOAuthEnabled)
+	require.Empty(t, settings.OIDCOAuthProviderName)
 	require.False(t, settings.GitHubOAuthEnabled)
 	require.False(t, settings.GoogleOAuthEnabled)
 	require.False(t, settings.PaymentEnabled)

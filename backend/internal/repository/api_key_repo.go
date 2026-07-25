@@ -129,6 +129,33 @@ func (r *apiKeyRepository) GetKeyAndOwnerID(ctx context.Context, id int64) (stri
 	return m.Key, m.UserID, nil
 }
 
+func (r *apiKeyRepository) HasPendingAuthCacheInvalidation(ctx context.Context) (bool, error) {
+	if r == nil || r.sql == nil {
+		return false, errors.New("nil API key SQL executor")
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM auth_cache_invalidation_outbox
+		)
+	`)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return false, err
+		}
+		return false, errors.New("auth cache invalidation barrier returned no row")
+	}
+	var pending bool
+	if err := rows.Scan(&pending); err != nil {
+		return false, err
+	}
+	return pending, nil
+}
+
 func (r *apiKeyRepository) GetByKey(ctx context.Context, key string) (*service.APIKey, error) {
 	return r.getByKey(ctx, key, false)
 }

@@ -70,9 +70,9 @@ const SINGLE_USER_POST_LOGIN_ROUTES = [
   '/key-usage',
 ] as readonly string[]
 
-export function singleUserPostLoginRedirect(requested?: string): string {
+export function singleUserPostLoginRedirect(requested?: unknown): string {
   const fallback = '/admin/dashboard'
-  if (!requested || !requested.startsWith('/') || requested.startsWith('//') || requested.includes('\\')) {
+  if (typeof requested !== 'string' || !requested.startsWith('/') || requested.startsWith('//') || requested.includes('\\')) {
     return fallback
   }
   try {

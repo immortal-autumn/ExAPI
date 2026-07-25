@@ -478,8 +478,8 @@ function validateForm(): boolean {
 // ==================== Form Handlers ====================
 
 function postLoginRedirect(): string {
-  const requested = router.currentRoute.value.query.redirect as string | undefined
-  return privateProduct ? singleUserPostLoginRedirect(requested) : requested || '/dashboard'
+  const requested = router.currentRoute.value.query.redirect
+  return privateProduct ? singleUserPostLoginRedirect(requested) : typeof requested === 'string' ? requested : '/dashboard'
 }
 
 async function handleLogin(): Promise<void> {
