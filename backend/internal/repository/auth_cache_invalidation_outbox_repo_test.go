@@ -113,6 +113,21 @@ func TestAuthCacheInvalidationBarrierMigration_CoversEveryMutableAPIKeyAuthoriza
 	require.Contains(t, sqlText, "enqueue_auth_cache_invalidation")
 }
 
+func TestAuthCacheInvalidationRelatedPolicyMigration_CoversCachedAuthorizationFields(t *testing.T) {
+	content, err := migrations.FS.ReadFile("215_auth_cache_invalidation_related_policy_barriers.sql")
+	require.NoError(t, err)
+	sqlText := string(content)
+	for _, required := range []string{
+		"OLD.allow_image_generation", "OLD.allow_batch_image_generation",
+		"OLD.claude_code_only", "OLD.supported_model_scopes", "OLD.allow_messages_dispatch",
+		"OLD.model_routing", "OLD.rpm_limit", "OLD.peak_rate_enabled",
+		"OLD.concurrency", "OLD.rpm_override", "user_group_rate_multipliers",
+	} {
+		require.Contains(t, sqlText, required)
+	}
+	require.Contains(t, sqlText, "repeat('0', 64)")
+}
+
 func TestAuthCacheInvalidationMigration_SecurityCoverageAndNoPlaintextPayload(t *testing.T) {
 	content, err := migrations.FS.ReadFile("184_auth_cache_invalidation_outbox.sql")
 	require.NoError(t, err)

@@ -84,6 +84,11 @@ func TestAuthCacheInvalidationTriggers_CoverSecurityMutationsOnly(t *testing.T) 
 	require.NoError(t, userRepo.Update(ctx, loadedUser))
 	require.Zero(t, count(), "balance update with unchanged allowed groups must not enqueue")
 
+	_, err = integrationDB.ExecContext(ctx, "UPDATE users SET rpm_limit = rpm_limit + 1 WHERE id = $1", user.ID)
+	require.NoError(t, err)
+	require.Equal(t, 1, count(), "user RPM policy changes must create a durable barrier")
+	clear()
+
 	_, err = integrationDB.ExecContext(ctx, "UPDATE users SET status = 'disabled' WHERE id = $1", user.ID)
 	require.NoError(t, err)
 	require.Equal(t, 1, count(), "user disable must enqueue all active keys")
@@ -95,12 +100,25 @@ func TestAuthCacheInvalidationTriggers_CoverSecurityMutationsOnly(t *testing.T) 
 	_, err = integrationDB.ExecContext(ctx, "UPDATE groups SET name = name || '-cosmetic' WHERE id = $1", group.ID)
 	require.NoError(t, err)
 	require.Zero(t, count(), "cosmetic group update must not enqueue")
+
+	_, err = integrationDB.ExecContext(ctx, "UPDATE groups SET allow_image_generation = NOT allow_image_generation WHERE id = $1", group.ID)
+	require.NoError(t, err)
+	require.Equal(t, 1, count(), "group image authorization changes must create a durable barrier")
+	clear()
+
 	_, err = integrationDB.ExecContext(ctx, "UPDATE groups SET status = 'disabled' WHERE id = $1", group.ID)
 	require.NoError(t, err)
 	require.Equal(t, 1, count(), "group disable must enqueue bound keys")
 	clear()
 	_, err = integrationDB.ExecContext(ctx, "UPDATE groups SET status = 'active' WHERE id = $1", group.ID)
 	require.NoError(t, err)
+	clear()
+
+	_, err = integrationDB.ExecContext(ctx, `
+		INSERT INTO user_group_rate_multipliers (user_id, group_id, rate_multiplier, rpm_override)
+		VALUES ($1, $2, 1, 10)`, user.ID, group.ID)
+	require.NoError(t, err)
+	require.Equal(t, 1, count(), "user-group RPM policy changes must create a durable barrier")
 	clear()
 
 	_, err = integrationDB.ExecContext(ctx,

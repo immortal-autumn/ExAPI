@@ -865,6 +865,40 @@ func TestAPIKeyService_ProtectedDeleteSecondGenerationFailureCannotReauthorizeRa
 	require.Equal(t, int32(2), peerRepoCalls.Load(), "pending durable outbox event must bypass the raced current-generation snapshot")
 }
 
+func TestAPIKeyService_PendingGroupPolicyBarrierBypassesStalePeerAuthorization(t *testing.T) {
+	stale := &APIKeyAuthCacheEntry{Snapshot: &APIKeyAuthSnapshot{
+		Version: apiKeyAuthSnapshotVersion, APIKeyID: 1, UserID: 2, Status: StatusAPIKeyActive,
+		User:  APIKeyAuthUserSnapshot{ID: 2, Status: StatusActive},
+		Group: &APIKeyAuthGroupSnapshot{ID: 3, Status: StatusActive, AllowImageGeneration: true},
+	}}
+	cache := &authCacheStub{getAuthCache: func(context.Context, string) (*APIKeyAuthCacheEntry, error) {
+		return stale, nil
+	}}
+	var repoCalls atomic.Int32
+	repo := &authRepoStub{
+		getByKeyForAuth: func(context.Context, string) (*APIKey, error) {
+			repoCalls.Add(1)
+			groupID := int64(3)
+			return &APIKey{
+				ID: 1, UserID: 2, GroupID: &groupID, Status: StatusAPIKeyActive,
+				User:  &User{ID: 2, Status: StatusActive},
+				Group: &Group{ID: 3, Status: StatusActive, AllowImageGeneration: false, Hydrated: true},
+			}, nil
+		},
+		hasPendingAuthInvalidation: func(context.Context) (bool, error) { return true, nil },
+	}
+	svc := NewAPIKeyService(repo, nil, nil, nil, nil, cache, &config.Config{
+		APIKeyAuth: config.APIKeyAuthCacheConfig{L1Size: 100, L1TTLSeconds: 300, L2TTLSeconds: 300},
+	})
+
+	got, err := svc.GetByKey(context.Background(), "sk-group-policy")
+	require.NoError(t, err)
+	require.NotNil(t, got.Group)
+	require.False(t, got.Group.AllowImageGeneration,
+		"a durable group-policy barrier must prevent stale peer authorization")
+	require.Equal(t, int32(1), repoCalls.Load(), "pending barrier must reload PostgreSQL")
+}
+
 func TestAPIKeyService_AuthInvalidationBarrierReadFailureBypassesStaleCaches(t *testing.T) {
 	stale := &APIKeyAuthCacheEntry{Snapshot: &APIKeyAuthSnapshot{
 		Version: apiKeyAuthSnapshotVersion, APIKeyID: 1, UserID: 7, Status: StatusAPIKeyActive,
