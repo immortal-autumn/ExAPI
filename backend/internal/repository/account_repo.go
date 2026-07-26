@@ -1282,7 +1282,7 @@ func (r *accountRepository) SetGrokCredentialErrorIfMatch(
 	if err != nil {
 		return false, err
 	}
-	applied, err := r.withLockedCredentialMatch(ctx, id, expectedCredentials, func(exec sqlExecutor) (bool, error) {
+	applied, committed, err := r.withLockedCredentialMatch(ctx, id, expectedCredentials, func(exec sqlExecutor) (bool, error) {
 		result, err := exec.ExecContext(ctx, `
 			WITH updated AS (
 			UPDATE accounts AS a
@@ -1317,7 +1317,7 @@ func (r *accountRepository) SetGrokCredentialErrorIfMatch(
 		}
 		return rowsAffected(result)
 	})
-	if applied {
+	if applied && committed {
 		r.syncSchedulerAccountSnapshotDetached(ctx, id)
 	}
 	return applied, err
@@ -1337,7 +1337,7 @@ func (r *accountRepository) SetGrokOAuthErrorIfCredentialsUnchanged(
 	if refreshToken, _ := expectedCredentials["refresh_token"].(string); strings.TrimSpace(refreshToken) != "" {
 		return false, nil
 	}
-	applied, err := r.withLockedCredentialMatch(ctx, id, expectedCredentials, func(exec sqlExecutor) (bool, error) {
+	applied, committed, err := r.withLockedCredentialMatch(ctx, id, expectedCredentials, func(exec sqlExecutor) (bool, error) {
 		result, err := exec.ExecContext(ctx, `
 			WITH updated AS (
 			UPDATE accounts AS a
@@ -1361,7 +1361,7 @@ func (r *accountRepository) SetGrokOAuthErrorIfCredentialsUnchanged(
 		}
 		return rowsAffected(result)
 	})
-	if applied {
+	if applied && committed {
 		r.syncSchedulerAccountSnapshotDetached(ctx, id)
 	}
 	return applied, err
@@ -1379,7 +1379,7 @@ func (r *accountRepository) UpdateGrokOAuthCredentialsIfUnchanged(
 	expectedProxyID *int64,
 	credentials map[string]any,
 ) (bool, error) {
-	applied, err := r.withLockedCredentialMatch(ctx, id, expectedCredentials, func(exec sqlExecutor) (bool, error) {
+	applied, committed, err := r.withLockedCredentialMatch(ctx, id, expectedCredentials, func(exec sqlExecutor) (bool, error) {
 		sealedCredentials, err := r.protector.seal(id, credentials)
 		if err != nil {
 			return false, err
@@ -1409,7 +1409,7 @@ func (r *accountRepository) UpdateGrokOAuthCredentialsIfUnchanged(
 		}
 		return rowsAffected(result)
 	})
-	if applied {
+	if applied && committed {
 		r.syncSchedulerAccountSnapshotDetached(ctx, id)
 	}
 	return applied, err
@@ -1426,7 +1426,7 @@ func (r *accountRepository) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(
 	expectedProxyID *int64,
 	errorMsg string,
 ) (bool, error) {
-	applied, err := r.withLockedCredentialMatch(ctx, id, expectedCredentials, func(exec sqlExecutor) (bool, error) {
+	applied, committed, err := r.withLockedCredentialMatch(ctx, id, expectedCredentials, func(exec sqlExecutor) (bool, error) {
 		result, err := exec.ExecContext(ctx, `
 			WITH updated AS (
 			UPDATE accounts AS a
@@ -1451,7 +1451,7 @@ func (r *accountRepository) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(
 		}
 		return rowsAffected(result)
 	})
-	if applied {
+	if applied && committed {
 		r.syncSchedulerAccountSnapshotDetached(ctx, id)
 	}
 	return applied, err
@@ -1468,7 +1468,7 @@ func (r *accountRepository) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnc
 	until time.Time,
 	reason string,
 ) (bool, error) {
-	applied, err := r.withLockedCredentialMatch(ctx, id, expectedCredentials, func(exec sqlExecutor) (bool, error) {
+	applied, committed, err := r.withLockedCredentialMatch(ctx, id, expectedCredentials, func(exec sqlExecutor) (bool, error) {
 		result, err := exec.ExecContext(ctx, `
 			WITH updated AS (
 			UPDATE accounts AS a
@@ -1493,7 +1493,7 @@ func (r *accountRepository) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnc
 		}
 		return rowsAffected(result)
 	})
-	if applied {
+	if applied && committed {
 		r.syncSchedulerAccountSnapshotDetached(ctx, id)
 	}
 	return applied, err
@@ -2173,7 +2173,7 @@ func (r *accountRepository) SetGrokCredentialTempUnschedulableIfMatch(
 	if err != nil {
 		return false, err
 	}
-	applied, err := r.withLockedCredentialMatch(ctx, id, expectedCredentials, func(exec sqlExecutor) (bool, error) {
+	applied, committed, err := r.withLockedCredentialMatch(ctx, id, expectedCredentials, func(exec sqlExecutor) (bool, error) {
 		result, err := exec.ExecContext(ctx, `
 			WITH updated AS (
 			UPDATE accounts AS a
@@ -2205,7 +2205,7 @@ func (r *accountRepository) SetGrokCredentialTempUnschedulableIfMatch(
 		}
 		return rowsAffected(result)
 	})
-	if applied {
+	if applied && committed {
 		r.syncSchedulerAccountSnapshotDetached(ctx, id)
 	}
 	return applied, err

@@ -12,34 +12,53 @@ import (
 )
 
 // withLockedCredentialMatch runs a credential-dependent mutation while holding
-// a row lock. Account credentials are encrypted with randomized nonces, so a
-// plaintext JSON document cannot be compared safely or meaningfully in SQL.
-// The row is instead locked, decrypted, compared in process, and mutated in the
-// same database transaction. A successful callback is committed together with
-// any durable outbox write it performs.
+// a row lock. The second result reports whether this helper committed the
+// mutation itself; caller-owned transactions intentionally return false so
+// callers do not publish cache state before the outer commit.
 func (r *accountRepository) withLockedCredentialMatch(
 	ctx context.Context,
 	id int64,
 	expectedCredentials map[string]any,
 	mutate func(exec sqlExecutor) (bool, error),
-) (bool, error) {
+) (bool, bool, error) {
 	if r == nil || r.client == nil || r.sql == nil {
-		return false, errors.New("account repository transaction dependencies are not configured")
+		return false, false, errors.New("account repository transaction dependencies are not configured")
 	}
 	if r.protector == nil {
-		return false, errors.New("data-encryption keyring is required for account credential comparison")
+		return false, false, errors.New("data-encryption keyring is required for account credential comparison")
+	}
+
+	if dbent.TxFromContext(ctx) != nil {
+		applied, err := r.mutateLockedCredentials(ctx, clientFromContext(ctx, r.client), id, expectedCredentials, mutate)
+		return applied, false, err
 	}
 
 	tx, err := r.client.Tx(ctx)
-	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
-		return false, err
+	if errors.Is(err, dbent.ErrTxStarted) {
+		return false, false, errors.New("transaction-bound account repository requires an Ent transaction context")
 	}
-	exec := r.sql
-	if tx != nil {
-		defer func() { _ = tx.Rollback() }()
-		exec = tx.Client()
+	if err != nil {
+		return false, false, err
 	}
+	defer func() { _ = tx.Rollback() }()
 
+	applied, err := r.mutateLockedCredentials(ctx, tx.Client(), id, expectedCredentials, mutate)
+	if err != nil || !applied {
+		return false, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, false, err
+	}
+	return true, true, nil
+}
+
+func (r *accountRepository) mutateLockedCredentials(
+	ctx context.Context,
+	exec sqlExecutor,
+	id int64,
+	expectedCredentials map[string]any,
+	mutate func(exec sqlExecutor) (bool, error),
+) (bool, error) {
 	storedCredentials, found, err := loadLockedAccountCredentials(ctx, exec, id)
 	if err != nil || !found {
 		return false, err
@@ -52,17 +71,7 @@ func (r *accountRepository) withLockedCredentialMatch(
 	if err != nil || !equal {
 		return false, err
 	}
-
-	applied, err := mutate(exec)
-	if err != nil || !applied {
-		return false, err
-	}
-	if tx != nil {
-		if err := tx.Commit(); err != nil {
-			return false, err
-		}
-	}
-	return true, nil
+	return mutate(exec)
 }
 
 func loadLockedAccountCredentials(ctx context.Context, exec sqlExecutor, id int64) (map[string]any, bool, error) {

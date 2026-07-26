@@ -20,6 +20,7 @@ import (
 type AccountRepoSuite struct {
 	suite.Suite
 	ctx    context.Context
+	tx     *dbent.Tx
 	client *dbent.Client
 	repo   *accountRepository
 }
@@ -138,6 +139,7 @@ func (s *schedulerCacheRecorder) SetOutboxWatermark(ctx context.Context, id int6
 func (s *AccountRepoSuite) SetupTest() {
 	s.ctx = context.Background()
 	tx := testEntTx(s.T())
+	s.tx = tx
 	s.client = tx.Client()
 	s.repo = integrationAccountRepository(s.T(), s.client, tx, nil)
 }
@@ -1087,7 +1089,8 @@ func (s *AccountRepoSuite) TestSetError() {
 	s.Require().Equal(1, outboxCount)
 }
 
-func (s *AccountRepoSuite) TestSetGrokOAuthErrorIfCredentialsUnchanged_AppliesAndSyncsSchedulerState() {
+func (s *AccountRepoSuite) TestSetGrokOAuthErrorIfCredentialsUnchanged_DefersSchedulerStateInBoundTransaction() {
+	txCtx := dbent.NewTxContext(s.ctx, s.tx)
 	account := mustCreateAccount(s.T(), s.client, &service.Account{
 		Name:        "grok-conditional-error-applied",
 		Platform:    service.PlatformGrok,
@@ -1104,7 +1107,7 @@ func (s *AccountRepoSuite) TestSetGrokOAuthErrorIfCredentialsUnchanged_AppliesAn
 	s.Require().NoError(err)
 
 	applied, err := s.repo.SetGrokOAuthErrorIfCredentialsUnchanged(
-		s.ctx,
+		txCtx,
 		account.ID,
 		observed.Credentials,
 		"missing refresh token",
@@ -1117,8 +1120,7 @@ func (s *AccountRepoSuite) TestSetGrokOAuthErrorIfCredentialsUnchanged_AppliesAn
 	s.Require().Equal(service.StatusError, got.Status)
 	s.Require().False(got.Schedulable)
 	s.Require().Equal("missing refresh token", got.ErrorMessage)
-	s.Require().Len(cacheRecorder.setAccounts, 1)
-	s.Require().Equal(service.StatusError, cacheRecorder.setAccounts[0].Status)
+	s.Require().Empty(cacheRecorder.setAccounts, "transaction-bound mutation must defer cache publication until the durable outbox is committed")
 
 	var outboxCount int
 	err = scanSingleRow(
@@ -1133,6 +1135,7 @@ func (s *AccountRepoSuite) TestSetGrokOAuthErrorIfCredentialsUnchanged_AppliesAn
 }
 
 func (s *AccountRepoSuite) TestSetGrokOAuthErrorIfCredentialsUnchanged_SkipsConcurrentReauthorization() {
+	txCtx := dbent.NewTxContext(s.ctx, s.tx)
 	account := mustCreateAccount(s.T(), s.client, &service.Account{
 		Name:        "grok-conditional-error-reauthorized",
 		Platform:    service.PlatformGrok,
@@ -1155,7 +1158,7 @@ func (s *AccountRepoSuite) TestSetGrokOAuthErrorIfCredentialsUnchanged_SkipsConc
 	s.Require().NoError(err)
 
 	applied, err := s.repo.SetGrokOAuthErrorIfCredentialsUnchanged(
-		s.ctx,
+		txCtx,
 		account.ID,
 		observed.Credentials,
 		"stale reconciliation",
@@ -1182,7 +1185,8 @@ func (s *AccountRepoSuite) TestSetGrokOAuthErrorIfCredentialsUnchanged_SkipsConc
 	s.Require().Zero(outboxCount, "a lost compare-and-set race must not enqueue a stale account change")
 }
 
-func (s *AccountRepoSuite) TestUpdateGrokOAuthCredentialsIfUnchanged_AppliesAndPublishesSchedulerState() {
+func (s *AccountRepoSuite) TestUpdateGrokOAuthCredentialsIfUnchanged_DefersSchedulerStateInBoundTransaction() {
+	txCtx := dbent.NewTxContext(s.ctx, s.tx)
 	account := mustCreateAccount(s.T(), s.client, &service.Account{
 		Name:        "grok-refresh-success-cas-applied",
 		Platform:    service.PlatformGrok,
@@ -1203,7 +1207,7 @@ func (s *AccountRepoSuite) TestUpdateGrokOAuthCredentialsIfUnchanged_AppliesAndP
 	s.Require().NoError(err)
 
 	applied, err := s.repo.UpdateGrokOAuthCredentialsIfUnchanged(
-		s.ctx,
+		txCtx,
 		account.ID,
 		observed.Credentials,
 		observed.ProxyID,
@@ -1219,9 +1223,7 @@ func (s *AccountRepoSuite) TestUpdateGrokOAuthCredentialsIfUnchanged_AppliesAndP
 	got, err := s.repo.GetByID(s.ctx, account.ID)
 	s.Require().NoError(err)
 	s.Require().Equal("rotated-refresh", got.GetGrokRefreshToken())
-	s.Require().Len(cacheRecorder.setAccounts, 1)
-	s.Require().Equal("rotated-refresh", cacheRecorder.setAccounts[0].GetGrokRefreshToken())
-	s.Require().NoError(cacheRecorder.setCtxErr)
+	s.Require().Empty(cacheRecorder.setAccounts, "transaction-bound mutation must defer cache publication until the durable outbox is committed")
 
 	var outboxCount int
 	err = scanSingleRow(
@@ -1236,6 +1238,7 @@ func (s *AccountRepoSuite) TestUpdateGrokOAuthCredentialsIfUnchanged_AppliesAndP
 }
 
 func (s *AccountRepoSuite) TestUpdateGrokOAuthCredentialsIfUnchanged_SkipsConcurrentReauthorization() {
+	txCtx := dbent.NewTxContext(s.ctx, s.tx)
 	account := mustCreateAccount(s.T(), s.client, &service.Account{
 		Name:        "grok-refresh-success-cas-reauthorized",
 		Platform:    service.PlatformGrok,
@@ -1261,7 +1264,7 @@ func (s *AccountRepoSuite) TestUpdateGrokOAuthCredentialsIfUnchanged_SkipsConcur
 	s.Require().NoError(err)
 
 	applied, err := s.repo.UpdateGrokOAuthCredentialsIfUnchanged(
-		s.ctx,
+		txCtx,
 		account.ID,
 		observed.Credentials,
 		observed.ProxyID,
@@ -1291,7 +1294,7 @@ func (s *AccountRepoSuite) TestUpdateGrokOAuthCredentialsIfUnchanged_SkipsConcur
 	s.Require().Zero(outboxCount)
 }
 
-func (s *AccountRepoSuite) TestGrokOAuthConditionalMutation_DetachesBoundedSnapshotSync() {
+func (s *AccountRepoSuite) TestGrokOAuthConditionalMutation_RejectsAmbiguousBoundExecutor() {
 	account := mustCreateAccount(s.T(), s.client, &service.Account{
 		Name:        "grok-conditional-detached-sync",
 		Platform:    service.PlatformGrok,
@@ -1316,11 +1319,10 @@ func (s *AccountRepoSuite) TestGrokOAuthConditionalMutation_DetachesBoundedSnaps
 		"missing refresh token",
 	)
 
-	s.Require().NoError(err)
-	s.Require().True(applied)
-	s.Require().ErrorIs(ctx.Err(), context.Canceled)
-	s.Require().Len(cacheRecorder.setAccounts, 1)
-	s.Require().NoError(cacheRecorder.setCtxErr, "immediate scheduler propagation must use a bounded detached context")
+	s.Require().Error(err)
+	s.Require().False(applied)
+	s.Require().NoError(ctx.Err(), "fail-closed transaction wiring rejection must occur before executing the wrapped mutation")
+	s.Require().Empty(cacheRecorder.setAccounts)
 }
 
 func TestGrokOAuthConditionalMutationRollsBackWhenOutboxInsertFails(t *testing.T) {

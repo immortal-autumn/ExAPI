@@ -54,14 +54,11 @@ func integrationAPIKeyRepository(t *testing.T, client *dbent.Client, exec sqlExe
 }
 
 func TestMain(m *testing.M) {
-	if os.Getenv("SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID") == "" && os.Getenv("SUB2API_DATA_ENCRYPTION_KEYS_JSON") == "" {
-		_ = os.Setenv("SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID", "integration-data-v1")
-		_ = os.Setenv("SUB2API_DATA_ENCRYPTION_KEYS_JSON", `{"integration-data-v1":"YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="}`)
-	}
-	if os.Getenv("SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID") == "" && os.Getenv("SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON") == "" {
-		_ = os.Setenv("SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID", "integration-digest-v1")
-		_ = os.Setenv("SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON", `{"integration-digest-v1":"QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI="}`)
-	}
+	// Integration tests must never inherit production-shaped cryptographic roots.
+	_ = os.Setenv("SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID", "integration-data-v1")
+	_ = os.Setenv("SUB2API_DATA_ENCRYPTION_KEYS_JSON", `{"integration-data-v1":"YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="}`)
+	_ = os.Setenv("SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID", "integration-digest-v1")
+	_ = os.Setenv("SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON", `{"integration-digest-v1":"QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI="}`)
 	ctx := context.Background()
 
 	if err := timezone.Init("UTC"); err != nil {
