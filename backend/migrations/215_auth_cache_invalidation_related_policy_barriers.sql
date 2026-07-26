@@ -110,20 +110,33 @@ DECLARE
     target_user_id BIGINT;
     target_group_id BIGINT;
 BEGIN
-    IF TG_OP = 'DELETE' THEN
-        target_user_id := OLD.user_id;
-        target_group_id := OLD.group_id;
-    ELSE
-        target_user_id := NEW.user_id;
-        target_group_id := NEW.group_id;
-    END IF;
-
     IF TG_OP = 'UPDATE'
        AND OLD.user_id IS NOT DISTINCT FROM NEW.user_id
        AND OLD.group_id IS NOT DISTINCT FROM NEW.group_id
        AND OLD.rpm_override IS NOT DISTINCT FROM NEW.rpm_override
        AND OLD.rate_multiplier IS NOT DISTINCT FROM NEW.rate_multiplier THEN
         RETURN NEW;
+    END IF;
+
+    IF TG_OP = 'UPDATE' THEN
+        INSERT INTO auth_cache_invalidation_outbox (cache_key)
+        SELECT repeat('0', 64)
+        WHERE EXISTS (
+            SELECT 1 FROM api_keys AS k
+            WHERE ((k.user_id = OLD.user_id AND k.group_id = OLD.group_id)
+                OR (k.user_id = NEW.user_id AND k.group_id = NEW.group_id))
+              AND k.deleted_at IS NULL
+              AND k.key <> ''
+        );
+        RETURN NEW;
+    END IF;
+
+    IF TG_OP = 'DELETE' THEN
+        target_user_id := OLD.user_id;
+        target_group_id := OLD.group_id;
+    ELSE
+        target_user_id := NEW.user_id;
+        target_group_id := NEW.group_id;
     END IF;
 
     INSERT INTO auth_cache_invalidation_outbox (cache_key)
@@ -147,3 +160,9 @@ DROP TRIGGER IF EXISTS trg_user_group_rate_auth_cache_invalidation
 CREATE TRIGGER trg_user_group_rate_auth_cache_invalidation
 AFTER INSERT OR UPDATE OR DELETE ON user_group_rate_multipliers
 FOR EACH ROW EXECUTE FUNCTION enqueue_user_group_rate_auth_cache_invalidation();
+
+-- Retire every pre-migration authorization snapshot. Older trigger coverage could
+-- have missed a policy mutation, so installation itself establishes the durable
+-- global boundary before any v15 cache entry can be trusted again.
+INSERT INTO auth_cache_invalidation_outbox (cache_key)
+VALUES (repeat('0', 64));

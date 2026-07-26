@@ -15,7 +15,7 @@ import (
 func TestListDueUpstreamBillingProbeAccountsHandlesInvalidCalendarDate(t *testing.T) {
 	ctx := context.Background()
 	tx := testEntTx(t)
-	repo := newAccountRepositoryWithSQL(tx.Client(), tx, nil)
+	repo := integrationAccountRepository(t, tx.Client(), tx, nil)
 	now := time.Date(2026, time.July, 14, 12, 0, 0, 0, time.UTC)
 	_, err := tx.ExecContext(ctx, `
 		UPDATE accounts

@@ -27,6 +27,9 @@ func TestAccountRepositoryCreateStoresEncryptedCredentialsAndReadsPlaintext(t *t
 	}
 
 	require.NoError(t, repo.Create(ctx, account))
+	t.Cleanup(func() {
+		_, _ = integrationDB.ExecContext(context.Background(), "DELETE FROM accounts WHERE id = $1", account.ID)
+	})
 
 	var encoded []byte
 	require.NoError(t, integrationDB.QueryRowContext(ctx,

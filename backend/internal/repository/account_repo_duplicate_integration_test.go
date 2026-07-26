@@ -15,7 +15,7 @@ import (
 func TestCreateWithAccountGroupsPersistsPausedCopyAtomically(t *testing.T) {
 	ctx := context.Background()
 	client := testEntClient(t)
-	repo := newAccountRepositoryWithSQL(client, integrationDB, nil)
+	repo := integrationAccountRepository(t, client, integrationDB, nil)
 	suffix := time.Now().UnixNano()
 
 	group, err := client.Group.Create().

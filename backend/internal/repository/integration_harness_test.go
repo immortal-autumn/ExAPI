@@ -18,6 +18,7 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	_ "github.com/Wei-Shaw/sub2api/ent/runtime"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
+	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -42,7 +43,25 @@ var (
 	redisNamespaceSeq uint64
 )
 
+func integrationAccountRepository(t *testing.T, client *dbent.Client, exec sqlExecutor, schedulerCache service.SchedulerCache) *accountRepository {
+	t.Helper()
+	return newAccountRepositoryWithSQLAndProtector(client, exec, schedulerCache, mustAccountCredentialProtectorForTest(t))
+}
+
+func integrationAPIKeyRepository(t *testing.T, client *dbent.Client, exec sqlExecutor) *apiKeyRepository {
+	t.Helper()
+	return newAPIKeyRepositoryWithSQLAndDigester(client, exec, mustGatewayAPIKeyDigesterForTest(t))
+}
+
 func TestMain(m *testing.M) {
+	if os.Getenv("SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID") == "" && os.Getenv("SUB2API_DATA_ENCRYPTION_KEYS_JSON") == "" {
+		_ = os.Setenv("SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID", "integration-data-v1")
+		_ = os.Setenv("SUB2API_DATA_ENCRYPTION_KEYS_JSON", `{"integration-data-v1":"YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="}`)
+	}
+	if os.Getenv("SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID") == "" && os.Getenv("SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON") == "" {
+		_ = os.Setenv("SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID", "integration-digest-v1")
+		_ = os.Setenv("SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON", `{"integration-digest-v1":"QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI="}`)
+	}
 	ctx := context.Background()
 
 	if err := timezone.Init("UTC"); err != nil {

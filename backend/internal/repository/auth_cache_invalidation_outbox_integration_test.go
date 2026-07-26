@@ -18,13 +18,20 @@ func TestAuthCacheInvalidationTriggers_CoverSecurityMutationsOnly(t *testing.T) 
 	group := mustCreateGroup(t, integrationEntClient, &service.Group{
 		Name: fmt.Sprintf("auth-outbox-group-%d", suffix), RateMultiplier: 1, IsExclusive: true,
 	})
+	emptyGroup := mustCreateGroup(t, integrationEntClient, &service.Group{
+		Name: fmt.Sprintf("auth-outbox-empty-group-%d", suffix), RateMultiplier: 1,
+	})
 	user := mustCreateUser(t, integrationEntClient, &service.User{
 		Email: fmt.Sprintf("auth-outbox-%d@example.com", suffix), Concurrency: 5,
 	})
 	groupID := group.ID
 	keyValue := fmt.Sprintf("sk-auth-outbox-%d", suffix)
-	apiKeyRepo, err := NewAPIKeyRepository(integrationEntClient, integrationDB)
-	require.NoError(t, err)
+	apiKeyRepo := newAPIKeyRepositoryWithSQLAndDigester(
+		integrationEntClient,
+		integrationDB,
+		mustGatewayAPIKeyDigesterForTest(t),
+	)
+	var err error
 	key := &service.APIKey{UserID: user.ID, GroupID: &groupID, Key: keyValue, Name: "outbox", Status: service.StatusActive}
 	require.NoError(t, apiKeyRepo.Create(ctx, key))
 
@@ -52,6 +59,8 @@ func TestAuthCacheInvalidationTriggers_CoverSecurityMutationsOnly(t *testing.T) 
 		_, err = integrationDB.ExecContext(ctx, "DELETE FROM users WHERE id = $1", user.ID)
 		require.NoError(t, err)
 		_, err = integrationDB.ExecContext(ctx, "DELETE FROM groups WHERE id = $1", group.ID)
+		require.NoError(t, err)
+		_, err = integrationDB.ExecContext(ctx, "DELETE FROM groups WHERE id = $1", emptyGroup.ID)
 		require.NoError(t, err)
 	})
 
@@ -119,6 +128,14 @@ func TestAuthCacheInvalidationTriggers_CoverSecurityMutationsOnly(t *testing.T) 
 		VALUES ($1, $2, 1, 10)`, user.ID, group.ID)
 	require.NoError(t, err)
 	require.Equal(t, 1, count(), "user-group RPM policy changes must create a durable barrier")
+	clear()
+
+	_, err = integrationDB.ExecContext(ctx, `
+		UPDATE user_group_rate_multipliers
+		SET group_id = $1
+		WHERE user_id = $2 AND group_id = $3`, emptyGroup.ID, user.ID, group.ID)
+	require.NoError(t, err)
+	require.Equal(t, 1, count(), "reassigning an override must invalidate the old cached association")
 	clear()
 
 	_, err = integrationDB.ExecContext(ctx,

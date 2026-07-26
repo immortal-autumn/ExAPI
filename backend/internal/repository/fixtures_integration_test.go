@@ -244,9 +244,17 @@ func mustCreateAccount(t *testing.T, client *dbent.Client, a *service.Account) *
 	created, err := create.Save(ctx)
 	require.NoError(t, err, "create account")
 
+	protector := mustAccountCredentialProtectorForTest(t)
+	sealedCredentials, err := protector.seal(created.ID, a.Credentials)
+	require.NoError(t, err, "seal account fixture credentials")
+	updated, err := client.Account.UpdateOneID(created.ID).SetCredentials(sealedCredentials).Save(ctx)
+	require.NoError(t, err, "persist sealed account credentials")
+	_, err = client.ExecContext(ctx, "DELETE FROM scheduler_outbox WHERE account_id = $1", created.ID)
+	require.NoError(t, err, "clear account fixture scheduler outbox")
+
 	a.ID = created.ID
-	a.CreatedAt = created.CreatedAt
-	a.UpdatedAt = created.UpdatedAt
+	a.CreatedAt = updated.CreatedAt
+	a.UpdatedAt = updated.UpdatedAt
 	return a
 }
 

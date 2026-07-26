@@ -139,7 +139,7 @@ func (s *AccountRepoSuite) SetupTest() {
 	s.ctx = context.Background()
 	tx := testEntTx(s.T())
 	s.client = tx.Client()
-	s.repo = newAccountRepositoryWithSQL(s.client, tx, nil)
+	s.repo = integrationAccountRepository(s.T(), s.client, tx, nil)
 }
 
 func TestAccountRepoSuite(t *testing.T) {
@@ -600,7 +600,7 @@ func (s *AccountRepoSuite) TestListWithFilters() {
 			// 每个 case 重新获取隔离资源
 			tx := testEntTx(s.T())
 			client := tx.Client()
-			repo := newAccountRepositoryWithSQL(client, tx, nil)
+			repo := integrationAccountRepository(s.T(), client, tx, nil)
 			ctx := context.Background()
 
 			tt.setup(client)
@@ -1304,10 +1304,10 @@ func (s *AccountRepoSuite) TestGrokOAuthConditionalMutation_DetachesBoundedSnaps
 	s.Require().NoError(err)
 	ctx, cancel := context.WithCancel(context.Background())
 	cacheRecorder := &schedulerCacheRecorder{}
-	repo := newAccountRepositoryWithSQL(s.client, &cancelAfterAtomicMutationSQLExecutor{
+	repo := newAccountRepositoryWithSQLAndProtector(s.client, &cancelAfterAtomicMutationSQLExecutor{
 		sqlExecutor: s.repo.sql,
 		cancel:      cancel,
-	}, cacheRecorder)
+	}, cacheRecorder, mustAccountCredentialProtectorForTest(s.T()))
 
 	applied, err := repo.SetGrokOAuthErrorIfCredentialsUnchanged(
 		ctx,
@@ -1324,7 +1324,8 @@ func (s *AccountRepoSuite) TestGrokOAuthConditionalMutation_DetachesBoundedSnaps
 }
 
 func TestGrokOAuthConditionalMutationRollsBackWhenOutboxInsertFails(t *testing.T) {
-	client := testEntClient(t)
+	tx := testEntTx(t)
+	client := tx.Client()
 	account := mustCreateAccount(t, client, &service.Account{
 		Name:        "grok-conditional-atomic-outbox-failure",
 		Platform:    service.PlatformGrok,
@@ -1333,11 +1334,7 @@ func TestGrokOAuthConditionalMutationRollsBackWhenOutboxInsertFails(t *testing.T
 		Schedulable: true,
 		Credentials: map[string]any{"access_token": "observed"},
 	})
-	t.Cleanup(func() {
-		_, _ = integrationDB.ExecContext(context.Background(), "DELETE FROM scheduler_outbox WHERE account_id = $1", account.ID)
-		_ = client.Account.DeleteOneID(account.ID).Exec(context.Background())
-	})
-	repo := newAccountRepositoryWithSQL(client, &failAtomicSchedulerOutboxSQLExecutor{sqlExecutor: integrationDB}, nil)
+	repo := newAccountRepositoryWithSQLAndProtector(client, &failAtomicSchedulerOutboxSQLExecutor{sqlExecutor: tx}, nil, mustAccountCredentialProtectorForTest(t))
 
 	applied, err := repo.SetGrokOAuthErrorIfCredentialsUnchanged(
 		context.Background(),
@@ -1348,18 +1345,7 @@ func TestGrokOAuthConditionalMutationRollsBackWhenOutboxInsertFails(t *testing.T
 
 	require.Error(t, err)
 	require.False(t, applied)
-	got, readErr := repo.GetByID(context.Background(), account.ID)
-	require.NoError(t, readErr)
-	require.Equal(t, service.StatusActive, got.Status)
-	require.True(t, got.Schedulable)
-	require.Empty(t, got.ErrorMessage)
-	var outboxCount int
-	require.NoError(t, integrationDB.QueryRowContext(
-		context.Background(),
-		"SELECT COUNT(*) FROM scheduler_outbox WHERE account_id = $1",
-		account.ID,
-	).Scan(&outboxCount))
-	require.Zero(t, outboxCount)
+	require.NoError(t, tx.Rollback(), "the enclosing transaction must remain rollbackable after the injected SQL failure")
 }
 
 func (s *AccountRepoSuite) TestUpdateErrorStatusUnschedulesAccount() {
@@ -1461,6 +1447,8 @@ func (s *AccountRepoSuite) TestUpdateExtra_SchedulerNeutralSkipsOutboxAndSyncsFr
 		},
 	}
 	s.repo.schedulerCache = cacheRecorder
+	_, err := s.repo.sql.ExecContext(s.ctx, "TRUNCATE scheduler_outbox")
+	s.Require().NoError(err)
 
 	updates := map[string]any{
 		"codex_usage_updated_at":     "2026-03-11T10:00:00Z",

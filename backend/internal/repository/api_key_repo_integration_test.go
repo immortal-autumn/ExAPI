@@ -28,7 +28,7 @@ func (s *APIKeyRepoSuite) SetupTest() {
 	s.ctx = context.Background()
 	tx := testEntTx(s.T())
 	s.client = tx.Client()
-	s.repo = newAPIKeyRepositoryWithSQL(s.client, tx)
+	s.repo = integrationAPIKeyRepository(s.T(), s.client, tx)
 }
 
 func TestAPIKeyRepoSuite(t *testing.T) {
@@ -109,7 +109,8 @@ func (s *APIKeyRepoSuite) TestCreate() {
 
 	got, err := s.repo.GetByID(s.ctx, key.ID)
 	s.Require().NoError(err, "GetByID")
-	s.Require().Equal("sk-create-test", got.Key)
+	s.Require().Empty(got.Key, "protected key plaintext must not be returned")
+	s.Require().NotNil(got.KeyDigest)
 }
 
 func (s *APIKeyRepoSuite) TestGetByID_NotFound() {
@@ -202,7 +203,8 @@ func (s *APIKeyRepoSuite) TestUpdate() {
 
 	got, err := s.repo.GetByID(s.ctx, key.ID)
 	s.Require().NoError(err, "GetByID after update")
-	s.Require().Equal("sk-update", got.Key, "Update should not change key")
+	s.Require().Empty(got.Key, "protected key plaintext must not be returned")
+	s.Require().NotNil(got.KeyDigest, "Update must preserve the verifier")
 	s.Require().Equal(user.ID, got.UserID, "Update should not change user_id")
 	s.Require().Equal("Renamed", got.Name)
 	s.Require().Equal(service.StatusDisabled, got.Status)
@@ -248,7 +250,7 @@ func (s *APIKeyRepoSuite) TestDelete() {
 	s.Require().Error(err, "expected error after delete")
 }
 
-func (s *APIKeyRepoSuite) TestCreate_AfterSoftDelete_AllowsSameKey() {
+func (s *APIKeyRepoSuite) TestCreate_AfterSoftDelete_RetainsVerifierUniqueness() {
 	user := s.mustCreateUser("recreate-after-soft-delete@test.com")
 	const reusedKey = "sk-reuse-after-soft-delete"
 
@@ -268,9 +270,8 @@ func (s *APIKeyRepoSuite) TestCreate_AfterSoftDelete_AllowsSameKey() {
 		Name:   "Second Key",
 		Status: service.StatusActive,
 	}
-	s.Require().NoError(s.repo.Create(s.ctx, second), "create second key with same key")
-	s.Require().NotZero(second.ID)
-	s.Require().NotEqual(first.ID, second.ID, "recreated key should be a new row")
+	err := s.repo.Create(s.ctx, second)
+	s.Require().Error(err, "a deleted verifier remains reserved and must not be reused")
 }
 
 // --- ListByUserID / CountByUserID ---
@@ -430,7 +431,8 @@ func (s *APIKeyRepoSuite) TestCRUD_Search_ClearGroupID() {
 
 	got2, err := s.repo.GetByID(s.ctx, key.ID)
 	s.Require().NoError(err, "GetByID")
-	s.Require().Equal("sk-test-1", got2.Key, "Update should not change key")
+	s.Require().Empty(got2.Key, "protected key plaintext must not be returned")
+	s.Require().NotNil(got2.KeyDigest, "Update must preserve the verifier")
 	s.Require().Equal(user.ID, got2.UserID, "Update should not change user_id")
 	s.Require().Equal("Renamed", got2.Name)
 	s.Require().Equal(service.StatusDisabled, got2.Status)
@@ -553,7 +555,7 @@ func (s *APIKeyRepoSuite) TestIncrementQuotaUsedAndGetState() {
 	s.Require().Equal(3.0, state.Quota)
 	s.Require().Equal(user.ID, state.UserID)
 	s.Require().Equal(service.StatusAPIKeyQuotaExhausted, state.Status)
-	s.Require().Equal(key.Key, state.Key)
+	s.Require().True(strings.HasPrefix(state.Key, "__hmac__"))
 
 	got, err := s.repo.GetByID(s.ctx, key.ID)
 	s.Require().NoError(err, "GetByID")
@@ -565,7 +567,7 @@ func (s *APIKeyRepoSuite) TestIncrementQuotaUsedAndGetState() {
 // 注意：此测试使用 testEntClient（非事务隔离），数据会真正写入数据库。
 func TestIncrementQuotaUsed_Concurrent(t *testing.T) {
 	client := testEntClient(t)
-	repo := newAPIKeyRepositoryWithSQL(client, integrationDB)
+	repo := integrationAPIKeyRepository(t, client, integrationDB)
 	ctx := context.Background()
 
 	// 创建测试用户和 API Key

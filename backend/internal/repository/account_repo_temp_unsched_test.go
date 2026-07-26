@@ -26,227 +26,34 @@ func TestAccountRepository_SetTempUnschedulable_NoRowsAffectedDoesNotWriteOutbox
 	require.NotContains(t, strings.Join(exec.execQueries, "\n"), "scheduler_outbox")
 }
 
-func TestAccountRepository_GrokCredentialConditionalMutationsAreEligibleAndAtomicallyPropagated(t *testing.T) {
-	proxyID := int64(77)
-	snapshot := service.GrokCredentialMutationSnapshot{
-		CredentialsJSON: `{"access_token":"access","refresh_token":"refresh","_token_version":123}`,
-		ProxyID:         &proxyID,
-	}
+func TestAccountRepository_CredentialConditionalMutationsFailClosedWithoutTransactionalProtection(t *testing.T) {
+	repo := newAccountRepositoryWithSQL(nil, &recordingSQLExecutor{result: rowsAffectedResult(1)}, nil)
+	expected := map[string]any{"access_token": "observed"}
 
-	t.Run("permanent", func(t *testing.T) {
-		exec := &recordingSQLExecutor{result: rowsAffectedResult(0)}
-		repo := newAccountRepositoryWithSQL(nil, exec, nil)
-
-		updated, err := repo.SetGrokCredentialErrorIfMatch(context.Background(), 42, snapshot, "revoked")
-
-		require.NoError(t, err)
-		require.False(t, updated)
-		require.Len(t, exec.execQueries, 1)
-		normalized := normalizeSQLWhitespace(exec.execQueries[0])
-		require.Contains(t, normalized, "WITH updated AS ( UPDATE accounts AS a")
-		require.Contains(t, normalized, "a.schedulable IS TRUE")
-		require.Contains(t, normalized, "a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until <= NOW()")
-		require.Contains(t, normalized, "a.rate_limit_reset_at IS NULL OR a.rate_limit_reset_at <= NOW()")
-		require.Contains(t, normalized, "a.overload_until IS NULL OR a.overload_until <= NOW()")
-		require.Contains(t, normalized, "a.credentials = $7::jsonb")
-		require.Contains(t, normalized, "a.proxy_id IS NOT DISTINCT FROM $8")
-		require.Contains(t, normalized, "NOT EXISTS ( SELECT 1 FROM proxies p")
-		require.Contains(t, normalized, "INSERT INTO scheduler_outbox")
-		require.Len(t, exec.execArgs[0], 10)
-		require.Equal(t, snapshot.CredentialsJSON, exec.execArgs[0][6])
-		require.Equal(t, &proxyID, exec.execArgs[0][7])
-		require.Equal(t, string(service.GrokCredentialReasonProxyInvalid), exec.execArgs[0][8])
-		require.Equal(t, service.SchedulerOutboxEventAccountChanged, exec.execArgs[0][9])
-	})
-
-	t.Run("transient", func(t *testing.T) {
-		exec := &recordingSQLExecutor{result: rowsAffectedResult(0)}
-		repo := newAccountRepositoryWithSQL(nil, exec, nil)
-
-		updated, err := repo.SetGrokCredentialTempUnschedulableIfMatch(
-			context.Background(), 42, snapshot, time.Now().Add(time.Minute), "temporary",
-		)
-
-		require.NoError(t, err)
-		require.False(t, updated)
-		require.Len(t, exec.execQueries, 1)
-		normalized := normalizeSQLWhitespace(exec.execQueries[0])
-		require.Contains(t, normalized, "WITH updated AS ( UPDATE accounts AS a")
-		require.Contains(t, normalized, "a.schedulable IS TRUE")
-		require.Contains(t, normalized, "a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until <= NOW()")
-		require.Contains(t, normalized, "a.rate_limit_reset_at IS NULL OR a.rate_limit_reset_at <= NOW()")
-		require.Contains(t, normalized, "a.overload_until IS NULL OR a.overload_until <= NOW()")
-		require.Contains(t, normalized, "a.credentials = $7::jsonb")
-		require.Contains(t, normalized, "a.proxy_id IS NOT DISTINCT FROM $8")
-		require.Contains(t, normalized, "INSERT INTO scheduler_outbox")
-		require.Len(t, exec.execArgs[0], 9)
-		require.Equal(t, snapshot.CredentialsJSON, exec.execArgs[0][6])
-		require.Equal(t, &proxyID, exec.execArgs[0][7])
-		require.Equal(t, service.SchedulerOutboxEventAccountChanged, exec.execArgs[0][8])
-	})
-}
-
-func TestAccountRepository_GrokCredentialCommitCarriesOutboxAcrossCallerCancellation(t *testing.T) {
-	snapshot := service.GrokCredentialMutationSnapshot{CredentialsJSON: `{"access_token":"access","refresh_token":"refresh"}`}
-	tests := []struct {
-		name   string
-		mutate func(context.Context, *accountRepository) (bool, error)
-	}{
-		{
-			name: "permanent",
-			mutate: func(ctx context.Context, repo *accountRepository) (bool, error) {
-				return repo.SetGrokCredentialErrorIfMatch(ctx, 42, snapshot, string(service.GrokCredentialReasonRevoked))
-			},
-		},
-		{
-			name: "transient",
-			mutate: func(ctx context.Context, repo *accountRepository) (bool, error) {
-				return repo.SetGrokCredentialTempUnschedulableIfMatch(ctx, 42, snapshot, time.Now().Add(time.Minute), string(service.GrokCredentialReasonRefreshTransient))
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			exec := &recordingSQLExecutor{result: rowsAffectedResult(1), afterExec: cancel}
-			repo := newAccountRepositoryWithSQL(nil, exec, nil)
-
-			updated, err := tt.mutate(ctx, repo)
-
-			require.NoError(t, err)
-			require.True(t, updated)
-			require.ErrorIs(t, ctx.Err(), context.Canceled)
-			require.Len(t, exec.execQueries, 1, "state update and scheduler outbox must share one atomic SQL statement")
-			require.Contains(t, normalizeSQLWhitespace(exec.execQueries[0]), "INSERT INTO scheduler_outbox")
-		})
-	}
-}
-
-func TestAccountRepository_SetGrokOAuthErrorIfCredentialsUnchanged_RequiresActiveExactCredentialMatch(t *testing.T) {
-	exec := &recordingSQLExecutor{result: rowsAffectedResult(0)}
-	repo := newAccountRepositoryWithSQL(nil, exec, nil)
-
-	applied, err := repo.SetGrokOAuthErrorIfCredentialsUnchanged(
-		context.Background(),
-		42,
-		map[string]any{"access_token": "observed", "_token_version": int64(7)},
-		"missing refresh token",
-	)
-
-	require.NoError(t, err)
+	applied, err := repo.SetGrokOAuthErrorIfCredentialsUnchanged(context.Background(), 42, expected, "missing refresh token")
 	require.False(t, applied)
-	require.Len(t, exec.execQueries, 1, "the account mutation and conditional outbox insert must be one statement")
-	normalized := normalizeSQLWhitespace(exec.execQueries[0])
-	require.Contains(t, normalized, "WITH updated AS")
-	require.Contains(t, normalized, "INSERT INTO scheduler_outbox")
-	require.Contains(t, normalized, "FROM updated")
-	require.Contains(t, normalized, "platform = $4")
-	require.Contains(t, normalized, "type = $5")
-	require.Contains(t, normalized, "status = $6")
-	require.Contains(t, normalized, "credentials = $7::jsonb")
-	require.Contains(t, normalized, "NULLIF(BTRIM(a.credentials->>'refresh_token'), '') IS NULL")
-	require.Len(t, exec.execArgs, 1)
-	require.Equal(t, service.StatusActive, exec.execArgs[0][5])
-	require.Contains(t, exec.execArgs[0][6], `"_token_version":7`)
+	require.ErrorContains(t, err, "transaction dependencies")
 }
 
-func TestAccountRepository_SetGrokOAuthErrorIfCredentialsUnchanged_AppliedWritesOutbox(t *testing.T) {
-	exec := &recordingSQLExecutor{result: rowsAffectedResult(1)}
-	repo := newAccountRepositoryWithSQL(nil, exec, nil)
-
-	applied, err := repo.SetGrokOAuthErrorIfCredentialsUnchanged(
-		context.Background(),
-		42,
-		map[string]any{"access_token": "observed"},
-		"missing refresh token",
+func TestNormalizedCredentialMapsEqual_UsesCanonicalJSONSemantics(t *testing.T) {
+	equal, err := normalizedCredentialMapsEqual(
+		map[string]any{"nested": map[string]any{"count": float64(7)}, "token": "secret"},
+		map[string]any{"token": "secret", "nested": map[string]any{"count": int64(7)}},
 	)
-
 	require.NoError(t, err)
-	require.True(t, applied)
-	require.Len(t, exec.execQueries, 1)
-	normalized := normalizeSQLWhitespace(exec.execQueries[0])
-	require.Contains(t, normalized, "WITH updated AS")
-	require.Contains(t, normalized, "INSERT INTO scheduler_outbox")
-	require.Contains(t, normalized, "SELECT $8, updated.id, NULL, NULL FROM updated")
+	require.True(t, equal)
+
+	equal, err = normalizedCredentialMapsEqual(
+		map[string]any{"token": "old"},
+		map[string]any{"token": "new"},
+	)
+	require.NoError(t, err)
+	require.False(t, equal)
 }
 
-func TestAccountRepository_SetGrokOAuthRefreshErrorIfCredentialsUnchanged_UsesAttemptCredentialsAndProxy(t *testing.T) {
-	exec := &recordingSQLExecutor{result: rowsAffectedResult(0)}
-	repo := newAccountRepositoryWithSQL(nil, exec, nil)
-	proxyID := int64(17)
-
-	applied, err := repo.SetGrokOAuthRefreshErrorIfCredentialsUnchanged(
-		context.Background(),
-		42,
-		map[string]any{"refresh_token": "attempted", "_token_version": int64(7)},
-		&proxyID,
-		"revoked",
-	)
-
-	require.NoError(t, err)
-	require.False(t, applied)
-	require.Len(t, exec.execQueries, 1)
-	normalized := normalizeSQLWhitespace(exec.execQueries[0])
-	require.Contains(t, normalized, "credentials = $7::jsonb")
-	require.Contains(t, normalized, "proxy_id IS NOT DISTINCT FROM $8")
-	require.NotContains(t, normalized, "credentials->>'refresh_token'",
-		"background invalid_grant CAS must accept the attempted refresh token; only reconciliation requires it missing")
-	require.Equal(t, &proxyID, exec.execArgs[0][7])
-	require.Contains(t, normalized, "INSERT INTO scheduler_outbox")
-	require.Len(t, exec.execArgs[0], 9)
-}
-
-func TestAccountRepository_SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged_UsesAttemptCredentialsAndProxy(t *testing.T) {
-	exec := &recordingSQLExecutor{result: rowsAffectedResult(0)}
-	repo := newAccountRepositoryWithSQL(nil, exec, nil)
-	proxyID := int64(19)
-
-	applied, err := repo.SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(
-		context.Background(),
-		42,
-		map[string]any{"refresh_token": "attempted", "_token_version": int64(8)},
-		&proxyID,
-		time.Now().Add(10*time.Minute),
-		"retry exhausted",
-	)
-
-	require.NoError(t, err)
-	require.False(t, applied)
-	require.Len(t, exec.execQueries, 1)
-	normalized := normalizeSQLWhitespace(exec.execQueries[0])
-	require.Contains(t, normalized, "credentials = $7::jsonb")
-	require.Contains(t, normalized, "proxy_id IS NOT DISTINCT FROM $8")
-	require.Contains(t, normalized, "a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until < $1")
-	require.Len(t, exec.execArgs[0], 9)
-	require.Equal(t, &proxyID, exec.execArgs[0][7])
-	require.Contains(t, normalized, "INSERT INTO scheduler_outbox")
-}
-
-func TestAccountRepository_UpdateGrokOAuthCredentialsIfUnchanged_UsesExactAttemptStateAndAtomicOutbox(t *testing.T) {
-	exec := &recordingSQLExecutor{result: rowsAffectedResult(1)}
-	repo := newAccountRepositoryWithSQL(nil, exec, nil)
-	proxyID := int64(29)
-
-	applied, err := repo.UpdateGrokOAuthCredentialsIfUnchanged(
-		context.Background(),
-		42,
-		map[string]any{"refresh_token": "attempted", "_token_version": int64(9)},
-		&proxyID,
-		map[string]any{"refresh_token": "rotated", "_token_version": int64(10)},
-	)
-
-	require.NoError(t, err)
-	require.True(t, applied)
-	require.Len(t, exec.execQueries, 1)
-	normalized := normalizeSQLWhitespace(exec.execQueries[0])
-	require.Contains(t, normalized, "WITH updated AS")
-	require.Contains(t, normalized, "credentials = $1::jsonb")
-	require.Contains(t, normalized, "credentials = $5::jsonb")
-	require.Contains(t, normalized, "proxy_id IS NOT DISTINCT FROM $6")
-	require.Contains(t, normalized, "INSERT INTO scheduler_outbox")
-	require.Len(t, exec.execArgs[0], 7)
-	require.Equal(t, &proxyID, exec.execArgs[0][5])
+func TestCredentialSnapshotJSONRejectsMalformedInput(t *testing.T) {
+	_, err := credentialSnapshotJSON(`{"access_token":`)
+	require.Error(t, err)
 }
 
 func TestAccountRepository_ListOAuthRefreshCandidatePage_SQLFilter(t *testing.T) {
@@ -282,8 +89,9 @@ func TestAccountRepository_ListOAuthRefreshCandidatePage_SQLFilter(t *testing.T)
 	require.Contains(t, normalized, "platform = ANY($1)")
 	require.NotContains(t, normalized, "platform IN ('anthropic'",
 		"candidate platforms must come from the refresher registry instead of a second hard-coded list")
-	require.Contains(t, normalized, "credentials ? 'refresh_token'")
-	require.Contains(t, normalized, "btrim(credentials->>'refresh_token') <> ''")
+	require.NotContains(t, normalized, "credentials ? 'refresh_token'",
+		"encrypted credentials must be filtered only after repository decryption")
+	require.NotContains(t, normalized, "credentials->>'refresh_token'")
 	require.Contains(t, normalized, "temp_unschedulable_until > NOW()")
 	require.Contains(t, normalized, "temp_unschedulable_reason LIKE 'token refresh retry exhausted:%'")
 	require.Contains(t, normalized, "IS NOT TRUE",

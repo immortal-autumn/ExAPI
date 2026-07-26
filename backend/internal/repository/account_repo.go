@@ -1122,11 +1122,8 @@ func (r *accountRepository) ListOAuthRefreshCandidatePage(ctx context.Context, o
 		query += `
 			AND type = 'oauth'`
 	}
-	if options.RequireRefreshToken {
-		query += `
-			AND credentials ? 'refresh_token'
-			AND btrim(credentials->>'refresh_token') <> ''`
-	}
+	// Credential fields are encrypted at rest and cannot be filtered in SQL.
+	// Apply RequireRefreshToken after decrypting the selected page below.
 	if options.ExcludeRetryCooldown {
 		query += `
 			AND (
@@ -1172,6 +1169,10 @@ func (r *accountRepository) ListOAuthRefreshCandidatePage(ctx context.Context, o
 	out := make([]service.Account, 0, len(accounts))
 	for _, id := range ids {
 		if account := accountsByID[id]; account != nil {
+			refreshToken, _ := account.Credentials["refresh_token"].(string)
+			if options.RequireRefreshToken && strings.TrimSpace(refreshToken) == "" {
+				continue
+			}
 			out = append(out, *account)
 		}
 	}
@@ -1277,46 +1278,49 @@ func (r *accountRepository) SetGrokCredentialErrorIfMatch(
 	snapshot service.GrokCredentialMutationSnapshot,
 	errorMsg string,
 ) (bool, error) {
-	result, err := r.sql.ExecContext(ctx, `
-		WITH updated AS (
-		UPDATE accounts AS a
-		SET status = $1,
-			error_message = $2,
-			schedulable = false,
-			updated_at = NOW()
-		WHERE a.id = $3
-			AND a.deleted_at IS NULL
-			AND a.status = $4
-			AND a.platform = $5
-			AND a.type = $6
-			AND a.schedulable IS TRUE
-			AND (a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until <= NOW())
-			AND (a.rate_limit_reset_at IS NULL OR a.rate_limit_reset_at <= NOW())
-			AND (a.overload_until IS NULL OR a.overload_until <= NOW())
-			AND (a.auto_pause_on_expired IS NOT TRUE OR a.expires_at IS NULL OR a.expires_at > NOW())
-			AND a.credentials = $7::jsonb
-			AND a.proxy_id IS NOT DISTINCT FROM $8
-			AND ($2 <> $9 OR (
-				a.proxy_id IS NOT NULL AND NOT EXISTS (
-					SELECT 1 FROM proxies p WHERE p.id = a.proxy_id AND p.deleted_at IS NULL
-				)
-			))
-		RETURNING a.id
-		)
-		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
-		SELECT $10, updated.id, NULL, NULL FROM updated
-	`, service.StatusError, errorMsg, id, service.StatusActive, service.PlatformGrok, service.AccountTypeOAuth,
-		snapshot.CredentialsJSON, snapshot.ProxyID, string(service.GrokCredentialReasonProxyInvalid),
-		service.SchedulerOutboxEventAccountChanged)
+	expectedCredentials, err := credentialSnapshotJSON(snapshot.CredentialsJSON)
 	if err != nil {
 		return false, err
 	}
-	affected, err := result.RowsAffected()
-	if err != nil || affected == 0 {
-		return false, err
+	applied, err := r.withLockedCredentialMatch(ctx, id, expectedCredentials, func(exec sqlExecutor) (bool, error) {
+		result, err := exec.ExecContext(ctx, `
+			WITH updated AS (
+			UPDATE accounts AS a
+			SET status = $1,
+				error_message = $2,
+				schedulable = false,
+				updated_at = NOW()
+			WHERE a.id = $3
+				AND a.deleted_at IS NULL
+				AND a.status = $4
+				AND a.platform = $5
+				AND a.type = $6
+				AND a.schedulable IS TRUE
+				AND (a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until <= NOW())
+				AND (a.rate_limit_reset_at IS NULL OR a.rate_limit_reset_at <= NOW())
+				AND (a.overload_until IS NULL OR a.overload_until <= NOW())
+				AND (a.auto_pause_on_expired IS NOT TRUE OR a.expires_at IS NULL OR a.expires_at > NOW())
+				AND a.proxy_id IS NOT DISTINCT FROM $7
+				AND ($2 <> $8 OR (
+					a.proxy_id IS NOT NULL AND NOT EXISTS (
+						SELECT 1 FROM proxies p WHERE p.id = a.proxy_id AND p.deleted_at IS NULL
+					)
+				))
+			RETURNING a.id
+			)
+			INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
+			SELECT $9, updated.id, NULL, NULL FROM updated
+		`, service.StatusError, errorMsg, id, service.StatusActive, service.PlatformGrok, service.AccountTypeOAuth,
+			snapshot.ProxyID, string(service.GrokCredentialReasonProxyInvalid), service.SchedulerOutboxEventAccountChanged)
+		if err != nil {
+			return false, err
+		}
+		return rowsAffected(result)
+	})
+	if applied {
+		r.syncSchedulerAccountSnapshotDetached(ctx, id)
 	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, id)
-	return true, nil
+	return applied, err
 }
 
 // SetGrokOAuthErrorIfCredentialsUnchanged atomically quarantines a structurally
@@ -1330,53 +1334,37 @@ func (r *accountRepository) SetGrokOAuthErrorIfCredentialsUnchanged(
 	expectedCredentials map[string]any,
 	errorMsg string,
 ) (bool, error) {
-	if r == nil || r.sql == nil {
-		return false, errors.New("account repository SQL executor is not configured")
-	}
-	expectedJSON, err := json.Marshal(normalizeJSONMap(expectedCredentials))
-	if err != nil {
-		return false, err
-	}
-	result, err := r.sql.ExecContext(ctx, `
-		WITH updated AS (
-		UPDATE accounts AS a
-		SET status = $1,
-			error_message = $2,
-			schedulable = FALSE,
-			updated_at = NOW()
-		WHERE a.id = $3
-			AND a.deleted_at IS NULL
-			AND a.platform = $4
-			AND a.type = $5
-			AND a.status = $6
-			AND a.credentials = $7::jsonb
-			AND NULLIF(BTRIM(a.credentials->>'refresh_token'), '') IS NULL
-		RETURNING a.id
-		)
-		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
-		SELECT $8, updated.id, NULL, NULL FROM updated
-	`,
-		service.StatusError,
-		errorMsg,
-		id,
-		service.PlatformGrok,
-		service.AccountTypeOAuth,
-		service.StatusActive,
-		string(expectedJSON),
-		service.SchedulerOutboxEventAccountChanged,
-	)
-	if err != nil {
-		return false, err
-	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return false, err
-	}
-	if rowsAffected == 0 {
+	if refreshToken, _ := expectedCredentials["refresh_token"].(string); strings.TrimSpace(refreshToken) != "" {
 		return false, nil
 	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, id)
-	return true, nil
+	applied, err := r.withLockedCredentialMatch(ctx, id, expectedCredentials, func(exec sqlExecutor) (bool, error) {
+		result, err := exec.ExecContext(ctx, `
+			WITH updated AS (
+			UPDATE accounts AS a
+			SET status = $1,
+				error_message = $2,
+				schedulable = FALSE,
+				updated_at = NOW()
+			WHERE a.id = $3
+				AND a.deleted_at IS NULL
+				AND a.platform = $4
+				AND a.type = $5
+				AND a.status = $6
+			RETURNING a.id
+			)
+			INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
+			SELECT $7, updated.id, NULL, NULL FROM updated
+		`, service.StatusError, errorMsg, id, service.PlatformGrok, service.AccountTypeOAuth,
+			service.StatusActive, service.SchedulerOutboxEventAccountChanged)
+		if err != nil {
+			return false, err
+		}
+		return rowsAffected(result)
+	})
+	if applied {
+		r.syncSchedulerAccountSnapshotDetached(ctx, id)
+	}
+	return applied, err
 }
 
 // UpdateGrokOAuthCredentialsIfUnchanged persists provider-issued replacement
@@ -1391,53 +1379,40 @@ func (r *accountRepository) UpdateGrokOAuthCredentialsIfUnchanged(
 	expectedProxyID *int64,
 	credentials map[string]any,
 ) (bool, error) {
-	if r == nil || r.sql == nil {
-		return false, errors.New("account repository SQL executor is not configured")
+	applied, err := r.withLockedCredentialMatch(ctx, id, expectedCredentials, func(exec sqlExecutor) (bool, error) {
+		sealedCredentials, err := r.protector.seal(id, credentials)
+		if err != nil {
+			return false, err
+		}
+		credentialsJSON, err := json.Marshal(sealedCredentials)
+		if err != nil {
+			return false, err
+		}
+		result, err := exec.ExecContext(ctx, `
+			WITH updated AS (
+			UPDATE accounts AS a
+			SET credentials = $1::jsonb,
+				updated_at = NOW()
+			WHERE a.id = $2
+				AND a.deleted_at IS NULL
+				AND a.platform = $3
+				AND a.type = $4
+				AND a.proxy_id IS NOT DISTINCT FROM $5
+			RETURNING a.id
+			)
+			INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
+			SELECT $6, updated.id, NULL, NULL FROM updated
+		`, string(credentialsJSON), id, service.PlatformGrok, service.AccountTypeOAuth,
+			expectedProxyID, service.SchedulerOutboxEventAccountChanged)
+		if err != nil {
+			return false, err
+		}
+		return rowsAffected(result)
+	})
+	if applied {
+		r.syncSchedulerAccountSnapshotDetached(ctx, id)
 	}
-	expectedJSON, err := json.Marshal(normalizeJSONMap(expectedCredentials))
-	if err != nil {
-		return false, err
-	}
-	credentialsJSON, err := json.Marshal(normalizeJSONMap(credentials))
-	if err != nil {
-		return false, err
-	}
-	result, err := r.sql.ExecContext(ctx, `
-		WITH updated AS (
-		UPDATE accounts AS a
-		SET credentials = $1::jsonb,
-			updated_at = NOW()
-		WHERE a.id = $2
-			AND a.deleted_at IS NULL
-			AND a.platform = $3
-			AND a.type = $4
-			AND a.credentials = $5::jsonb
-			AND a.proxy_id IS NOT DISTINCT FROM $6
-		RETURNING a.id
-		)
-		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
-		SELECT $7, updated.id, NULL, NULL FROM updated
-	`,
-		string(credentialsJSON),
-		id,
-		service.PlatformGrok,
-		service.AccountTypeOAuth,
-		string(expectedJSON),
-		expectedProxyID,
-		service.SchedulerOutboxEventAccountChanged,
-	)
-	if err != nil {
-		return false, err
-	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return false, err
-	}
-	if rowsAffected == 0 {
-		return false, nil
-	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, id)
-	return true, nil
+	return applied, err
 }
 
 // SetGrokOAuthRefreshErrorIfCredentialsUnchanged is the background-refresh
@@ -1451,54 +1426,35 @@ func (r *accountRepository) SetGrokOAuthRefreshErrorIfCredentialsUnchanged(
 	expectedProxyID *int64,
 	errorMsg string,
 ) (bool, error) {
-	if r == nil || r.sql == nil {
-		return false, errors.New("account repository SQL executor is not configured")
+	applied, err := r.withLockedCredentialMatch(ctx, id, expectedCredentials, func(exec sqlExecutor) (bool, error) {
+		result, err := exec.ExecContext(ctx, `
+			WITH updated AS (
+			UPDATE accounts AS a
+			SET status = $1,
+				error_message = $2,
+				schedulable = FALSE,
+				updated_at = NOW()
+			WHERE a.id = $3
+				AND a.deleted_at IS NULL
+				AND a.platform = $4
+				AND a.type = $5
+				AND a.status = $6
+				AND a.proxy_id IS NOT DISTINCT FROM $7
+			RETURNING a.id
+			)
+			INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
+			SELECT $8, updated.id, NULL, NULL FROM updated
+		`, service.StatusError, errorMsg, id, service.PlatformGrok, service.AccountTypeOAuth,
+			service.StatusActive, expectedProxyID, service.SchedulerOutboxEventAccountChanged)
+		if err != nil {
+			return false, err
+		}
+		return rowsAffected(result)
+	})
+	if applied {
+		r.syncSchedulerAccountSnapshotDetached(ctx, id)
 	}
-	expectedJSON, err := json.Marshal(normalizeJSONMap(expectedCredentials))
-	if err != nil {
-		return false, err
-	}
-	result, err := r.sql.ExecContext(ctx, `
-		WITH updated AS (
-		UPDATE accounts AS a
-		SET status = $1,
-			error_message = $2,
-			schedulable = FALSE,
-			updated_at = NOW()
-		WHERE a.id = $3
-			AND a.deleted_at IS NULL
-			AND a.platform = $4
-			AND a.type = $5
-			AND a.status = $6
-			AND a.credentials = $7::jsonb
-			AND a.proxy_id IS NOT DISTINCT FROM $8
-		RETURNING a.id
-		)
-		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
-		SELECT $9, updated.id, NULL, NULL FROM updated
-	`,
-		service.StatusError,
-		errorMsg,
-		id,
-		service.PlatformGrok,
-		service.AccountTypeOAuth,
-		service.StatusActive,
-		string(expectedJSON),
-		expectedProxyID,
-		service.SchedulerOutboxEventAccountChanged,
-	)
-	if err != nil {
-		return false, err
-	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return false, err
-	}
-	if rowsAffected == 0 {
-		return false, nil
-	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, id)
-	return true, nil
+	return applied, err
 }
 
 // SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged applies a bounded
@@ -1512,54 +1468,35 @@ func (r *accountRepository) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnc
 	until time.Time,
 	reason string,
 ) (bool, error) {
-	if r == nil || r.sql == nil {
-		return false, errors.New("account repository SQL executor is not configured")
+	applied, err := r.withLockedCredentialMatch(ctx, id, expectedCredentials, func(exec sqlExecutor) (bool, error) {
+		result, err := exec.ExecContext(ctx, `
+			WITH updated AS (
+			UPDATE accounts AS a
+			SET temp_unschedulable_until = $1,
+				temp_unschedulable_reason = $2,
+				updated_at = NOW()
+			WHERE a.id = $3
+				AND a.deleted_at IS NULL
+				AND a.platform = $4
+				AND a.type = $5
+				AND a.status = $6
+				AND a.proxy_id IS NOT DISTINCT FROM $7
+				AND (a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until < $1)
+			RETURNING a.id
+			)
+			INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
+			SELECT $8, updated.id, NULL, NULL FROM updated
+		`, until, reason, id, service.PlatformGrok, service.AccountTypeOAuth,
+			service.StatusActive, expectedProxyID, service.SchedulerOutboxEventAccountChanged)
+		if err != nil {
+			return false, err
+		}
+		return rowsAffected(result)
+	})
+	if applied {
+		r.syncSchedulerAccountSnapshotDetached(ctx, id)
 	}
-	expectedJSON, err := json.Marshal(normalizeJSONMap(expectedCredentials))
-	if err != nil {
-		return false, err
-	}
-	result, err := r.sql.ExecContext(ctx, `
-		WITH updated AS (
-		UPDATE accounts AS a
-		SET temp_unschedulable_until = $1,
-			temp_unschedulable_reason = $2,
-			updated_at = NOW()
-		WHERE a.id = $3
-			AND a.deleted_at IS NULL
-			AND a.platform = $4
-			AND a.type = $5
-			AND a.status = $6
-			AND a.credentials = $7::jsonb
-			AND a.proxy_id IS NOT DISTINCT FROM $8
-			AND (a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until < $1)
-		RETURNING a.id
-		)
-		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
-		SELECT $9, updated.id, NULL, NULL FROM updated
-	`,
-		until,
-		reason,
-		id,
-		service.PlatformGrok,
-		service.AccountTypeOAuth,
-		service.StatusActive,
-		string(expectedJSON),
-		expectedProxyID,
-		service.SchedulerOutboxEventAccountChanged,
-	)
-	if err != nil {
-		return false, err
-	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return false, err
-	}
-	if rowsAffected == 0 {
-		return false, nil
-	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, id)
-	return true, nil
+	return applied, err
 }
 
 // syncSchedulerAccountSnapshot 在账号状态变更时主动同步快照到调度器缓存。
@@ -2232,42 +2169,46 @@ func (r *accountRepository) SetGrokCredentialTempUnschedulableIfMatch(
 	until time.Time,
 	reason string,
 ) (bool, error) {
-	result, err := r.sql.ExecContext(ctx, `
-		WITH updated AS (
-		UPDATE accounts AS a
-		SET temp_unschedulable_until = CASE
-				WHEN a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until < $1 THEN $1
-				ELSE a.temp_unschedulable_until
-			END,
-			temp_unschedulable_reason = $2,
-			updated_at = NOW()
-		WHERE a.id = $3
-			AND a.deleted_at IS NULL
-			AND a.status = $4
-			AND a.platform = $5
-			AND a.type = $6
-			AND a.schedulable IS TRUE
-			AND (a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until <= NOW())
-			AND (a.rate_limit_reset_at IS NULL OR a.rate_limit_reset_at <= NOW())
-			AND (a.overload_until IS NULL OR a.overload_until <= NOW())
-			AND (a.auto_pause_on_expired IS NOT TRUE OR a.expires_at IS NULL OR a.expires_at > NOW())
-			AND a.credentials = $7::jsonb
-			AND a.proxy_id IS NOT DISTINCT FROM $8
-		RETURNING a.id
-		)
-		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
-		SELECT $9, updated.id, NULL, NULL FROM updated
-	`, until, reason, id, service.StatusActive, service.PlatformGrok, service.AccountTypeOAuth,
-		snapshot.CredentialsJSON, snapshot.ProxyID, service.SchedulerOutboxEventAccountChanged)
+	expectedCredentials, err := credentialSnapshotJSON(snapshot.CredentialsJSON)
 	if err != nil {
 		return false, err
 	}
-	affected, err := result.RowsAffected()
-	if err != nil || affected == 0 {
-		return false, err
+	applied, err := r.withLockedCredentialMatch(ctx, id, expectedCredentials, func(exec sqlExecutor) (bool, error) {
+		result, err := exec.ExecContext(ctx, `
+			WITH updated AS (
+			UPDATE accounts AS a
+			SET temp_unschedulable_until = CASE
+					WHEN a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until < $1 THEN $1
+					ELSE a.temp_unschedulable_until
+				END,
+				temp_unschedulable_reason = $2,
+				updated_at = NOW()
+			WHERE a.id = $3
+				AND a.deleted_at IS NULL
+				AND a.status = $4
+				AND a.platform = $5
+				AND a.type = $6
+				AND a.schedulable IS TRUE
+				AND (a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until <= NOW())
+				AND (a.rate_limit_reset_at IS NULL OR a.rate_limit_reset_at <= NOW())
+				AND (a.overload_until IS NULL OR a.overload_until <= NOW())
+				AND (a.auto_pause_on_expired IS NOT TRUE OR a.expires_at IS NULL OR a.expires_at > NOW())
+				AND a.proxy_id IS NOT DISTINCT FROM $7
+			RETURNING a.id
+			)
+			INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
+			SELECT $8, updated.id, NULL, NULL FROM updated
+		`, until, reason, id, service.StatusActive, service.PlatformGrok, service.AccountTypeOAuth,
+			snapshot.ProxyID, service.SchedulerOutboxEventAccountChanged)
+		if err != nil {
+			return false, err
+		}
+		return rowsAffected(result)
+	})
+	if applied {
+		r.syncSchedulerAccountSnapshotDetached(ctx, id)
 	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, id)
-	return true, nil
+	return applied, err
 }
 
 func (r *accountRepository) ClearTempUnschedulable(ctx context.Context, id int64) error {
@@ -2533,6 +2474,9 @@ func (r *accountRepository) UpdateUpstreamBillingProbeSnapshot(
 	if account == nil || snapshot == nil {
 		return service.ErrAccountNilInput
 	}
+	if r == nil || r.protector == nil {
+		return errors.New("data-encryption keyring is required for account credential comparison")
+	}
 	if dbent.TxFromContext(ctx) == nil {
 		tx, err := r.client.Tx(ctx)
 		if errors.Is(err, dbent.ErrTxStarted) {
@@ -2566,10 +2510,7 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 	if err != nil {
 		return err
 	}
-	credentials, err := json.Marshal(account.Credentials)
-	if err != nil {
-		return err
-	}
+	client := clientFromContext(ctx, r.client)
 	var expectedSnapshot any
 	if account.Extra != nil {
 		expectedSnapshot = account.Extra[service.UpstreamBillingProbeExtraKey]
@@ -2586,12 +2527,29 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 	if err != nil {
 		return err
 	}
-	client := clientFromContext(ctx, r.client)
 	proxyMatches, err := lockAndMatchProbeProxyIdentity(ctx, client, account)
 	if err != nil {
 		return err
 	}
 	if !proxyMatches {
+		return service.ErrUpstreamBillingProbeIdentityChanged
+	}
+	storedCredentials, found, err := loadLockedAccountCredentials(ctx, client, account.ID)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return service.ErrUpstreamBillingProbeIdentityChanged
+	}
+	currentCredentials, _, err := r.protector.openLegacy(account.ID, storedCredentials)
+	if err != nil {
+		return err
+	}
+	credentialsMatch, err := normalizedCredentialMapsEqual(currentCredentials, account.Credentials)
+	if err != nil {
+		return err
+	}
+	if !credentialsMatch {
 		return service.ErrUpstreamBillingProbeIdentityChanged
 	}
 	var proxyID any
@@ -2604,12 +2562,11 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 		WHERE id = $2
 			AND platform = $3
 			AND type = $4
-			AND credentials = $5::jsonb
-			AND proxy_id IS NOT DISTINCT FROM $6
-			AND COALESCE(extra -> 'upstream_billing_probe', 'null'::jsonb) = $7::jsonb
-			AND COALESCE(extra -> 'upstream_billing_probe_enabled', 'null'::jsonb) = $8::jsonb
+			AND proxy_id IS NOT DISTINCT FROM $5
+			AND COALESCE(extra -> 'upstream_billing_probe', 'null'::jsonb) = $6::jsonb
+			AND COALESCE(extra -> 'upstream_billing_probe_enabled', 'null'::jsonb) = $7::jsonb
 			AND deleted_at IS NULL
-	`, string(payload), account.ID, account.Platform, account.Type, string(credentials), proxyID, string(expectedSnapshotJSON), string(expectedEnabledJSON))
+	`, string(payload), account.ID, account.Platform, account.Type, proxyID, string(expectedSnapshotJSON), string(expectedEnabledJSON))
 	if err != nil {
 		return err
 	}

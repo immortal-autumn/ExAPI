@@ -126,6 +126,8 @@ func TestAuthCacheInvalidationRelatedPolicyMigration_CoversCachedAuthorizationFi
 		require.Contains(t, sqlText, required)
 	}
 	require.Contains(t, sqlText, "repeat('0', 64)")
+	require.Contains(t, sqlText, "Retire every pre-migration")
+	require.Contains(t, sqlText, "INSERT INTO auth_cache_invalidation_outbox (cache_key)\nVALUES (repeat('0', 64))")
 }
 
 func TestAuthCacheInvalidationMigration_SecurityCoverageAndNoPlaintextPayload(t *testing.T) {

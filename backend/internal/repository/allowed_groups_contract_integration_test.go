@@ -98,7 +98,7 @@ func TestGroupRepository_DeleteCascade_PreservesApiKeyGroupID(t *testing.T) {
 
 	userRepo := newUserRepositoryWithSQL(entClient, tx)
 	groupRepo := newGroupRepositoryWithSQL(entClient, tx)
-	apiKeyRepo := newAPIKeyRepositoryWithSQL(entClient, tx)
+	apiKeyRepo := integrationAPIKeyRepository(t, entClient, tx)
 
 	u := &service.User{
 		Email:         uniqueTestValue(t, "cascade-user") + "@example.com",
