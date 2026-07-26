@@ -118,6 +118,28 @@ describe('AccountTestModal', () => {
     localStorage.clear()
   })
 
+  it('loads available models when mounted already open', async () => {
+    mount(AccountTestModal, {
+      props: {
+        show: true,
+        account: buildAccount()
+      },
+      global: {
+        stubs: {
+          BaseDialog: BaseDialogStub,
+          Select: SelectStub,
+          TextArea: TextAreaStub,
+          Icon: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(getAvailableModelsMock).toHaveBeenCalledOnce()
+    expect(getAvailableModelsMock).toHaveBeenCalledWith(1)
+  })
+
   it('posts compact mode for OpenAI compact probe', async () => {
     const wrapper = mount(AccountTestModal, {
       props: {

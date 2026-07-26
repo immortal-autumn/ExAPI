@@ -65,10 +65,10 @@ function mountModal(account: Record<string, unknown> = {
   platform: 'gemini',
   type: 'apikey',
   status: 'active'
-}) {
+}, show = false) {
   return mount(AccountTestModal, {
     props: {
-      show: false,
+      show,
       account
     } as any,
     global: {
@@ -114,6 +114,20 @@ describe('AccountTestModal', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+  })
+
+  it('loads available models when mounted already open', async () => {
+    mountModal({
+      id: 42,
+      name: 'OpenAI OAuth',
+      platform: 'openai',
+      type: 'oauth',
+      status: 'active'
+    }, true)
+    await flushPromises()
+
+    expect(getAvailableModels).toHaveBeenCalledOnce()
+    expect(getAvailableModels).toHaveBeenCalledWith(42)
   })
 
   it('gemini 图片模型测试会携带提示词并渲染图片预览', async () => {
