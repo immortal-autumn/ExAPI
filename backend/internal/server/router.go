@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"log"
 	"sync/atomic"
 	"time"
@@ -113,7 +114,18 @@ func registerRoutes(
 	redisClient *redis.Client,
 ) {
 	// 通用路由（健康检查、状态等）
-	routes.RegisterCommonRoutes(r)
+	routes.RegisterCommonRoutes(r, func(ctx context.Context) error {
+		if settingService == nil {
+			return errors.New("setting service unavailable")
+		}
+		if _, err := settingService.GetFrameSrcOrigins(ctx); err != nil {
+			return err
+		}
+		if redisClient == nil {
+			return errors.New("redis unavailable")
+		}
+		return redisClient.Ping(ctx).Err()
+	})
 
 	// API v1
 	v1 := r.Group("/api/v1")
