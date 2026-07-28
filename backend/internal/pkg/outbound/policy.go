@@ -132,7 +132,7 @@ func (p Policy) ValidateURL(raw string, allowHTTP bool) (*url.URL, error) {
 		return nil, errors.New("invalid outbound URL")
 	}
 	scheme := strings.ToLower(parsed.Scheme)
-	if scheme != "https" && !(allowHTTP && scheme == "http") {
+	if scheme != "https" && (!allowHTTP || scheme != "http") {
 		return nil, errors.New("outbound URL must use https")
 	}
 	if parsed.User != nil {
