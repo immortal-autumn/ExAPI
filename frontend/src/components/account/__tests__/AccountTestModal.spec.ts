@@ -78,6 +78,16 @@ const TextAreaStub = defineComponent({
   `
 })
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
 function buildAccount() {
   return {
     id: 1,
@@ -138,6 +148,82 @@ describe('AccountTestModal', () => {
 
     expect(getAvailableModelsMock).toHaveBeenCalledOnce()
     expect(getAvailableModelsMock).toHaveBeenCalledWith(1)
+  })
+
+  it('ignores a stale model response after close and account switch', async () => {
+    const first = deferred<any[]>()
+    const second = deferred<any[]>()
+    getAvailableModelsMock
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise)
+
+    const wrapper = mount(AccountTestModal, {
+      props: { show: true, account: buildAccount() },
+      global: {
+        stubs: {
+          BaseDialog: BaseDialogStub,
+          Select: SelectStub,
+          TextArea: TextAreaStub,
+          Icon: true
+        }
+      }
+    })
+    await flushPromises()
+
+    await wrapper.setProps({ show: false })
+    await wrapper.setProps({
+      account: { ...buildAccount(), id: 2, name: 'Account B' },
+      show: true
+    })
+    await flushPromises()
+
+    second.resolve([{ id: 'model-b', display_name: 'Model B' }])
+    await flushPromises()
+    expect((wrapper.vm as any).selectedModelId).toBe('model-b')
+
+    first.resolve([{ id: 'model-a', display_name: 'Model A' }])
+    await flushPromises()
+    expect((wrapper.vm as any).selectedModelId).toBe('model-b')
+    expect(getAvailableModelsMock).toHaveBeenNthCalledWith(2, 2)
+  })
+
+  it('keeps the newer stream connecting when the superseded stream aborts', async () => {
+    const firstFetch = deferred<Response>()
+    const secondFetch = deferred<Response>()
+    global.fetch = vi.fn()
+      .mockImplementationOnce((_url, options: RequestInit) => {
+        options.signal?.addEventListener('abort', () => {
+          firstFetch.reject(new DOMException('Aborted', 'AbortError'))
+        })
+        return firstFetch.promise
+      })
+      .mockImplementationOnce(() => secondFetch.promise) as any
+
+    const wrapper = mount(AccountTestModal, {
+      props: { show: true, account: buildAccount() },
+      global: {
+        stubs: {
+          BaseDialog: BaseDialogStub,
+          Select: SelectStub,
+          TextArea: TextAreaStub,
+          Icon: true
+        }
+      }
+    })
+    await flushPromises()
+    ;(wrapper.vm as any).selectedModelId = 'gpt-5.4'
+
+    void (wrapper.vm as any).startTest()
+    await flushPromises()
+    void (wrapper.vm as any).startTest()
+    await flushPromises()
+
+    expect((wrapper.vm as any).status).toBe('connecting')
+    secondFetch.resolve({
+      ok: true,
+      body: { getReader: () => ({ read: vi.fn().mockResolvedValue({ done: true }) }) }
+    } as any)
+    await flushPromises()
   })
 
   it('posts compact mode for OpenAI compact probe', async () => {

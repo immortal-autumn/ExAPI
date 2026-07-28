@@ -181,7 +181,7 @@
         <div
           v-if="wsTestDialogOpen"
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          @click.self="wsTestDialogOpen = false"
+          @click.self="closeWebSearchTestDialog"
         >
           <div
             class="mx-4 w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-dark-800"
@@ -252,7 +252,7 @@
               <button
                 type="button"
                 class="btn btn-secondary btn-sm"
-                @click="wsTestDialogOpen = false"
+                @click="closeWebSearchTestDialog"
               >
                 {{ t("common.close") }}
               </button>
@@ -616,7 +616,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch, defineAsyncComponent } from "vue";
+import { ref, reactive, computed, onMounted, onUnmounted, watch, defineAsyncComponent } from "vue";
 import { useI18n } from "vue-i18n";
 import { adminAPI } from "@/api";
 import {
@@ -1697,10 +1697,19 @@ const wsTestQuery = ref("");
 const wsTestLoading = ref(false);
 const wsTestResult = ref<WebSearchTestResult | null>(null);
 const wsTestDialogOpen = ref(false);
+let wsTestGeneration = 0;
 
 function openTestDialog() {
+  wsTestGeneration++;
+  wsTestLoading.value = false;
   wsTestResult.value = null;
   wsTestDialogOpen.value = true;
+}
+
+function closeWebSearchTestDialog() {
+  wsTestGeneration++;
+  wsTestLoading.value = false;
+  wsTestDialogOpen.value = false;
 }
 
 function toggleProviderExpand(idx: number) {
@@ -1795,17 +1804,21 @@ async function copyApiKey(idx: number) {
 }
 
 async function testWebSearchProvider() {
+  const generation = ++wsTestGeneration;
   wsTestLoading.value = true;
   wsTestResult.value = null;
   try {
     const query =
       wsTestQuery.value.trim() ||
       t("admin.settings.webSearchEmulation.testDefaultQuery");
-    wsTestResult.value = await adminAPI.settings.testWebSearchEmulation(query);
+    const result = await adminAPI.settings.testWebSearchEmulation(query);
+    if (generation !== wsTestGeneration || !wsTestDialogOpen.value) return;
+    wsTestResult.value = result;
   } catch (err: unknown) {
+    if (generation !== wsTestGeneration || !wsTestDialogOpen.value) return;
     appStore.showError(extractApiErrorMessage(err, t("common.error")));
   } finally {
-    wsTestLoading.value = false;
+    if (generation === wsTestGeneration) wsTestLoading.value = false;
   }
 }
 
@@ -3860,6 +3873,10 @@ onMounted(() => {
     loadSubscriptionGroups();
     loadProviders();
   }
+});
+
+onUnmounted(() => {
+  wsTestGeneration++;
 });
 
 // =========================

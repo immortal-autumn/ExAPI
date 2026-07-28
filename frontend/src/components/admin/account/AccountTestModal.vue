@@ -242,7 +242,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
@@ -286,6 +286,8 @@ const selectedModelId = ref('')
 const testPrompt = ref('')
 const loadingModels = ref(false)
 let abortController: AbortController | null = null
+let modelLoadGeneration = 0
+let streamGeneration = 0
 const generatedImages = ref<PreviewImage[]>([])
 const previewImageUrl = ref('')
 const testMode = ref<'default' | 'compact'>('default')
@@ -328,18 +330,21 @@ watch(selectedModelId, () => {
 })
 
 const loadAvailableModels = async () => {
-  if (!props.account) return
+  const account = props.account
+  if (!account) return
+  const generation = ++modelLoadGeneration
 
   loadingModels.value = true
   selectedModelId.value = '' // Reset selection before loading
   try {
-    const models = await adminAPI.accounts.getAvailableModels(props.account.id)
-    availableModels.value = props.account.platform === 'gemini' || props.account.platform === 'antigravity'
+    const models = await adminAPI.accounts.getAvailableModels(account.id)
+    if (generation !== modelLoadGeneration || !props.show || props.account?.id !== account.id) return
+    availableModels.value = account.platform === 'gemini' || account.platform === 'antigravity'
       ? sortTestModels(models)
       : models
     // Default selection by platform
     if (availableModels.value.length > 0) {
-      if (props.account.platform === 'gemini') {
+      if (account.platform === 'gemini') {
         selectedModelId.value = availableModels.value[0].id
       } else {
         // Try to select Sonnet as default, otherwise use first model
@@ -348,12 +353,13 @@ const loadAvailableModels = async () => {
       }
     }
   } catch (error) {
+    if (generation !== modelLoadGeneration || !props.show || props.account?.id !== account.id) return
     console.error('Failed to load available models:', error)
     // Fallback to empty list
     availableModels.value = []
     selectedModelId.value = ''
   } finally {
-    loadingModels.value = false
+    if (generation === modelLoadGeneration) loadingModels.value = false
   }
 }
 
@@ -366,11 +372,6 @@ const resetState = () => {
   previewImageUrl.value = ''
 }
 
-const handleClose = () => {
-  abortStream()
-  emit('close')
-}
-
 const abortStream = () => {
   if (abortController) {
     abortController.abort()
@@ -378,21 +379,37 @@ const abortStream = () => {
   }
 }
 
-// Load available models when modal opens, including an initially-open v-if mount.
+const invalidatePendingWork = () => {
+  modelLoadGeneration++
+  streamGeneration++
+  loadingModels.value = false
+  abortStream()
+}
+
+const handleClose = () => {
+  invalidatePendingWork()
+  emit('close')
+}
+
+// Load available models when the modal opens or the selected account changes.
 watch(
-  () => props.show,
-  async (newVal) => {
-    if (newVal && props.account) {
+  () => [props.show, props.account?.id] as const,
+  async ([show]) => {
+    if (show && props.account) {
+      streamGeneration++
+      abortStream()
       testPrompt.value = ''
       testMode.value = 'default'
       resetState()
       await loadAvailableModels()
     } else {
-      abortStream()
+      invalidatePendingWork()
     }
   },
   { immediate: true }
 )
+
+onUnmounted(invalidatePendingWork)
 
 const addLine = (text: string, className: string = 'text-gray-300') => {
   outputLines.value.push({ text, class: className })
@@ -407,17 +424,19 @@ const scrollToBottom = async () => {
 }
 
 const startTest = async () => {
-  if (!props.account || !selectedModelId.value) return
+  const account = props.account
+  if (!account || !selectedModelId.value) return
+
+  abortStream()
+  const controller = new AbortController()
+  abortController = controller
+  const generation = ++streamGeneration
 
   resetState()
   status.value = 'connecting'
-  addLine(t('admin.accounts.startingTestForAccount', { name: props.account.name }), 'text-blue-400')
-  addLine(t('admin.accounts.testAccountTypeLabel', { type: props.account.type }), 'text-gray-400')
+  addLine(t('admin.accounts.startingTestForAccount', { name: account.name }), 'text-blue-400')
+  addLine(t('admin.accounts.testAccountTypeLabel', { type: account.type }), 'text-gray-400')
   addLine('', 'text-gray-300')
-
-  abortStream()
-
-  abortController = new AbortController()
 
   try {
     const requestBody: {
@@ -433,7 +452,7 @@ const startTest = async () => {
     }
 
     // Use the configured API base; EventSource does not support POST.
-    const url = buildApiUrl(`/admin/accounts/${props.account.id}/test`)
+    const url = buildApiUrl(`/admin/accounts/${account.id}/test`)
 
     // Use fetch with streaming for SSE since EventSource doesn't support POST
     const response = await fetch(url, {
@@ -444,8 +463,10 @@ const startTest = async () => {
         [ADMIN_UI_REQUEST_HEADER]: '1'
       },
       body: JSON.stringify(requestBody),
-      signal: abortController.signal
+      signal: controller.signal
     })
+
+    if (generation !== streamGeneration) return
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
@@ -461,6 +482,7 @@ const startTest = async () => {
 
     while (true) {
       const { done, value } = await reader.read()
+      if (generation !== streamGeneration) return
       if (done) break
 
       buffer += decoder.decode(value, { stream: true })
@@ -482,6 +504,7 @@ const startTest = async () => {
       }
     }
   } catch (error: unknown) {
+    if (generation !== streamGeneration) return
     if (error instanceof DOMException && error.name === 'AbortError') {
       status.value = 'idle'
       return
@@ -490,6 +513,8 @@ const startTest = async () => {
     const msg = error instanceof Error ? error.message : 'Unknown error'
     errorMessage.value = msg
     addLine(`Error: ${msg}`, 'text-red-400')
+  } finally {
+    if (abortController === controller) abortController = null
   }
 }
 

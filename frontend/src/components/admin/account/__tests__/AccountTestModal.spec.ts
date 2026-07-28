@@ -39,6 +39,16 @@ vi.mock('vue-i18n', async () => {
   }
 })
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
 function createStreamResponse(lines: string[]) {
   const encoder = new TextEncoder()
   const chunks = lines.map((line) => encoder.encode(line))
@@ -128,6 +138,77 @@ describe('AccountTestModal', () => {
 
     expect(getAvailableModels).toHaveBeenCalledOnce()
     expect(getAvailableModels).toHaveBeenCalledWith(42)
+  })
+
+  it('ignores a stale model response after close and account switch', async () => {
+    const first = deferred<any[]>()
+    const second = deferred<any[]>()
+    getAvailableModels
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise)
+
+    const wrapper = mountModal({
+      id: 1,
+      name: 'Account A',
+      platform: 'openai',
+      type: 'oauth',
+      status: 'active'
+    }, true)
+    await flushPromises()
+
+    await wrapper.setProps({ show: false })
+    await wrapper.setProps({
+      account: {
+        id: 2,
+        name: 'Account B',
+        platform: 'openai',
+        type: 'oauth',
+        status: 'active'
+      },
+      show: true
+    })
+    await flushPromises()
+
+    second.resolve([{ id: 'model-b', display_name: 'Model B' }])
+    await flushPromises()
+    expect((wrapper.vm as any).selectedModelId).toBe('model-b')
+
+    first.resolve([{ id: 'model-a', display_name: 'Model A' }])
+    await flushPromises()
+    expect((wrapper.vm as any).selectedModelId).toBe('model-b')
+    expect(getAvailableModels).toHaveBeenNthCalledWith(2, 2)
+  })
+
+  it('keeps the newer stream connecting when the superseded stream aborts', async () => {
+    const firstFetch = deferred<Response>()
+    const secondFetch = deferred<Response>()
+    global.fetch = vi.fn()
+      .mockImplementationOnce((_url, options: RequestInit) => {
+        options.signal?.addEventListener('abort', () => {
+          firstFetch.reject(new DOMException('Aborted', 'AbortError'))
+        })
+        return firstFetch.promise
+      })
+      .mockImplementationOnce(() => secondFetch.promise) as any
+
+    const wrapper = mountModal({
+      id: 42,
+      name: 'OpenAI OAuth',
+      platform: 'openai',
+      type: 'oauth',
+      status: 'active'
+    }, true)
+    await flushPromises()
+    ;(wrapper.vm as any).selectedModelId = 'gpt-5.4'
+
+    void (wrapper.vm as any).startTest()
+    await flushPromises()
+    void (wrapper.vm as any).startTest()
+    await flushPromises()
+
+    expect((wrapper.vm as any).status).toBe('connecting')
+    secondFetch.resolve(createStreamResponse([]))
+    await flushPromises()
   })
 
   it('gemini 图片模型测试会携带提示词并渲染图片预览', async () => {

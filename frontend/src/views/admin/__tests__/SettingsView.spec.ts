@@ -9,6 +9,7 @@ const {
   updateSettings,
   getWebSearchEmulationConfig,
   updateWebSearchEmulationConfig,
+  testWebSearchEmulation,
   getAdminApiKey,
   getOverloadCooldownSettings,
   getRateLimit429CooldownSettings,
@@ -31,6 +32,7 @@ const {
   updateSettings: vi.fn(),
   getWebSearchEmulationConfig: vi.fn(),
   updateWebSearchEmulationConfig: vi.fn(),
+  testWebSearchEmulation: vi.fn(),
   getAdminApiKey: vi.fn(),
   getOverloadCooldownSettings: vi.fn(),
   getRateLimit429CooldownSettings: vi.fn(),
@@ -59,6 +61,7 @@ vi.mock("@/api", () => ({
       updateSettings,
       getWebSearchEmulationConfig,
       updateWebSearchEmulationConfig,
+      testWebSearchEmulation,
       getAdminApiKey,
       getOverloadCooldownSettings,
       getRateLimit429CooldownSettings,
@@ -466,6 +469,14 @@ const baseSettingsResponse = {
   },
 };
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 function mountView() {
   return mount(SettingsView, {
     global: {
@@ -535,6 +546,7 @@ describe("admin SettingsView payment visible method controls", () => {
     updateSettings.mockReset();
     getWebSearchEmulationConfig.mockReset();
     updateWebSearchEmulationConfig.mockReset();
+    testWebSearchEmulation.mockReset();
     getAdminApiKey.mockReset();
     getOverloadCooldownSettings.mockReset();
     getRateLimit429CooldownSettings.mockReset();
@@ -606,6 +618,30 @@ describe("admin SettingsView payment visible method controls", () => {
     });
     fetchPublicSettings.mockResolvedValue(undefined);
     adminSettingsFetch.mockResolvedValue(undefined);
+  });
+
+  it("ignores a web-search result that resolves after the dialog closes", async () => {
+    const request = deferred<{ provider: string; results: Array<unknown> }>();
+    testWebSearchEmulation.mockReturnValue(request.promise);
+    const wrapper = mountView();
+    await flushPromises();
+
+    (wrapper.vm as any).openTestDialog();
+    await flushPromises();
+    void (wrapper.vm as any).testWebSearchProvider();
+    await flushPromises();
+
+    const closeButton = wrapper
+      .findAll("button")
+      .find((node) => node.text().includes("common.close"));
+    expect(closeButton).toBeDefined();
+    await closeButton?.trigger("click");
+
+    request.resolve({ provider: "stale-provider", results: [] });
+    await flushPromises();
+
+    expect((wrapper.vm as any).wsTestResult).toBeNull();
+    expect((wrapper.vm as any).wsTestLoading).toBe(false);
   });
 
   it.skip("does not render legacy visible payment method controls", async () => {
@@ -920,6 +956,7 @@ describe("admin SettingsView wechat connect controls", () => {
     updateSettings.mockReset();
     getWebSearchEmulationConfig.mockReset();
     updateWebSearchEmulationConfig.mockReset();
+    testWebSearchEmulation.mockReset();
     getAdminApiKey.mockReset();
     getOverloadCooldownSettings.mockReset();
     getRateLimit429CooldownSettings.mockReset();
@@ -1053,6 +1090,7 @@ describe("admin SettingsView platform quota matrix", () => {
     updateSettings.mockReset();
     getWebSearchEmulationConfig.mockReset();
     updateWebSearchEmulationConfig.mockReset();
+    testWebSearchEmulation.mockReset();
     getAdminApiKey.mockReset();
     getOverloadCooldownSettings.mockReset();
     getRateLimit429CooldownSettings.mockReset();
