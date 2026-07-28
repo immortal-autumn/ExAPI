@@ -5,6 +5,7 @@ package web
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -352,7 +353,7 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 		assert.True(t, strings.HasSuffix(etag, `"`))
 	})
 
-	t.Run("returns_304_for_matching_etag", func(t *testing.T) {
+	t.Run("revalidates_html_with_current_nonce", func(t *testing.T) {
 		provider := &mockSettingsProvider{
 			settings: map[string]string{"test": "value"},
 		}
@@ -360,29 +361,30 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 		server, err := NewFrontendServer(provider)
 		require.NoError(t, err)
 
-		// Use a real router for proper 304 handling
+		requestNumber := 0
 		router := gin.New()
 		router.Use(func(c *gin.Context) {
-			c.Set(middleware.CSPNonceKey, "test-nonce")
+			requestNumber++
+			c.Set(middleware.CSPNonceKey, fmt.Sprintf("nonce-%d", requestNumber))
 			c.Next()
 		})
 		router.Use(server.Middleware())
 
-		// First request to populate cache and get ETag
 		w1 := httptest.NewRecorder()
 		req1 := httptest.NewRequest(http.MethodGet, "/", nil)
 		router.ServeHTTP(w1, req1)
 		etag := w1.Header().Get("ETag")
 		require.NotEmpty(t, etag)
+		require.Contains(t, w1.Body.String(), `nonce="nonce-1"`)
 
-		// Second request with If-None-Match
 		w2 := httptest.NewRecorder()
 		req2 := httptest.NewRequest(http.MethodGet, "/", nil)
 		req2.Header.Set("If-None-Match", etag)
 		router.ServeHTTP(w2, req2)
 
-		assert.Equal(t, http.StatusNotModified, w2.Code)
-		assert.Empty(t, w2.Body.String())
+		assert.Equal(t, http.StatusOK, w2.Code)
+		assert.Contains(t, w2.Body.String(), `nonce="nonce-2"`)
+		assert.NotContains(t, w2.Body.String(), `nonce="nonce-1"`)
 	})
 
 	t.Run("sets_cache_control_header", func(t *testing.T) {
