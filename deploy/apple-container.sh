@@ -384,6 +384,12 @@ validate_ipv4_address() {
     done
 }
 
+validate_immutable_app_image() {
+    local image="$1"
+    [[ "${image}" =~ ^ghcr\.io/immortal-autumn/sub2api2personal@sha256:[0-9a-fA-F]{64}$ ]] || \
+        die "APPLE_CONTAINER_SUB2API_IMAGE must be an immutable ExAPI GHCR sha256 digest reference."
+}
+
 validate_env_file_security() {
     local owner mode permissions
 
@@ -400,7 +406,7 @@ validate_env_file_security() {
 prepare_environment() {
     validate_env_file_security
 
-    APP_IMAGE="$(read_env_value APPLE_CONTAINER_SUB2API_IMAGE weishaw/sub2api:latest)"
+    APP_IMAGE="$(read_env_value APPLE_CONTAINER_SUB2API_IMAGE)"
     POSTGRES_IMAGE="$(read_env_value APPLE_CONTAINER_POSTGRES_IMAGE postgres:18-alpine)"
     REDIS_IMAGE="$(read_env_value APPLE_CONTAINER_REDIS_IMAGE redis:8-alpine)"
     BIND_HOST="$(read_env_value BIND_HOST 0.0.0.0)"
@@ -412,6 +418,7 @@ prepare_environment() {
     TZ_VALUE="$(read_env_value TZ Asia/Shanghai)"
 
     [[ -n "${BIND_HOST}" ]] || die "BIND_HOST must not be empty."
+    validate_immutable_app_image "${APP_IMAGE}"
     validate_ipv4_address "${BIND_HOST}"
     validate_port "${HOST_PORT}"
     if [[ "${BIND_HOST}" == "0.0.0.0" ]]; then
@@ -604,7 +611,7 @@ probe_redis() {
 
 probe_app() {
     container exec "${APP_CONTAINER}" \
-        wget -q -T 5 -O /dev/null http://localhost:8080/health
+        wget -q -T 5 -O /dev/null http://localhost:8080/ready
 }
 
 probe_host_app() {

@@ -26,9 +26,12 @@ test-backend:
 	@$(MAKE) -C backend test
 
 test-frontend:
-	@pnpm --dir frontend run lint:check
-	@pnpm --dir frontend run typecheck
-	@$(MAKE) test-frontend-critical
+	cd frontend && pnpm run lint:check
+	cd frontend && pnpm run typecheck
+	cd frontend && pnpm run check:coverage-config
+	cd frontend && NODE_ENV=test CI=true pnpm run test:coverage
+	cd frontend && pnpm run build
+	cd frontend && pnpm run check:bundle
 
 test-frontend-critical:
 	@pnpm --dir frontend exec vitest run $(FRONTEND_CRITICAL_VITEST)
