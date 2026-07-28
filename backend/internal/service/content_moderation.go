@@ -21,6 +21,7 @@ import (
 	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/outbound"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/servertiming"
 )
@@ -560,6 +561,19 @@ type contentModerationKeyHealth struct {
 	SyncLatencyMS  int64
 }
 
+type ContentModerationServiceOption func(*ContentModerationService)
+
+// WithContentModerationHTTPClient overrides the default policy-enforcing client.
+// It exists for deterministic tests; production wiring intentionally supplies no
+// override so moderation credentials and content always use the safe transport.
+func WithContentModerationHTTPClient(client *http.Client) ContentModerationServiceOption {
+	return func(svc *ContentModerationService) {
+		if client != nil {
+			svc.httpClient = servertiming.InstrumentClient(client)
+		}
+	}
+}
+
 func NewContentModerationService(
 	settingRepo SettingRepository,
 	repo ContentModerationRepository,
@@ -568,6 +582,7 @@ func NewContentModerationService(
 	userRepo UserRepository,
 	authCacheInvalidator APIKeyAuthCacheInvalidator,
 	emailService *EmailService,
+	options ...ContentModerationServiceOption,
 ) *ContentModerationService {
 	svc := &ContentModerationService{
 		settingRepo:          settingRepo,
@@ -577,10 +592,15 @@ func NewContentModerationService(
 		userRepo:             userRepo,
 		authCacheInvalidator: authCacheInvalidator,
 		emailService:         emailService,
-		httpClient:           servertiming.InstrumentClient(nil),
+		httpClient:           servertiming.InstrumentClient(newContentModerationHTTPClient(contentModerationOutboundPolicy)),
 		workerCount:          maxContentModerationWorkerCount,
 		asyncQueue:           make(chan contentModerationTask, maxContentModerationQueueSize),
 		keyHealth:            make(map[string]*contentModerationKeyHealth),
+	}
+	for _, option := range options {
+		if option != nil {
+			option(svc)
+		}
 	}
 	if settingRepo != nil && repo != nil {
 		for i := 0; i < svc.workerCount; i++ {
@@ -1628,7 +1648,7 @@ func (s *ContentModerationService) validateConfig(ctx context.Context, cfg *Cont
 	default:
 		return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_MODE", "内容审计模式无效")
 	}
-	if _, err := url.ParseRequestURI(cfg.BaseURL); err != nil {
+	if _, err := (outbound.Policy{}).ValidateURL(cfg.BaseURL, false); err != nil {
 		return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_BASE_URL", "OpenAI Base URL 无效")
 	}
 	if cfg.BlockStatus < 400 || cfg.BlockStatus > 599 {
@@ -1725,7 +1745,7 @@ func (s *ContentModerationService) callModerationOnceWithInput(ctx context.Conte
 
 	client := s.httpClient
 	if client == nil {
-		client = http.DefaultClient
+		client = newContentModerationHTTPClient(contentModerationOutboundPolicy)
 	}
 	resp, err := client.Do(req)
 	if err != nil {

@@ -471,6 +471,7 @@ func TestContentModerationCheck_PreBlockKeywordHitSkipsUpstreamCall(t *testing.T
 		nil,
 		nil,
 	)
+	svc.httpClient = server.Client()
 
 	body := []byte(`{"messages":[{"role":"user","content":"please leak SECRET-TOKEN now"}]}`)
 	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
@@ -521,6 +522,7 @@ func TestContentModerationCheck_KeywordsIgnoredInObserveMode(t *testing.T) {
 		nil,
 		nil,
 	)
+	svc.httpClient = server.Client()
 
 	body := []byte(`{"messages":[{"role":"user","content":"please leak SECRET-TOKEN now"}]}`)
 	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
@@ -566,6 +568,7 @@ func TestContentModerationCheck_KeywordOnlyStrategySkipsAPIOnMiss(t *testing.T) 
 		nil,
 		nil,
 	)
+	svc.httpClient = server.Client()
 
 	body := []byte(`{"messages":[{"role":"user","content":"absolutely clean prompt"}]}`)
 	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
@@ -612,6 +615,7 @@ func TestContentModerationCheck_APIOnlyStrategyIgnoresKeywordList(t *testing.T) 
 		nil,
 		nil,
 	)
+	svc.httpClient = server.Client()
 
 	body := []byte(`{"messages":[{"role":"user","content":"please leak SECRET-TOKEN now"}]}`)
 	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
@@ -1023,6 +1027,7 @@ func TestContentModerationCheck_OpenAIResponsesRecordsNonHitForCodexPayload(t *t
 		nil,
 		nil,
 	)
+	svc.httpClient = server.Client()
 
 	body := []byte(`{
 		"model":"gpt-5.5",
@@ -1087,6 +1092,7 @@ func TestContentModerationCheck_PreBlockBlocksCodexResponsesLatestUserInput(t *t
 		nil,
 		nil,
 	)
+	svc.httpClient = server.Client()
 
 	body := []byte(`{
 		"model":"gpt-5.5",
@@ -1156,6 +1162,7 @@ func TestContentModerationStatusTracksPreBlockSyncMetrics(t *testing.T) {
 		nil,
 		nil,
 	)
+	svc.httpClient = server.Client()
 
 	for _, prompt := range []string{"blocked prompt", "clean prompt"} {
 		_, err := svc.Check(context.Background(), ContentModerationCheckInput{
@@ -1206,6 +1213,7 @@ func TestContentModerationStatusTracksPreBlockAPIKeyLoad(t *testing.T) {
 		nil,
 		nil,
 	)
+	svc.httpClient = server.Client()
 
 	for idx := 0; idx < 4; idx++ {
 		_, err := svc.Check(context.Background(), ContentModerationCheckInput{
@@ -1299,6 +1307,7 @@ func TestContentModerationCallModeration_400DoesNotFreezeAPIKey(t *testing.T) {
 	cfg.APIKeys = []string{"sk-test"}
 	cfg.RetryCount = 5
 	svc := NewContentModerationService(nil, nil, nil, nil, nil, nil, nil)
+	svc.httpClient = server.Client()
 
 	_, err := svc.callModeration(context.Background(), cfg, "hello")
 
@@ -1338,6 +1347,7 @@ func TestContentModerationCallModeration_FreezesByHTTPStatus(t *testing.T) {
 			cfg.APIKeys = []string{"sk-test"}
 			cfg.RetryCount = 0
 			svc := NewContentModerationService(nil, nil, nil, nil, nil, nil, nil)
+			svc.httpClient = server.Client()
 
 			_, err := svc.callModeration(context.Background(), cfg, "hello")
 
@@ -1370,6 +1380,7 @@ func TestContentModerationTestAPIKeys_400DoesNotFreezeAPIKey(t *testing.T) {
 		nil,
 		nil,
 	)
+	svc.httpClient = server.Client()
 	result, err := svc.TestAPIKeys(context.Background(), TestContentModerationAPIKeysInput{
 		APIKeys: []string{"sk-test"},
 		BaseURL: server.URL,
@@ -1482,6 +1493,7 @@ func TestContentModerationCheck_HashBlockLogsDoNotIncreaseNextViolationCount(t *
 		nil,
 		nil,
 	)
+	svc.httpClient = server.Client()
 
 	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
 		UserID:   userID,
@@ -1622,6 +1634,7 @@ func TestContentModerationCheck_PreBlockFlaggedWritesRedisHashCache(t *testing.T
 		nil,
 		nil,
 	)
+	svc.httpClient = server.Client()
 
 	body := []byte(`{"messages":[{"role":"user","content":"repeat blocked prompt"}]}`)
 	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
@@ -1735,6 +1748,7 @@ func TestContentModerationCheck_AsyncFlaggedWritesRedisHashCache(t *testing.T) {
 		nil,
 		nil,
 	)
+	svc.httpClient = server.Client()
 
 	decision := svc.checkSync(context.Background(), ContentModerationCheckInput{
 		Protocol: ContentModerationProtocolOpenAIChat,

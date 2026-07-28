@@ -26,12 +26,12 @@ import (
 	"golang.org/x/net/http2"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/outbound"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyurl"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyutil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/servertiming"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"github.com/Wei-Shaw/sub2api/internal/service"
-	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
 	"golang.org/x/mod/semver"
 )
 
@@ -144,9 +144,10 @@ type openAIHTTP2FallbackState struct {
 // 7. 代理变更时清空旧连接池，避免复用错误代理
 // 8. 账号并发数与连接池上限对应（账号隔离策略下）
 type httpUpstreamService struct {
-	cfg     *config.Config                  // 全局配置
-	mu      sync.RWMutex                    // 保护 clients map 的读写锁
-	clients map[string]*upstreamClientEntry // 客户端缓存池，key 由隔离策略决定
+	cfg            *config.Config                  // 全局配置
+	outboundPolicy outbound.Policy                 // 直连 DNS/IP 校验与 socket pinning
+	mu             sync.RWMutex                    // 保护 clients map 的读写锁
+	clients        map[string]*upstreamClientEntry // 客户端缓存池，key 由隔离策略决定
 	// OpenAI 走 HTTP/HTTPS 代理时的 H2->H1 回退状态（key=标准化 proxyKey）
 	openAIHTTP2Fallbacks sync.Map
 }
@@ -161,8 +162,9 @@ type httpUpstreamService struct {
 //   - service.HTTPUpstream 接口实现
 func NewHTTPUpstream(cfg *config.Config) service.HTTPUpstream {
 	return &httpUpstreamService{
-		cfg:     cfg,
-		clients: make(map[string]*upstreamClientEntry),
+		cfg:            cfg,
+		outboundPolicy: outbound.PublicPolicy(),
+		clients:        make(map[string]*upstreamClientEntry),
 	}
 }
 
@@ -534,6 +536,12 @@ func (s *httpUpstreamService) getClientEntryWithTLS(proxyURL string, accountID i
 		s.mu.Unlock()
 		return nil, fmt.Errorf("build TLS fingerprint transport: %w", err)
 	}
+	if s.shouldValidateResolvedIP() {
+		if err := configureUpstreamTLSFingerprintDestinationPolicy(transport, parsedProxy, profile, s.outboundPolicy); err != nil {
+			s.mu.Unlock()
+			return nil, fmt.Errorf("configure TLS fingerprint destination policy: %w", err)
+		}
+	}
 
 	client := &http.Client{Transport: transport}
 	if s.shouldValidateResolvedIP() {
@@ -574,14 +582,8 @@ func (s *httpUpstreamService) validateRequestHost(req *http.Request) error {
 	if req == nil || req.URL == nil {
 		return errors.New("request url is nil")
 	}
-	host := strings.TrimSpace(req.URL.Hostname())
-	if host == "" {
-		return errors.New("request host is empty")
-	}
-	if err := urlvalidator.ValidateResolvedIP(host); err != nil {
-		return err
-	}
-	return nil
+	_, err := s.outboundPolicy.ValidateURL(req.URL.String(), s.cfg.Security.URLAllowlist.AllowInsecureHTTP)
+	return err
 }
 
 func (s *httpUpstreamService) redirectChecker(req *http.Request, via []*http.Request) error {
@@ -686,6 +688,12 @@ func (s *httpUpstreamService) getClientEntry(proxyURL string, accountID int64, a
 	if err != nil {
 		s.mu.Unlock()
 		return nil, fmt.Errorf("build transport: %w", err)
+	}
+	if s.shouldValidateResolvedIP() {
+		if err := configureUpstreamDestinationPolicy(transport, parsedProxy, s.outboundPolicy); err != nil {
+			s.mu.Unlock()
+			return nil, fmt.Errorf("configure destination policy: %w", err)
+		}
 	}
 	client := &http.Client{Transport: transport}
 	if s.shouldValidateResolvedIP() {
@@ -1262,6 +1270,28 @@ func defaultPoolSettings(cfg *config.Config) poolSettings {
 //   - MaxConnsPerHost: 每主机最大连接数（达到后新请求等待）
 //   - IdleConnTimeout: 空闲连接超时（超时后关闭）
 //   - ResponseHeaderTimeout: 等待响应头超时（不影响流式传输）
+func configureUpstreamDestinationPolicy(transport *http.Transport, proxyURL *url.URL, policy outbound.Policy) error {
+	mode := outbound.DirectResolution
+	if proxyURL != nil {
+		// An account proxy is explicit operator configuration. It remains the DNS
+		// and egress trust boundary; replacing its dialer would bypass the proxy.
+		mode = outbound.TrustedProxyResolution
+	}
+	return policy.ConfigureTransport(transport, mode)
+}
+
+func configureUpstreamTLSFingerprintDestinationPolicy(transport *http.Transport, proxyURL *url.URL, profile *tlsfingerprint.Profile, policy outbound.Policy) error {
+	if transport == nil {
+		return errors.New("upstream transport is nil")
+	}
+	if proxyURL != nil {
+		return policy.ConfigureTransport(transport, outbound.TrustedProxyResolution)
+	}
+	dialer := tlsfingerprint.NewDialer(profile, policy.DialContext)
+	transport.DialTLSContext = dialer.DialTLSContext
+	return nil
+}
+
 func buildUpstreamTransport(settings poolSettings, proxyURL *url.URL, protocolMode string) (*http.Transport, error) {
 	transport := &http.Transport{
 		MaxIdleConns:          settings.maxIdleConns,
