@@ -26,12 +26,37 @@ permissions:
   packages: write
 
 jobs:
+  # Resolve the release source once so every gate and artifact uses one commit.
+  resolve-ref:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - name: Checkout requested release ref
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Resolve immutable release commit
+        id: source
+        run: |
+          SHA=$(git rev-parse HEAD)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Resolved release commit: $SHA"
+
   # Update VERSION file with tag version
   update-version:
+    needs: resolve-ref
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.resolve-ref.outputs.sha }}
+
+      - name: Verify resolved source identity
+        run: test "$(git rev-parse HEAD)" = "${{ needs.resolve-ref.outputs.sha }}"
 
       - name: Update VERSION file
         run: |
@@ -52,10 +77,16 @@ jobs:
           retention-days: 1
 
   quality-gate:
+    needs: resolve-ref
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.resolve-ref.outputs.sha }}
+
+      - name: Verify resolved source identity
+        run: test "$(git rev-parse HEAD)" = "${{ needs.resolve-ref.outputs.sha }}"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
@@ -112,14 +143,17 @@ jobs:
           retention-days: 1
 
   release:
-    needs: [update-version, quality-gate]
+    needs: [resolve-ref, update-version, quality-gate]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.resolve-ref.outputs.sha }}
+
+      - name: Verify resolved source identity
+        run: test "$(git rev-parse HEAD)" = "${{ needs.resolve-ref.outputs.sha }}"
 
       - name: Download VERSION artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8

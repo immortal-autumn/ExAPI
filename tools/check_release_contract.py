@@ -35,7 +35,14 @@ for required in (
     require(".github/workflows/backend-ci.yml", required)
 
 require(".github/workflows/release.yml", "quality-gate")
-require(".github/workflows/release.yml", "needs: [update-version, quality-gate]")
+require(".github/workflows/release.yml", "resolve-ref:")
+require(".github/workflows/release.yml", "needs: [resolve-ref, update-version, quality-gate]")
+require(".github/workflows/release.yml", "ref: ${{ needs.resolve-ref.outputs.sha }}")
+release_workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+if release_workflow.count("ref: ${{ github.event.inputs.tag || github.ref }}") != 1:
+    raise SystemExit(".github/workflows/release.yml: the mutable event ref may only be used by resolve-ref")
+if release_workflow.count("ref: ${{ needs.resolve-ref.outputs.sha }}") != 3:
+    raise SystemExit(".github/workflows/release.yml: every consuming job must checkout the one resolved release SHA")
 forbid(".github/workflows/release.yml", "--skip=validate")
 
 for path in (
