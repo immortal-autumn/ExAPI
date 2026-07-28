@@ -143,6 +143,8 @@ func TestPolicyRejectsSpecialUseLiteralDestinations(t *testing.T) {
 		"https://10.0.0.1",
 		"https://169.254.169.254/latest/meta-data",
 		"https://168.63.129.16/",
+		"https://192.88.99.2/",
+		"https://[::ffff:192.88.99.2]/",
 		"https://[::1]",
 		"https://[fc00::1]",
 		"https://[fe80::1]",
@@ -152,8 +154,18 @@ func TestPolicyRejectsSpecialUseLiteralDestinations(t *testing.T) {
 		"https://[64:ff9b:1::7f00:1]",
 		"https://[64:ff9b:1::a00:1]",
 		"https://[64:ff9b:1::a9fe:a9fe]",
+		"https://[100::1]",
+		"https://[100:0:0:1::1]",
 		"https://[2001::1]",
+		"https://[2001:2::1]",
 		"https://[2002:0a00:0001::1]",
+		"https://[3ffe::1]",
+		"https://[3fff::1]",
+		"https://[4000::1]",
+		"https://[5f00::1]",
+		"https://[8000::1]",
+		"https://[c000::1]",
+		"https://[fec0::1]",
 	} {
 		t.Run(rawURL, func(t *testing.T) {
 			_, err := policy.ValidateURL(rawURL, false)
@@ -167,6 +179,8 @@ func TestPolicyRejectsSpecialUseResolvedDestinationsBeforeDial(t *testing.T) {
 		"10.0.0.1",
 		"169.254.169.254",
 		"168.63.129.16",
+		"192.88.99.2",
+		"::ffff:192.88.99.2",
 		"fc00::1",
 		"fe80::1",
 		"64:ff9b::7f00:1",
@@ -175,8 +189,18 @@ func TestPolicyRejectsSpecialUseResolvedDestinationsBeforeDial(t *testing.T) {
 		"64:ff9b:1::7f00:1",
 		"64:ff9b:1::a00:1",
 		"64:ff9b:1::a9fe:a9fe",
+		"100::1",
+		"100:0:0:1::1",
 		"2001::1",
+		"2001:2::1",
 		"2002:0a00:0001::1",
+		"3ffe::1",
+		"3fff::1",
+		"4000::1",
+		"5f00::1",
+		"8000::1",
+		"c000::1",
+		"fec0::1",
 	} {
 		t.Run(rawIP, func(t *testing.T) {
 			dialed := false
@@ -196,4 +220,9 @@ func TestPolicyRejectsSpecialUseResolvedDestinationsBeforeDial(t *testing.T) {
 			require.False(t, dialed)
 		})
 	}
+}
+
+func TestPolicyAllowsMappedPublicIPv4Literal(t *testing.T) {
+	_, err := PublicPolicy().ValidateURL("https://[::ffff:93.184.216.34]", false)
+	require.NoError(t, err)
 }

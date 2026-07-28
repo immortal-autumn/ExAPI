@@ -191,6 +191,9 @@ func validateIP(ip net.IP, allowPrivate bool) error {
 	if allowPrivate {
 		return nil
 	}
+	if ip.To4() == nil && !allocatedPublicIPv6.Contains(ip) {
+		return fmt.Errorf("outbound IP %s is disallowed", ip.String())
+	}
 	for _, network := range blockedNetworks {
 		if network.Contains(ip) {
 			return fmt.Errorf("outbound IP %s is disallowed", ip.String())
@@ -211,6 +214,13 @@ func isMetadataHostname(host string) bool {
 	}
 }
 
+// allocatedPublicIPv6 is the currently allocated IPv6 Global Unicast block.
+// Fail closed for future/reserved space until the policy is deliberately updated.
+var allocatedPublicIPv6 = mustParseNetwork("2000::/3")
+
+// blockedNetworks follows the applicable non-public/special-use entries in the
+// IANA IPv4 and IPv6 Special-Purpose Address Registries (snapshot 2025-10-09),
+// plus retired site-local and 6bone ranges that may still be routed internally.
 var blockedNetworks = mustParseNetworks([]string{
 	"0.0.0.0/8",
 	"10.0.0.0/8",
@@ -221,6 +231,7 @@ var blockedNetworks = mustParseNetworks([]string{
 	"172.16.0.0/12",
 	"192.0.0.0/24",
 	"192.0.2.0/24",
+	"192.88.99.0/24",
 	"192.168.0.0/16",
 	"198.18.0.0/15",
 	"198.51.100.0/24",
@@ -231,13 +242,27 @@ var blockedNetworks = mustParseNetworks([]string{
 	"::1/128",
 	"64:ff9b::/96",
 	"64:ff9b:1::/48",
-	"2001::/32",
+	"100::/64",
+	"100:0:0:1::/64",
+	"2001::/23",
 	"2001:db8::/32",
 	"2002::/16",
+	"3ffe::/16",
+	"3fff::/20",
+	"5f00::/16",
 	"fc00::/7",
 	"fe80::/10",
+	"fec0::/10",
 	"ff00::/8",
 })
+
+func mustParseNetwork(value string) *net.IPNet {
+	_, network, err := net.ParseCIDR(value)
+	if err != nil {
+		panic("invalid outbound policy CIDR: " + value)
+	}
+	return network
+}
 
 func mustParseNetworks(values []string) []*net.IPNet {
 	result := make([]*net.IPNet, 0, len(values))
