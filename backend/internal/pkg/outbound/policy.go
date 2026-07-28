@@ -229,13 +229,14 @@ var blockedNetworks = mustParseNetworks([]string{
 	"240.0.0.0/4",
 	"::/128",
 	"::1/128",
+	"64:ff9b::/96",
+	"64:ff9b:1::/48",
+	"2001::/32",
 	"2001:db8::/32",
+	"2002::/16",
 	"fc00::/7",
 	"fe80::/10",
 	"ff00::/8",
-	"64:ff9b:1::/48",
-	"2001::/32",
-	"2002::/16",
 })
 
 func mustParseNetworks(values []string) []*net.IPNet {
