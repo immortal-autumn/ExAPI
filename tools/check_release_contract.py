@@ -55,6 +55,10 @@ for path in (
     forbid(path, "Wei-Shaw/sub2api")
     forbid(path, "weishaw/sub2api:latest")
 
+require("deploy/install.sh", "Checksum retrieval and archive lookup fail closed.")
+require("deploy/install.sh", 'curl -fsSL "$checksum_url"')
+forbid("deploy/install.sh", 'print_warning "$(msg \'checksum_not_found\')"')
+
 for path in (
     "deploy/docker-compose.yml",
     "deploy/docker-compose.local.yml",
