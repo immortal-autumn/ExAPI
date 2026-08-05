@@ -34,8 +34,47 @@ export SUB2API_ENV_FILE="${ENV_FILE}"
 mkdir -p "${STATE_DIR}"
 
 "${SCRIPT}" init
-[[ "$(stat -f '%Lp' "${ENV_FILE}")" == "600" ]] || fail "init did not create a mode-600 env file"
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    env_mode="$(stat -f '%Lp' "${ENV_FILE}")"
+else
+    env_mode="$(stat -c '%a' "${ENV_FILE}")"
+fi
+[[ "${env_mode}" == "600" ]] || fail "init did not create a mode-600 env file"
 grep -q '^POSTGRES_PASSWORD=change_this_secure_password$' "${ENV_FILE}" && fail "init retained the placeholder password"
+python3 - "${ENV_FILE}" <<'PY' || fail "init did not create three valid independent keyrings"
+import base64, json, sys
+values = {}
+for raw in open(sys.argv[1], encoding="utf-8"):
+    if "=" in raw and not raw.lstrip().startswith("#"):
+        name, value = raw.rstrip("\r\n").split("=", 1)
+        values[name] = value
+domains = (
+    ("SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID", "SUB2API_DATA_ENCRYPTION_KEYS_JSON"),
+    ("SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID", "SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON"),
+    ("SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID", "SUB2API_BACKUP_ENCRYPTION_KEYS_JSON"),
+)
+material = []
+for active_name, keys_name in domains:
+    active = values[active_name]
+    keys = json.loads(values[keys_name])
+    decoded = base64.b64decode(keys[active], validate=True)
+    if len(decoded) != 32:
+        raise SystemExit(1)
+    material.append(decoded)
+if len(set(material)) != 3:
+    raise SystemExit(1)
+PY
+python3 - "${ENV_FILE}" <<'PY'
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+text = text.replace(
+    "APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/immortal-autumn/sub2api2personal@sha256:REPLACE_WITH_RELEASE_DIGEST",
+    "APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/immortal-autumn/sub2api2personal@sha256:" + "a" * 64,
+)
+path.write_text(text, encoding="utf-8")
+path.chmod(0o600)
+PY
 
 chmod 644 "${ENV_FILE}"
 if "${SCRIPT}" up >/dev/null 2>&1; then

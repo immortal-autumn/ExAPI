@@ -25,7 +25,13 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Check deployment scripts
         run: |
+          /bin/bash -n deploy/install.sh
+          /bin/bash -n deploy/docker-deploy.sh
           /bin/bash -n deploy/apple-container.sh
+          /bin/bash deploy/test-bind-defaults.sh
+          /bin/bash deploy/test-docker-deploy-keyrings.sh
+          /bin/bash deploy/test-install-purge.sh
+          /bin/bash deploy/test-keyring-contract.sh
           /bin/bash deploy/tests/apple-container-test.sh
 
   test:

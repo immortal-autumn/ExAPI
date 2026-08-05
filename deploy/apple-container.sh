@@ -332,8 +332,12 @@ generate_secret() {
     openssl rand -hex 32
 }
 
+generate_base64_key() {
+    openssl rand -base64 32 | tr -d '\r\n'
+}
+
 cmd_init() {
-    local env_dir temp_file postgres_secret jwt_secret totp_secret
+    local env_dir temp_file postgres_secret jwt_secret totp_secret data_key digest_key backup_key
 
     require_command openssl
 
@@ -344,8 +348,14 @@ cmd_init() {
     postgres_secret="$(generate_secret)" || die "Failed to generate PostgreSQL password."
     jwt_secret="$(generate_secret)" || die "Failed to generate JWT secret."
     totp_secret="$(generate_secret)" || die "Failed to generate TOTP encryption key."
-    [[ -n "${postgres_secret}" && -n "${jwt_secret}" && -n "${totp_secret}" ]] || \
+    data_key="$(generate_base64_key)" || die "Failed to generate data-encryption key."
+    digest_key="$(generate_base64_key)" || die "Failed to generate gateway-digest key."
+    backup_key="$(generate_base64_key)" || die "Failed to generate backup-encryption key."
+    [[ -n "${postgres_secret}" && -n "${jwt_secret}" && -n "${totp_secret}" && \
+       -n "${data_key}" && -n "${digest_key}" && -n "${backup_key}" ]] || \
         die "Secret generation returned an empty value."
+    [[ "${data_key}" != "${digest_key}" && "${data_key}" != "${backup_key}" && "${digest_key}" != "${backup_key}" ]] || \
+        die "Cryptographic key generation reused material across domains."
 
     env_dir="$(dirname "${ENV_FILE}")"
     temp_file="${ENV_FILE}.init.tmp.$$"
@@ -355,6 +365,12 @@ cmd_init() {
     replace_env_value POSTGRES_PASSWORD "${postgres_secret}" "${temp_file}"
     replace_env_value JWT_SECRET "${jwt_secret}" "${temp_file}"
     replace_env_value TOTP_ENCRYPTION_KEY "${totp_secret}" "${temp_file}"
+    replace_env_value SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID data-v1 "${temp_file}"
+    replace_env_value SUB2API_DATA_ENCRYPTION_KEYS_JSON "{\"data-v1\":\"${data_key}\"}" "${temp_file}"
+    replace_env_value SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID digest-v1 "${temp_file}"
+    replace_env_value SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON "{\"digest-v1\":\"${digest_key}\"}" "${temp_file}"
+    replace_env_value SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID backup-v1 "${temp_file}"
+    replace_env_value SUB2API_BACKUP_ENCRYPTION_KEYS_JSON "{\"backup-v1\":\"${backup_key}\"}" "${temp_file}"
     mv "${temp_file}" "${ENV_FILE}"
 
     info "Created ${ENV_FILE} with generated secrets."
@@ -390,12 +406,28 @@ validate_immutable_app_image() {
         die "APPLE_CONTAINER_SUB2API_IMAGE must be an immutable ExAPI GHCR sha256 digest reference."
 }
 
+file_owner() {
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        stat -f '%u' "$1"
+    else
+        stat -c '%u' "$1"
+    fi
+}
+
+file_mode() {
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        stat -f '%Lp' "$1"
+    else
+        stat -c '%a' "$1"
+    fi
+}
+
 validate_env_file_security() {
     local owner mode permissions
 
     [[ -f "${ENV_FILE}" ]] || die "Environment file not found: ${ENV_FILE}. Run '$0 init' first."
-    owner="$(stat -f '%u' "${ENV_FILE}")" || die "Unable to read owner for ${ENV_FILE}."
-    mode="$(stat -f '%Lp' "${ENV_FILE}")" || die "Unable to read permissions for ${ENV_FILE}."
+    owner="$(file_owner "${ENV_FILE}")" || die "Unable to read owner for ${ENV_FILE}."
+    mode="$(file_mode "${ENV_FILE}")" || die "Unable to read permissions for ${ENV_FILE}."
     [[ "${owner}" == "${EUID}" ]] || die "Environment file must be owned by the current user: ${ENV_FILE}"
     [[ "${mode}" =~ ^[0-7]+$ ]] || die "Unable to parse permissions for ${ENV_FILE}: ${mode}"
     permissions=$((8#${mode}))

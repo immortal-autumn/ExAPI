@@ -7,12 +7,20 @@ cd "$ROOT_DIR"
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 
 for file in deploy/docker-compose.yml deploy/docker-compose.local.yml; do
-  if REDIS_PASSWORD= docker compose -f "$file" config >/dev/null 2>&1; then
-    fail "$file rendered without REDIS_PASSWORD"
-  fi
-  rendered=$(REDIS_PASSWORD='test-only-redis-password' POSTGRES_PASSWORD='test-only-postgres' \
+  immutable_image='ghcr.io/example/exapi@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  if EXAPI_IMAGE="$immutable_image" REDIS_PASSWORD= POSTGRES_PASSWORD='test-only-postgres' \
     SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID=test \
     SUB2API_DATA_ENCRYPTION_KEYS_JSON='{"test":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}' \
+    SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID=digest-test \
+    SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON='{"digest-test":"QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI="}' \
+    docker compose -f "$file" config >/dev/null 2>&1; then
+    fail "$file rendered without REDIS_PASSWORD"
+  fi
+  rendered=$(EXAPI_IMAGE="$immutable_image" REDIS_PASSWORD='test-only-redis-password' POSTGRES_PASSWORD='test-only-postgres' \
+    SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID=test \
+    SUB2API_DATA_ENCRYPTION_KEYS_JSON='{"test":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}' \
+    SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID=digest-test \
+    SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON='{"digest-test":"QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI="}' \
     docker compose -f "$file" config --format json)
   python3 -c '
 import json, sys

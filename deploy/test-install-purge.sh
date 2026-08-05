@@ -23,15 +23,23 @@ grep -Fq 'PURGE=true 将删除外部加密密钥环' <<<"$body" || fail 'non-int
 
 grep -Fq 'SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID=backup-v1' "$script" || fail 'systemd installer does not provision backup active key'
 grep -Fq 'SUB2API_BACKUP_ENCRYPTION_KEYS_JSON=' "$script" || fail 'systemd installer does not provision backup keyring'
+grep -Fq 'SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID=digest-v1' "$script" || fail 'systemd installer does not provision gateway-digest active key'
+grep -Fq 'SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON=' "$script" || fail 'systemd installer does not provision gateway-digest keyring'
 grep -Fq 'BACKUP_ENCRYPTION_KEY=$(generate_base64_key)' deploy/docker-deploy.sh || fail 'Docker installer does not generate an independent backup key'
+grep -Fq 'GATEWAY_KEY_DIGEST_KEY=$(generate_base64_key)' deploy/docker-deploy.sh || fail 'Docker installer does not generate an independent gateway-digest key'
 
 grep -Fq 'validate_runtime_keyring SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID' "$script" || fail 'existing data keyring is not validated'
+grep -Fq 'validate_runtime_keyring SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID' "$script" || fail 'existing gateway-digest keyring is not validated'
 grep -Fq 'validate_runtime_keyring SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID' "$script" || fail 'existing backup keyring is not validated'
+grep -Fq 'validate_runtime_keyring_independence' "$script" || fail 'systemd keyrings are not checked for cross-domain reuse'
 
 grep -Fq 'JWT_SECRET=$(read_env_value JWT_SECRET)' deploy/docker-deploy.sh || fail 'Docker redeploy does not preserve JWT secret'
 grep -Fq 'TOTP_ENCRYPTION_KEY=$(read_env_value TOTP_ENCRYPTION_KEY)' deploy/docker-deploy.sh || fail 'Docker redeploy does not preserve TOTP key'
 grep -Fq 'POSTGRES_PASSWORD=$(read_env_value POSTGRES_PASSWORD)' deploy/docker-deploy.sh || fail 'Docker redeploy does not preserve PostgreSQL password'
 grep -Fq 'validate_keyring_pair "$DATA_ENCRYPTION_ACTIVE_KEY_ID"' deploy/docker-deploy.sh || fail 'Docker redeploy does not validate existing data keyring'
+grep -Fq 'validate_keyring_pair "$GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID"' deploy/docker-deploy.sh || fail 'Docker redeploy does not validate existing gateway-digest keyring'
+grep -Fq 'Generated missing gateway-digest keyring for existing deployment' deploy/docker-deploy.sh || fail 'Docker upgrade does not provision a missing gateway-digest keyring'
+grep -Fq 'validate_independent_keyrings' deploy/docker-deploy.sh || fail 'Docker keyrings are not checked for cross-domain reuse'
 grep -Fq 'Preserving existing validated encryption keyrings' deploy/docker-deploy.sh || fail 'Docker redeploy does not preserve encryption roots'
 for compose in deploy/docker-compose.yml deploy/docker-compose.local.yml deploy/docker-compose.standalone.yml deploy/docker-compose.dev.yml; do
     grep -Fq 'SUB2API_MIGRATE_LEGACY_SECURITY_SECRETS=${SUB2API_MIGRATE_LEGACY_SECURITY_SECRETS:-false}' "$compose" || fail "migration switch missing from $compose"

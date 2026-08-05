@@ -87,7 +87,20 @@ for path in (
     require(path, "http://localhost:8080/ready")
     forbid(path, "http://localhost:8080/health")
 
+for path in (
+    "deploy/docker-compose.yml",
+    "deploy/docker-compose.local.yml",
+    "deploy/docker-compose.standalone.yml",
+    "deploy/docker-compose.dev.yml",
+):
+    require(path, "SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID=${SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID:?")
+    require(path, "SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON=${SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON:?")
+
+require("deploy/install.sh", "validate_runtime_keyring_independence")
+require("deploy/docker-deploy.sh", "validate_independent_keyrings")
+
 require("deploy/apple-container.sh", "validate_immutable_app_image")
+require("deploy/apple-container.sh", "SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON")
 require(".goreleaser.yaml", "/sub2api2personal:{{ .Version }}")
 require(".goreleaser.simple.yaml", "/sub2api2personal:{{ .Version }}")
 for path in (".goreleaser.yaml", ".goreleaser.simple.yaml"):

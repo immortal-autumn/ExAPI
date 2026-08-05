@@ -762,22 +762,68 @@ if not active or not raw_keys:
     raise SystemExit(f"{label} keyring contains empty values")
 try:
     keys = json.loads(raw_keys)
-    material = base64.b64decode(keys[active], validate=True)
 except Exception as exc:
     raise SystemExit(f"{label} keyring is malformed: {exc}")
-if len(material) != 32:
-    raise SystemExit(f"{label} active key must decode to exactly 32 bytes")
+if not isinstance(keys, dict) or not keys:
+    raise SystemExit(f"{label} keyring must contain at least one key")
+if active not in keys:
+    raise SystemExit(f"{label} active key is missing from the keyring")
+seen = set()
+for key_id, encoded in keys.items():
+    try:
+        material = base64.b64decode(encoded + "=" * (-len(encoded) % 4), validate=True)
+    except Exception as exc:
+        raise SystemExit(f"{label} key {key_id!r} is malformed: {exc}")
+    if len(material) != 32:
+        raise SystemExit(f"{label} key {key_id!r} must decode to exactly 32 bytes")
+    if material in seen:
+        raise SystemExit(f"{label} keyring reuses key material")
+    seen.add(material)
+PY
+}
+
+validate_runtime_keyring_independence() {
+    python3 - "$RUNTIME_ENV_FILE" <<'PY'
+import base64, json, sys
+path = sys.argv[1]
+values = {}
+with open(path, encoding="utf-8") as handle:
+    for raw in handle:
+        line = raw.rstrip("\r\n")
+        if "=" not in line or line.lstrip().startswith("#"):
+            continue
+        key, value = line.split("=", 1)
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        values[key] = value
+domains = (
+    ("SUB2API_DATA_ENCRYPTION_KEYS_JSON", "data-encryption"),
+    ("SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON", "gateway-digest"),
+    ("SUB2API_BACKUP_ENCRYPTION_KEYS_JSON", "backup-encryption"),
+)
+seen = {}
+for variable, label in domains:
+    keys = json.loads(values[variable])
+    for key_id, encoded in keys.items():
+        material = base64.b64decode(encoded + "=" * (-len(encoded) % 4), validate=True)
+        previous = seen.get(material)
+        if previous is not None:
+            raise SystemExit(f"key material is reused between {previous} and {label}/{key_id}")
+        seen[material] = f"{label}/{key_id}"
 PY
 }
 
 # Create or preserve the external data-encryption root and systemd drop-in.
 # The key file is root-only and intentionally outside service-writable paths.
 ensure_runtime_secrets() {
-    local has_active=false has_keys=false has_backup_active=false has_backup_keys=false old_umask key key_json backup_key backup_key_json tmp_file dropin_dir
+    local has_active=false has_keys=false has_digest_active=false has_digest_keys=false has_backup_active=false has_backup_keys=false old_umask key key_json digest_key digest_key_json backup_key backup_key_json tmp_file dropin_dir
 
     if [ -f "$RUNTIME_ENV_FILE" ]; then
         grep -q '^SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID=' "$RUNTIME_ENV_FILE" && has_active=true
         grep -q '^SUB2API_DATA_ENCRYPTION_KEYS_JSON=' "$RUNTIME_ENV_FILE" && has_keys=true
+        grep -q '^SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID=' "$RUNTIME_ENV_FILE" && has_digest_active=true
+        grep -q '^SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON=' "$RUNTIME_ENV_FILE" && has_digest_keys=true
         grep -q '^SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID=' "$RUNTIME_ENV_FILE" && has_backup_active=true
         grep -q '^SUB2API_BACKUP_ENCRYPTION_KEYS_JSON=' "$RUNTIME_ENV_FILE" && has_backup_keys=true
         if [ "$has_active" != "$has_keys" ]; then
@@ -786,6 +832,10 @@ ensure_runtime_secrets() {
         fi
         if [ "$has_backup_active" != "$has_backup_keys" ]; then
             print_error "$RUNTIME_ENV_FILE contains a partial backup-encryption keyring; refusing to overwrite it"
+            exit 1
+        fi
+        if [ "$has_digest_active" != "$has_digest_keys" ]; then
+            print_error "$RUNTIME_ENV_FILE contains a partial gateway-digest keyring; refusing to overwrite it"
             exit 1
         fi
     fi
@@ -813,7 +863,19 @@ ensure_runtime_secrets() {
         chown root:root "$RUNTIME_ENV_FILE"
         chmod 600 "$RUNTIME_ENV_FILE"
         print_info "Preserving existing external data-encryption keyring"
-        validate_runtime_keyring SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID SUB2API_DATA_ENCRYPTION_KEYS_JSON data-encryption
+    fi
+
+    if [ "$has_digest_active" = false ]; then
+        digest_key=$(openssl rand -base64 32 | tr -d '\r\n')
+        digest_key_json="{\"digest-v1\":\"${digest_key}\"}"
+        printf 'SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID=digest-v1\n' >> "$RUNTIME_ENV_FILE"
+        printf "SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON='%s'\n" "$digest_key_json" >> "$RUNTIME_ENV_FILE"
+        chown root:root "$RUNTIME_ENV_FILE"
+        chmod 600 "$RUNTIME_ENV_FILE"
+        unset digest_key digest_key_json
+        print_success "Generated root-only external gateway-digest keyring"
+    else
+        print_info "Preserving existing external gateway-digest keyring"
     fi
 
     if [ "$has_backup_active" = false ]; then
@@ -827,8 +889,12 @@ ensure_runtime_secrets() {
         print_success "Generated root-only external backup-encryption keyring"
     else
         print_info "Preserving existing external backup-encryption keyring"
-        validate_runtime_keyring SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID SUB2API_BACKUP_ENCRYPTION_KEYS_JSON backup-encryption
     fi
+
+    validate_runtime_keyring SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID SUB2API_DATA_ENCRYPTION_KEYS_JSON data-encryption
+    validate_runtime_keyring SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON gateway-digest
+    validate_runtime_keyring SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID SUB2API_BACKUP_ENCRYPTION_KEYS_JSON backup-encryption
+    validate_runtime_keyring_independence
 
     dropin_dir="/etc/systemd/system/sub2api.service.d"
     mkdir -p "$dropin_dir"

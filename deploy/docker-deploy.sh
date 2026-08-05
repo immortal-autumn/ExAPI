@@ -4,7 +4,7 @@
 # =============================================================================
 # This script prepares deployment files for ExAPI:
 #   - Downloads docker-compose.local.yml and .env.example
-#   - Generates secure secrets (JWT, TOTP, data encryption, PostgreSQL)
+#   - Generates secure secrets (JWT, TOTP, three independent keyrings, PostgreSQL)
 #   - Creates necessary data directories
 #
 # After running this script, you can start services with:
@@ -21,7 +21,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # GitHub raw content base URL
-GITHUB_RAW_URL="https://raw.githubusercontent.com/immortal-autumn/Sub2API2Personal/main/deploy"
+GITHUB_RAW_URL=${GITHUB_RAW_URL:-"https://raw.githubusercontent.com/immortal-autumn/Sub2API2Personal/main/deploy"}
 
 # Print colored message
 print_info() {
@@ -69,18 +69,60 @@ PY
 
 validate_keyring_pair() {
     local active="$1" keys="$2" label="$3"
-    python3 - "$active" "$keys" "$label" <<'PY'
-import base64, json, sys
-active, raw, label = sys.argv[1:]
+    KEYRING_ACTIVE="$active" KEYRING_JSON="$keys" KEYRING_LABEL="$label" python3 <<'PY'
+import base64, json, os
+active = os.environ["KEYRING_ACTIVE"]
+raw = os.environ["KEYRING_JSON"]
+label = os.environ["KEYRING_LABEL"]
 if not active or not raw:
     raise SystemExit(f"{label} keyring is empty")
 try:
     keys = json.loads(raw)
-    material = base64.b64decode(keys[active], validate=True)
 except Exception as exc:
     raise SystemExit(f"{label} keyring is malformed: {exc}")
-if len(material) != 32:
-    raise SystemExit(f"{label} active key must decode to exactly 32 bytes")
+if not isinstance(keys, dict) or not keys:
+    raise SystemExit(f"{label} keyring must contain at least one key")
+if active not in keys:
+    raise SystemExit(f"{label} active key is missing from the keyring")
+seen = set()
+for key_id, encoded in keys.items():
+    try:
+        material = base64.b64decode(encoded + "=" * (-len(encoded) % 4), validate=True)
+    except Exception as exc:
+        raise SystemExit(f"{label} key {key_id!r} is malformed: {exc}")
+    if len(material) != 32:
+        raise SystemExit(f"{label} key {key_id!r} must decode to exactly 32 bytes")
+    if material in seen:
+        raise SystemExit(f"{label} keyring reuses key material")
+    seen.add(material)
+PY
+}
+
+validate_independent_keyrings() {
+    if [ "$#" -ne 9 ]; then
+        print_error "validate_independent_keyrings expects three keyring triples"
+        return 1
+    fi
+    KEYRING_DATA_ACTIVE="$1" KEYRING_DATA_JSON="$2" \
+    KEYRING_DIGEST_ACTIVE="$4" KEYRING_DIGEST_JSON="$5" \
+    KEYRING_BACKUP_ACTIVE="$7" KEYRING_BACKUP_JSON="$8" python3 <<'PY'
+import base64, json, os
+seen = {}
+domains = (
+    (os.environ["KEYRING_DATA_ACTIVE"], os.environ["KEYRING_DATA_JSON"], "data-encryption"),
+    (os.environ["KEYRING_DIGEST_ACTIVE"], os.environ["KEYRING_DIGEST_JSON"], "gateway-digest"),
+    (os.environ["KEYRING_BACKUP_ACTIVE"], os.environ["KEYRING_BACKUP_JSON"], "backup-encryption"),
+)
+for active, raw, label in domains:
+    keys = json.loads(raw)
+    if active not in keys:
+        raise SystemExit(f"{label} active key is missing from the keyring")
+    for key_id, encoded in keys.items():
+        material = base64.b64decode(encoded + "=" * (-len(encoded) % 4), validate=True)
+        previous = seen.get(material)
+        if previous is not None:
+            raise SystemExit(f"key material is reused between {previous} and {label}")
+        seen[material] = f"{label}/{key_id}"
 PY
 }
 
@@ -149,12 +191,33 @@ main() {
         [ -n "$JWT_SECRET" ] || { print_error "existing JWT_SECRET is empty"; exit 1; }
         [ -n "$TOTP_ENCRYPTION_KEY" ] || { print_error "existing TOTP_ENCRYPTION_KEY is empty"; exit 1; }
         [ -n "$POSTGRES_PASSWORD" ] || { print_error "existing POSTGRES_PASSWORD is empty"; exit 1; }
-        DATA_ENCRYPTION_ACTIVE_KEY_ID=$(read_env_value SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID)
-        DATA_ENCRYPTION_KEYS_JSON=$(read_env_value SUB2API_DATA_ENCRYPTION_KEYS_JSON)
-        BACKUP_ENCRYPTION_ACTIVE_KEY_ID=$(read_env_value SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID)
-        BACKUP_ENCRYPTION_KEYS_JSON=$(read_env_value SUB2API_BACKUP_ENCRYPTION_KEYS_JSON)
+        DATA_ENCRYPTION_ACTIVE_KEY_ID=$(read_env_value SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID || true)
+        DATA_ENCRYPTION_KEYS_JSON=$(read_env_value SUB2API_DATA_ENCRYPTION_KEYS_JSON || true)
+        GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID=$(read_env_value SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID || true)
+        GATEWAY_KEY_DIGEST_KEYS_JSON=$(read_env_value SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON || true)
+        BACKUP_ENCRYPTION_ACTIVE_KEY_ID=$(read_env_value SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID || true)
+        BACKUP_ENCRYPTION_KEYS_JSON=$(read_env_value SUB2API_BACKUP_ENCRYPTION_KEYS_JSON || true)
         validate_keyring_pair "$DATA_ENCRYPTION_ACTIVE_KEY_ID" "$DATA_ENCRYPTION_KEYS_JSON" data-encryption
+
+        if [ -z "$GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID" ] && [ -z "$GATEWAY_KEY_DIGEST_KEYS_JSON" ]; then
+            GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID=digest-v1
+            GATEWAY_KEY_DIGEST_KEY=$(generate_base64_key)
+            GATEWAY_KEY_DIGEST_KEYS_JSON="{\"digest-v1\":\"${GATEWAY_KEY_DIGEST_KEY}\"}"
+            print_info "Generated missing gateway-digest keyring for existing deployment"
+        fi
+        validate_keyring_pair "$GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID" "$GATEWAY_KEY_DIGEST_KEYS_JSON" gateway-digest
+
+        if [ -z "$BACKUP_ENCRYPTION_ACTIVE_KEY_ID" ] && [ -z "$BACKUP_ENCRYPTION_KEYS_JSON" ]; then
+            BACKUP_ENCRYPTION_ACTIVE_KEY_ID=backup-v1
+            BACKUP_ENCRYPTION_KEY=$(generate_base64_key)
+            BACKUP_ENCRYPTION_KEYS_JSON="{\"backup-v1\":\"${BACKUP_ENCRYPTION_KEY}\"}"
+            print_info "Generated missing backup-encryption keyring for existing deployment"
+        fi
         validate_keyring_pair "$BACKUP_ENCRYPTION_ACTIVE_KEY_ID" "$BACKUP_ENCRYPTION_KEYS_JSON" backup-encryption
+        validate_independent_keyrings \
+            "$DATA_ENCRYPTION_ACTIVE_KEY_ID" "$DATA_ENCRYPTION_KEYS_JSON" data-encryption \
+            "$GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID" "$GATEWAY_KEY_DIGEST_KEYS_JSON" gateway-digest \
+            "$BACKUP_ENCRYPTION_ACTIVE_KEY_ID" "$BACKUP_ENCRYPTION_KEYS_JSON" backup-encryption
         print_info "Preserving existing validated encryption keyrings"
     else
         JWT_SECRET=$(generate_secret)
@@ -163,9 +226,16 @@ main() {
         DATA_ENCRYPTION_ACTIVE_KEY_ID=data-v1
         DATA_ENCRYPTION_KEY=$(generate_base64_key)
         DATA_ENCRYPTION_KEYS_JSON="{\"data-v1\":\"${DATA_ENCRYPTION_KEY}\"}"
+        GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID=digest-v1
+        GATEWAY_KEY_DIGEST_KEY=$(generate_base64_key)
+        GATEWAY_KEY_DIGEST_KEYS_JSON="{\"digest-v1\":\"${GATEWAY_KEY_DIGEST_KEY}\"}"
         BACKUP_ENCRYPTION_ACTIVE_KEY_ID=backup-v1
         BACKUP_ENCRYPTION_KEY=$(generate_base64_key)
         BACKUP_ENCRYPTION_KEYS_JSON="{\"backup-v1\":\"${BACKUP_ENCRYPTION_KEY}\"}"
+        validate_independent_keyrings \
+            "$DATA_ENCRYPTION_ACTIVE_KEY_ID" "$DATA_ENCRYPTION_KEYS_JSON" data-encryption \
+            "$GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID" "$GATEWAY_KEY_DIGEST_KEYS_JSON" gateway-digest \
+            "$BACKUP_ENCRYPTION_ACTIVE_KEY_ID" "$BACKUP_ENCRYPTION_KEYS_JSON" backup-encryption
     fi
 
     # Create .env atomically under a restrictive umask. Secret values are
@@ -182,6 +252,8 @@ main() {
             POSTGRES_PASSWORD=*) printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD" ;;
             SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID=*) printf 'SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID=%s\n' "$DATA_ENCRYPTION_ACTIVE_KEY_ID" ;;
             SUB2API_DATA_ENCRYPTION_KEYS_JSON=*) printf 'SUB2API_DATA_ENCRYPTION_KEYS_JSON=%s\n' "$DATA_ENCRYPTION_KEYS_JSON" ;;
+            SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID=*) printf 'SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID=%s\n' "$GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID" ;;
+            SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON=*) printf 'SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON=%s\n' "$GATEWAY_KEY_DIGEST_KEYS_JSON" ;;
             SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID=*) printf 'SUB2API_BACKUP_ENCRYPTION_ACTIVE_KEY_ID=%s\n' "$BACKUP_ENCRYPTION_ACTIVE_KEY_ID" ;;
             SUB2API_BACKUP_ENCRYPTION_KEYS_JSON=*) printf 'SUB2API_BACKUP_ENCRYPTION_KEYS_JSON=%s\n' "$BACKUP_ENCRYPTION_KEYS_JSON" ;;
             *) printf '%s\n' "$line" ;;
@@ -190,7 +262,7 @@ main() {
     mv -f "$env_tmp" .env
     chmod 600 .env
     umask "$old_umask"
-    unset DATA_ENCRYPTION_ACTIVE_KEY_ID DATA_ENCRYPTION_KEY DATA_ENCRYPTION_KEYS_JSON BACKUP_ENCRYPTION_ACTIVE_KEY_ID BACKUP_ENCRYPTION_KEY BACKUP_ENCRYPTION_KEYS_JSON
+    unset DATA_ENCRYPTION_ACTIVE_KEY_ID DATA_ENCRYPTION_KEY DATA_ENCRYPTION_KEYS_JSON GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID GATEWAY_KEY_DIGEST_KEY GATEWAY_KEY_DIGEST_KEYS_JSON BACKUP_ENCRYPTION_ACTIVE_KEY_ID BACKUP_ENCRYPTION_KEY BACKUP_ENCRYPTION_KEYS_JSON
 
     # Create data directories
     print_info "Creating data directories..."
@@ -235,5 +307,8 @@ main() {
     echo ""
 }
 
-# Run main function
-main "$@"
+# Run main function when executed, while allowing contract tests to source the
+# validation helpers without performing a deployment.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi
