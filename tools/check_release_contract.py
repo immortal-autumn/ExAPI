@@ -45,6 +45,11 @@ for workflow in (
 
 require("frontend/package.json", '"packageManager": "pnpm@9.15.9"')
 require("frontend/package.json", '"node": ">=24 <25"')
+require("frontend/package.json", '"dompurify": "^3.4.13"')
+require("frontend/package.json", '"write-excel-file": "^4.1.1"')
+forbid("frontend/package.json", '"xlsx":')
+forbid("frontend/pnpm-lock.yaml", "xlsx@")
+forbid(".github/audit-exceptions.yml", "package: xlsx")
 require("Dockerfile", "corepack prepare pnpm@9.15.9 --activate")
 require("deploy/Dockerfile", "corepack prepare pnpm@9.15.9 --activate")
 

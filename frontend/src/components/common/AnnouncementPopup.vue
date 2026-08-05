@@ -87,9 +87,9 @@
 import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
-import DOMPurify from 'dompurify'
 import { useAnnouncementStore } from '@/stores/announcements'
 import { formatRelativeWithDateTime } from '@/utils/format'
+import { sanitizeHtml } from '@/utils/sanitize'
 
 const { t } = useI18n()
 const announcementStore = useAnnouncementStore()
@@ -103,7 +103,7 @@ const renderedContent = computed(() => {
   const content = announcementStore.currentPopup?.content
   if (!content) return ''
   const html = marked.parse(content) as string
-  return DOMPurify.sanitize(html)
+  return sanitizeHtml(html)
 })
 
 function handleDismiss() {

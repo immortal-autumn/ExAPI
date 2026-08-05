@@ -99,13 +99,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { marked } from 'marked'
-import DOMPurify from 'dompurify'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Input from '@/components/common/Input.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useAdminComplianceStore, useAppStore, useAuthStore } from '@/stores'
 import { getLocale } from '@/i18n'
+import { sanitizeHtml } from '@/utils/sanitize'
 import zhDocument from '../../../../docs/legal/admin-compliance.zh.md?raw'
 import enDocument from '../../../../docs/legal/admin-compliance.en.md?raw'
 
@@ -139,7 +139,7 @@ const inputError = computed(() => {
 })
 const renderedDocument = computed(() => {
   const html = marked.parse(currentDocument.value) as string
-  return DOMPurify.sanitize(html)
+  return sanitizeHtml(html)
 })
 
 watch(expectedPhrase, () => {
