@@ -107,10 +107,21 @@ FROM ${POSTGRES_IMAGE} AS pg-client
 # -----------------------------------------------------------------------------
 FROM ${ALPINE_IMAGE}
 
-# Labels
-LABEL maintainer="Wei-Shaw <github.com/Wei-Shaw>"
-LABEL description="ExAPI - AI API Gateway Platform"
-LABEL org.opencontainers.image.source="https://github.com/Wei-Shaw/sub2api"
+ARG VERSION
+ARG COMMIT
+ARG DATE
+
+# OCI provenance. Release builds must supply VERSION, COMMIT, and DATE.
+LABEL maintainer="ExAPI maintainers" \
+    org.opencontainers.image.title="ExAPI" \
+    org.opencontainers.image.description="Private multi-user AI API gateway" \
+    org.opencontainers.image.authors="ExAPI maintainers" \
+    org.opencontainers.image.url="https://github.com/immortal-autumn/Sub2API2Personal" \
+    org.opencontainers.image.source="https://github.com/immortal-autumn/Sub2API2Personal" \
+    org.opencontainers.image.version="${VERSION}" \
+    org.opencontainers.image.revision="${COMMIT}" \
+    org.opencontainers.image.created="${DATE}" \
+    org.opencontainers.image.licenses="MIT"
 
 # Install runtime dependencies
 RUN apk add --no-cache \
@@ -154,7 +165,7 @@ EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD wget -q -T 5 -O /dev/null http://localhost:${SERVER_PORT:-8080}/health || exit 1
+    CMD wget -q -T 5 -O /dev/null http://localhost:${SERVER_PORT:-8080}/ready || exit 1
 
 # Run the application (entrypoint fixes /app/data ownership then execs as sub2api)
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

@@ -48,6 +48,13 @@ require("frontend/package.json", '"node": ">=24 <25"')
 require("Dockerfile", "corepack prepare pnpm@9.15.9 --activate")
 require("deploy/Dockerfile", "corepack prepare pnpm@9.15.9 --activate")
 
+for path in ("Dockerfile", "deploy/Dockerfile", "Dockerfile.goreleaser"):
+    require(path, "org.opencontainers.image.title=\"ExAPI\"")
+    require(path, "org.opencontainers.image.source=\"https://github.com/immortal-autumn/Sub2API2Personal\"")
+    require(path, "http://localhost:${SERVER_PORT:-8080}/ready")
+    forbid(path, "http://localhost:${SERVER_PORT:-8080}/health")
+    forbid(path, "github.com/Wei-Shaw/sub2api")
+
 require(".github/workflows/release.yml", "quality-gate")
 require(".github/workflows/release.yml", "resolve-ref:")
 require(".github/workflows/release.yml", "needs: [resolve-ref, update-version, quality-gate]")
@@ -107,6 +114,16 @@ for path in (".goreleaser.yaml", ".goreleaser.simple.yaml"):
     forbid(path, "/sub2api:latest")
     forbid(path, "/sub2api2personal:latest")
     require(path, "go -C backend mod tidy -diff")
+    require(path, "-X main.Version={{.Version}}")
+    require(path, "--label=org.opencontainers.image.created={{ .Date }}")
+    require(path, "--label=org.opencontainers.image.source=https://github.com/{{ .Env.GITHUB_REPO_OWNER }}/{{ .Env.GITHUB_REPO_NAME }}")
+
+for stale in (
+    "${{ secrets.DOCKERHUB_USERNAME }}/sub2api\n",
+    "${DOCKERHUB_USERNAME}/sub2api\"",
+    "/pkgs/container/sub2api)",
+):
+    forbid(".github/workflows/release.yml", stale)
 
 for workflow in (ROOT / ".github/workflows").glob("*.yml"):
     for line_number, line in enumerate(workflow.read_text(encoding="utf-8").splitlines(), 1):

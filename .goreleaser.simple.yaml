@@ -22,6 +22,7 @@ builds:
       - amd64
     ldflags:
       - -s -w
+      - -X main.Version={{.Version}}
       - -X main.Commit={{.Commit}}
       - -X main.Date={{.Date}}
       - -X main.BuildType=release
@@ -52,6 +53,7 @@ dockers:
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.revision={{ .Commit }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
       - "--label=org.opencontainers.image.source=https://github.com/{{ .Env.GITHUB_REPO_OWNER }}/{{ .Env.GITHUB_REPO_NAME }}"
 
 # 跳过 manifests（单架构不需要）
