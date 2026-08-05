@@ -6,6 +6,8 @@ func TestIsPublicGatewayPath(t *testing.T) {
 	t.Parallel()
 
 	accepted := []string{
+		"/health",
+		"/ready",
 		"/models",
 		"/v1/models",
 		"/responses",
@@ -46,6 +48,7 @@ func TestIsAPIPath(t *testing.T) {
 		"/antigravity/v1/messages",
 		"/setup/init",
 		"/health",
+		"/ready",
 		"/responses",
 		"/responses/compact",
 		"/chat/completions",

@@ -15,11 +15,14 @@ const (
 	VideosGenerationsPath = "/videos/generations"
 	VideosStatusPath      = "/videos/:request_id"
 	AlphaSearchPath       = "/alpha/search"
+	HealthPath            = "/health"
+	ReadyPath             = "/ready"
 )
 
 func IsPublicGatewayPath(path string) bool {
 	path = strings.TrimSpace(path)
-	if path == "/health" ||
+	if path == HealthPath ||
+		path == ReadyPath ||
 		path == ModelsPath ||
 		path == ChatCompletionsPath ||
 		path == EmbeddingsPath ||
@@ -46,7 +49,8 @@ func IsPublicGatewayPath(path string) bool {
 func IsAPIPath(path string) bool {
 	path = strings.TrimSpace(path)
 
-	if path == "/health" ||
+	if path == HealthPath ||
+		path == ReadyPath ||
 		path == ModelsPath ||
 		path == ChatCompletionsPath ||
 		path == EmbeddingsPath ||

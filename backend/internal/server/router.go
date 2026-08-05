@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"sync/atomic"
 	"time"
@@ -34,6 +36,7 @@ func SetupRouter(
 	opsService *service.OpsService,
 	settingService *service.SettingService,
 	cfg *config.Config,
+	db *sql.DB,
 	redisClient *redis.Client,
 ) *gin.Engine {
 	middleware2.SetIngressRejectRecorder(opsService)
@@ -92,7 +95,7 @@ func SetupRouter(
 	}
 
 	// 注册路由
-	registerRoutes(r, handlers, jwtAuth, adminAuth, apiKeyAuth, auditLog, stepUpAuth, apiKeyService, subscriptionService, opsService, settingService, cfg, redisClient)
+	registerRoutes(r, handlers, jwtAuth, adminAuth, apiKeyAuth, auditLog, stepUpAuth, apiKeyService, subscriptionService, opsService, settingService, cfg, db, redisClient)
 
 	return r
 }
@@ -111,20 +114,12 @@ func registerRoutes(
 	opsService *service.OpsService,
 	settingService *service.SettingService,
 	cfg *config.Config,
+	db *sql.DB,
 	redisClient *redis.Client,
 ) {
 	// 通用路由（健康检查、状态等）
 	routes.RegisterCommonRoutes(r, func(ctx context.Context) error {
-		if settingService == nil {
-			return errors.New("setting service unavailable")
-		}
-		if _, err := settingService.GetFrameSrcOrigins(ctx); err != nil {
-			return err
-		}
-		if redisClient == nil {
-			return errors.New("redis unavailable")
-		}
-		return redisClient.Ping(ctx).Err()
+		return probeReadiness(ctx, db, redisClient)
 	})
 
 	// API v1
@@ -140,4 +135,29 @@ func registerRoutes(
 	}
 
 	handler.RegisterPageRoutes(v1, cfg.Pricing.DataDir, gin.HandlerFunc(jwtAuth), gin.HandlerFunc(adminAuth), settingService)
+}
+
+func probeReadiness(ctx context.Context, db *sql.DB, redisClient *redis.Client) error {
+	if db == nil {
+		return errors.New("database unavailable")
+	}
+	if err := db.PingContext(ctx); err != nil {
+		return fmt.Errorf("database ping: %w", err)
+	}
+
+	var migrationsApplied bool
+	if err := db.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM schema_migrations)").Scan(&migrationsApplied); err != nil {
+		return fmt.Errorf("schema migrations check: %w", err)
+	}
+	if !migrationsApplied {
+		return errors.New("schema migrations unavailable")
+	}
+
+	if redisClient == nil {
+		return errors.New("redis unavailable")
+	}
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("redis ping: %w", err)
+	}
+	return nil
 }
