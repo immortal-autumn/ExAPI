@@ -14,6 +14,7 @@ SKIP_PARTS = {
     "build",
     ".pnpm-store",
     "coverage",
+    "tmp",
 }
 EXTS = {
     ".vue",

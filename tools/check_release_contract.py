@@ -31,13 +31,32 @@ for required in (
 for required in (
     "GOTOOLCHAIN=auto go test -race ./internal/...",
     "GOTOOLCHAIN=auto go mod tidy -diff",
+    "python3 tools/check_release_contract.py",
 ):
     require(".github/workflows/backend-ci.yml", required)
+
+for workflow in (
+    ".github/workflows/backend-ci.yml",
+    ".github/workflows/security-scan.yml",
+    ".github/workflows/release.yml",
+):
+    require(workflow, "node-version: '24'")
+    require(workflow, "version: 9.15.9")
+
+require("frontend/package.json", '"packageManager": "pnpm@9.15.9"')
+require("frontend/package.json", '"node": ">=24 <25"')
+require("Dockerfile", "corepack prepare pnpm@9.15.9 --activate")
+require("deploy/Dockerfile", "corepack prepare pnpm@9.15.9 --activate")
 
 require(".github/workflows/release.yml", "quality-gate")
 require(".github/workflows/release.yml", "resolve-ref:")
 require(".github/workflows/release.yml", "needs: [resolve-ref, update-version, quality-gate]")
 require(".github/workflows/release.yml", "ref: ${{ needs.resolve-ref.outputs.sha }}")
+require(".github/workflows/release.yml", "python3 tools/check_release_contract.py")
+release_lines = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8").splitlines()
+backend_gate_index = release_lines.index("      - name: Backend unit and integration tests")
+if release_lines[backend_gate_index + 1].strip() != "working-directory: backend":
+    raise SystemExit(".github/workflows/release.yml: backend quality gate must run in backend/")
 release_workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
 if release_workflow.count("ref: ${{ github.event.inputs.tag || github.ref }}") != 1:
     raise SystemExit(".github/workflows/release.yml: the mutable event ref may only be used by resolve-ref")

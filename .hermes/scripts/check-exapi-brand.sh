@@ -16,7 +16,7 @@ matches=$(rg -n --hidden \
   --glob '!scripts/check-exapi-brand.sh' \
   'Sub2API|Sub2Api|SUB2API' \
   frontend/index.html frontend/src backend/cmd backend/internal deploy Dockerfile Dockerfile.goreleaser .goreleaser.yaml .goreleaser.simple.yaml 2>/dev/null \
-  | rg -v 'github.com/Wei-Shaw/sub2api|otpauth://totp/Sub2API|SUB2API_|X-Sub2API-Grok-Client-Tool-Cache|sub2apipay|Sub2ApiPay|Sub2API-compatible|upstream Sub2API|derived from|compatibility|Historical|original upstream|NestedSub2API|frontend/src/i18n/__tests__/brand-copy.spec.ts' || true)
+  | rg -v 'github.com/Wei-Shaw/sub2api|immortal-autumn/Sub2API2Personal|otpauth://totp/Sub2API|SUB2API_|X-Sub2API-Grok-Client-Tool-Cache|sub2apipay|Sub2ApiPay|Sub2API-compatible|upstream Sub2API|derived from|compatibility|Historical|original upstream|NestedSub2API|frontend/src/i18n/__tests__/brand-copy.spec.ts' || true)
 
 if [[ -n "$matches" ]]; then
   printf '%s\n' "$matches" >&2
