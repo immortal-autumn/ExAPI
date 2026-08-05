@@ -2,6 +2,10 @@
 
 This directory contains files for deploying ExAPI on Linux servers.
 
+Production promotion and rollback gates are documented in
+[`PRODUCTION_ROLLOUT.md`](PRODUCTION_ROLLOUT.md). The runbook uses an isolated,
+digest-pinned Compose project for canary validation before production changes.
+
 ## Deployment Methods
 
 | Method | Best For | Setup Wizard |
@@ -28,6 +32,7 @@ This directory contains files for deploying ExAPI on Linux servers.
 | `DATAMANAGEMENTD_CN.md` | datamanagementd 部署与联动说明（中文） |
 | `config.example.yaml` | Example configuration file |
 | `EDGE_SECURITY.md` | Reverse proxy, CDN/WAF, trusted proxy, and ingress hardening guide |
+| `PRODUCTION_ROLLOUT.md` | Backup, restore, canary, promotion, and rollback gates |
 
 ---
 

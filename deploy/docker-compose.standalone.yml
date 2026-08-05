@@ -13,7 +13,7 @@
 services:
   sub2api:
     image: ${EXAPI_IMAGE:?Set EXAPI_IMAGE to an immutable ghcr.io/immortal-autumn/sub2api2personal@sha256:<digest> reference}
-    container_name: sub2api
+    container_name: ${EXAPI_CONTAINER_NAME:-sub2api}
     restart: unless-stopped
     ulimits:
       nofile:

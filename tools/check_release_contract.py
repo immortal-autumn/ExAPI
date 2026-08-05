@@ -107,9 +107,12 @@ for path in (
 ):
     require(path, "SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID=${SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID:?")
     require(path, "SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON=${SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON:?")
+    require(path, "container_name: ${EXAPI_CONTAINER_NAME:-")
 
 require("deploy/install.sh", "validate_runtime_keyring_independence")
 require("deploy/docker-deploy.sh", "validate_independent_keyrings")
+require("deploy/PRODUCTION_ROLLOUT.md", "COMPOSE_PROJECT_NAME=exapi-canary")
+require("deploy/PRODUCTION_ROLLOUT.md", "@sha256:REPLACE_WITH_REVIEWED_DIGEST")
 
 require("deploy/apple-container.sh", "validate_immutable_app_image")
 require("deploy/apple-container.sh", "SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON")
