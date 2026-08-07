@@ -297,6 +297,18 @@ func (f PromoCodeUsageFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Val
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PromoCodeUsageMutation", m)
 }
 
+// The ProtectedSettingFunc type is an adapter to allow the use of ordinary
+// function as ProtectedSetting mutator.
+type ProtectedSettingFunc func(context.Context, *ent.ProtectedSettingMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ProtectedSettingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ProtectedSettingMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ProtectedSettingMutation", m)
+}
+
 // The ProxyFunc type is an adapter to allow the use of ordinary
 // function as Proxy mutator.
 type ProxyFunc func(context.Context, *ent.ProxyMutation) (ent.Value, error)

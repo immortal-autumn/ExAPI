@@ -37,6 +37,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/predicate"
 	"github.com/Wei-Shaw/sub2api/ent/promocode"
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
+	"github.com/Wei-Shaw/sub2api/ent/protectedsetting"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
@@ -87,6 +88,7 @@ const (
 	TypePendingAuthSession            = "PendingAuthSession"
 	TypePromoCode                     = "PromoCode"
 	TypePromoCodeUsage                = "PromoCodeUsage"
+	TypeProtectedSetting              = "ProtectedSetting"
 	TypeProxy                         = "Proxy"
 	TypeRedeemCode                    = "RedeemCode"
 	TypeSecuritySecret                = "SecuritySecret"
@@ -30732,6 +30734,7 @@ type PaymentProviderInstanceMutation struct {
 	provider_key      *string
 	name              *string
 	_config           *string
+	config_encrypted  *string
 	supported_types   *string
 	enabled           *bool
 	payment_mode      *string
@@ -30952,6 +30955,55 @@ func (m *PaymentProviderInstanceMutation) OldConfig(ctx context.Context) (v stri
 // ResetConfig resets all changes to the "config" field.
 func (m *PaymentProviderInstanceMutation) ResetConfig() {
 	m._config = nil
+}
+
+// SetConfigEncrypted sets the "config_encrypted" field.
+func (m *PaymentProviderInstanceMutation) SetConfigEncrypted(s string) {
+	m.config_encrypted = &s
+}
+
+// ConfigEncrypted returns the value of the "config_encrypted" field in the mutation.
+func (m *PaymentProviderInstanceMutation) ConfigEncrypted() (r string, exists bool) {
+	v := m.config_encrypted
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldConfigEncrypted returns the old "config_encrypted" field's value of the PaymentProviderInstance entity.
+// If the PaymentProviderInstance object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PaymentProviderInstanceMutation) OldConfigEncrypted(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldConfigEncrypted is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldConfigEncrypted requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldConfigEncrypted: %w", err)
+	}
+	return oldValue.ConfigEncrypted, nil
+}
+
+// ClearConfigEncrypted clears the value of the "config_encrypted" field.
+func (m *PaymentProviderInstanceMutation) ClearConfigEncrypted() {
+	m.config_encrypted = nil
+	m.clearedFields[paymentproviderinstance.FieldConfigEncrypted] = struct{}{}
+}
+
+// ConfigEncryptedCleared returns if the "config_encrypted" field was cleared in this mutation.
+func (m *PaymentProviderInstanceMutation) ConfigEncryptedCleared() bool {
+	_, ok := m.clearedFields[paymentproviderinstance.FieldConfigEncrypted]
+	return ok
+}
+
+// ResetConfigEncrypted resets all changes to the "config_encrypted" field.
+func (m *PaymentProviderInstanceMutation) ResetConfigEncrypted() {
+	m.config_encrypted = nil
+	delete(m.clearedFields, paymentproviderinstance.FieldConfigEncrypted)
 }
 
 // SetSupportedTypes sets the "supported_types" field.
@@ -31332,7 +31384,7 @@ func (m *PaymentProviderInstanceMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PaymentProviderInstanceMutation) Fields() []string {
-	fields := make([]string, 0, 12)
+	fields := make([]string, 0, 13)
 	if m.provider_key != nil {
 		fields = append(fields, paymentproviderinstance.FieldProviderKey)
 	}
@@ -31341,6 +31393,9 @@ func (m *PaymentProviderInstanceMutation) Fields() []string {
 	}
 	if m._config != nil {
 		fields = append(fields, paymentproviderinstance.FieldConfig)
+	}
+	if m.config_encrypted != nil {
+		fields = append(fields, paymentproviderinstance.FieldConfigEncrypted)
 	}
 	if m.supported_types != nil {
 		fields = append(fields, paymentproviderinstance.FieldSupportedTypes)
@@ -31383,6 +31438,8 @@ func (m *PaymentProviderInstanceMutation) Field(name string) (ent.Value, bool) {
 		return m.Name()
 	case paymentproviderinstance.FieldConfig:
 		return m.Config()
+	case paymentproviderinstance.FieldConfigEncrypted:
+		return m.ConfigEncrypted()
 	case paymentproviderinstance.FieldSupportedTypes:
 		return m.SupportedTypes()
 	case paymentproviderinstance.FieldEnabled:
@@ -31416,6 +31473,8 @@ func (m *PaymentProviderInstanceMutation) OldField(ctx context.Context, name str
 		return m.OldName(ctx)
 	case paymentproviderinstance.FieldConfig:
 		return m.OldConfig(ctx)
+	case paymentproviderinstance.FieldConfigEncrypted:
+		return m.OldConfigEncrypted(ctx)
 	case paymentproviderinstance.FieldSupportedTypes:
 		return m.OldSupportedTypes(ctx)
 	case paymentproviderinstance.FieldEnabled:
@@ -31463,6 +31522,13 @@ func (m *PaymentProviderInstanceMutation) SetField(name string, value ent.Value)
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetConfig(v)
+		return nil
+	case paymentproviderinstance.FieldConfigEncrypted:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetConfigEncrypted(v)
 		return nil
 	case paymentproviderinstance.FieldSupportedTypes:
 		v, ok := value.(string)
@@ -31571,7 +31637,11 @@ func (m *PaymentProviderInstanceMutation) AddField(name string, value ent.Value)
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *PaymentProviderInstanceMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(paymentproviderinstance.FieldConfigEncrypted) {
+		fields = append(fields, paymentproviderinstance.FieldConfigEncrypted)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -31584,6 +31654,11 @@ func (m *PaymentProviderInstanceMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *PaymentProviderInstanceMutation) ClearField(name string) error {
+	switch name {
+	case paymentproviderinstance.FieldConfigEncrypted:
+		m.ClearConfigEncrypted()
+		return nil
+	}
 	return fmt.Errorf("unknown PaymentProviderInstance nullable field %s", name)
 }
 
@@ -31599,6 +31674,9 @@ func (m *PaymentProviderInstanceMutation) ResetField(name string) error {
 		return nil
 	case paymentproviderinstance.FieldConfig:
 		m.ResetConfig()
+		return nil
+	case paymentproviderinstance.FieldConfigEncrypted:
+		m.ResetConfigEncrypted()
 		return nil
 	case paymentproviderinstance.FieldSupportedTypes:
 		m.ResetSupportedTypes()
@@ -34936,6 +35014,440 @@ func (m *PromoCodeUsageMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown PromoCodeUsage edge %s", name)
 }
 
+// ProtectedSettingMutation represents an operation that mutates the ProtectedSetting nodes in the graph.
+type ProtectedSettingMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int64
+	key           *string
+	envelope      *string
+	updated_at    *time.Time
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*ProtectedSetting, error)
+	predicates    []predicate.ProtectedSetting
+}
+
+var _ ent.Mutation = (*ProtectedSettingMutation)(nil)
+
+// protectedsettingOption allows management of the mutation configuration using functional options.
+type protectedsettingOption func(*ProtectedSettingMutation)
+
+// newProtectedSettingMutation creates new mutation for the ProtectedSetting entity.
+func newProtectedSettingMutation(c config, op Op, opts ...protectedsettingOption) *ProtectedSettingMutation {
+	m := &ProtectedSettingMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeProtectedSetting,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withProtectedSettingID sets the ID field of the mutation.
+func withProtectedSettingID(id int64) protectedsettingOption {
+	return func(m *ProtectedSettingMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *ProtectedSetting
+		)
+		m.oldValue = func(ctx context.Context) (*ProtectedSetting, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().ProtectedSetting.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withProtectedSetting sets the old ProtectedSetting of the mutation.
+func withProtectedSetting(node *ProtectedSetting) protectedsettingOption {
+	return func(m *ProtectedSettingMutation) {
+		m.oldValue = func(context.Context) (*ProtectedSetting, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ProtectedSettingMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ProtectedSettingMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ProtectedSettingMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ProtectedSettingMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().ProtectedSetting.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetKey sets the "key" field.
+func (m *ProtectedSettingMutation) SetKey(s string) {
+	m.key = &s
+}
+
+// Key returns the value of the "key" field in the mutation.
+func (m *ProtectedSettingMutation) Key() (r string, exists bool) {
+	v := m.key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKey returns the old "key" field's value of the ProtectedSetting entity.
+// If the ProtectedSetting object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProtectedSettingMutation) OldKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKey: %w", err)
+	}
+	return oldValue.Key, nil
+}
+
+// ResetKey resets all changes to the "key" field.
+func (m *ProtectedSettingMutation) ResetKey() {
+	m.key = nil
+}
+
+// SetEnvelope sets the "envelope" field.
+func (m *ProtectedSettingMutation) SetEnvelope(s string) {
+	m.envelope = &s
+}
+
+// Envelope returns the value of the "envelope" field in the mutation.
+func (m *ProtectedSettingMutation) Envelope() (r string, exists bool) {
+	v := m.envelope
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEnvelope returns the old "envelope" field's value of the ProtectedSetting entity.
+// If the ProtectedSetting object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProtectedSettingMutation) OldEnvelope(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEnvelope is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEnvelope requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEnvelope: %w", err)
+	}
+	return oldValue.Envelope, nil
+}
+
+// ResetEnvelope resets all changes to the "envelope" field.
+func (m *ProtectedSettingMutation) ResetEnvelope() {
+	m.envelope = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *ProtectedSettingMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *ProtectedSettingMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the ProtectedSetting entity.
+// If the ProtectedSetting object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProtectedSettingMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *ProtectedSettingMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the ProtectedSettingMutation builder.
+func (m *ProtectedSettingMutation) Where(ps ...predicate.ProtectedSetting) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ProtectedSettingMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ProtectedSettingMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.ProtectedSetting, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ProtectedSettingMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ProtectedSettingMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (ProtectedSetting).
+func (m *ProtectedSettingMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ProtectedSettingMutation) Fields() []string {
+	fields := make([]string, 0, 3)
+	if m.key != nil {
+		fields = append(fields, protectedsetting.FieldKey)
+	}
+	if m.envelope != nil {
+		fields = append(fields, protectedsetting.FieldEnvelope)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, protectedsetting.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ProtectedSettingMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case protectedsetting.FieldKey:
+		return m.Key()
+	case protectedsetting.FieldEnvelope:
+		return m.Envelope()
+	case protectedsetting.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ProtectedSettingMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case protectedsetting.FieldKey:
+		return m.OldKey(ctx)
+	case protectedsetting.FieldEnvelope:
+		return m.OldEnvelope(ctx)
+	case protectedsetting.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown ProtectedSetting field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ProtectedSettingMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case protectedsetting.FieldKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKey(v)
+		return nil
+	case protectedsetting.FieldEnvelope:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEnvelope(v)
+		return nil
+	case protectedsetting.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ProtectedSetting field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ProtectedSettingMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ProtectedSettingMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ProtectedSettingMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown ProtectedSetting numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ProtectedSettingMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ProtectedSettingMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ProtectedSettingMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown ProtectedSetting nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ProtectedSettingMutation) ResetField(name string) error {
+	switch name {
+	case protectedsetting.FieldKey:
+		m.ResetKey()
+		return nil
+	case protectedsetting.FieldEnvelope:
+		m.ResetEnvelope()
+		return nil
+	case protectedsetting.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown ProtectedSetting field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ProtectedSettingMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ProtectedSettingMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ProtectedSettingMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ProtectedSettingMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ProtectedSettingMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ProtectedSettingMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ProtectedSettingMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown ProtectedSetting unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ProtectedSettingMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown ProtectedSetting edge %s", name)
+}
+
 // ProxyMutation represents an operation that mutates the Proxy nodes in the graph.
 type ProxyMutation struct {
 	config
@@ -34952,6 +35464,7 @@ type ProxyMutation struct {
 	addport             *int
 	username            *string
 	password            *string
+	password_encrypted  *string
 	status              *string
 	expires_at          *time.Time
 	fallback_mode       *string
@@ -35449,6 +35962,55 @@ func (m *ProxyMutation) ResetPassword() {
 	delete(m.clearedFields, proxy.FieldPassword)
 }
 
+// SetPasswordEncrypted sets the "password_encrypted" field.
+func (m *ProxyMutation) SetPasswordEncrypted(s string) {
+	m.password_encrypted = &s
+}
+
+// PasswordEncrypted returns the value of the "password_encrypted" field in the mutation.
+func (m *ProxyMutation) PasswordEncrypted() (r string, exists bool) {
+	v := m.password_encrypted
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPasswordEncrypted returns the old "password_encrypted" field's value of the Proxy entity.
+// If the Proxy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProxyMutation) OldPasswordEncrypted(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPasswordEncrypted is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPasswordEncrypted requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPasswordEncrypted: %w", err)
+	}
+	return oldValue.PasswordEncrypted, nil
+}
+
+// ClearPasswordEncrypted clears the value of the "password_encrypted" field.
+func (m *ProxyMutation) ClearPasswordEncrypted() {
+	m.password_encrypted = nil
+	m.clearedFields[proxy.FieldPasswordEncrypted] = struct{}{}
+}
+
+// PasswordEncryptedCleared returns if the "password_encrypted" field was cleared in this mutation.
+func (m *ProxyMutation) PasswordEncryptedCleared() bool {
+	_, ok := m.clearedFields[proxy.FieldPasswordEncrypted]
+	return ok
+}
+
+// ResetPasswordEncrypted resets all changes to the "password_encrypted" field.
+func (m *ProxyMutation) ResetPasswordEncrypted() {
+	m.password_encrypted = nil
+	delete(m.clearedFields, proxy.FieldPasswordEncrypted)
+}
+
 // SetStatus sets the "status" field.
 func (m *ProxyMutation) SetStatus(s string) {
 	m.status = &s
@@ -35790,7 +36352,7 @@ func (m *ProxyMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ProxyMutation) Fields() []string {
-	fields := make([]string, 0, 14)
+	fields := make([]string, 0, 15)
 	if m.created_at != nil {
 		fields = append(fields, proxy.FieldCreatedAt)
 	}
@@ -35817,6 +36379,9 @@ func (m *ProxyMutation) Fields() []string {
 	}
 	if m.password != nil {
 		fields = append(fields, proxy.FieldPassword)
+	}
+	if m.password_encrypted != nil {
+		fields = append(fields, proxy.FieldPasswordEncrypted)
 	}
 	if m.status != nil {
 		fields = append(fields, proxy.FieldStatus)
@@ -35859,6 +36424,8 @@ func (m *ProxyMutation) Field(name string) (ent.Value, bool) {
 		return m.Username()
 	case proxy.FieldPassword:
 		return m.Password()
+	case proxy.FieldPasswordEncrypted:
+		return m.PasswordEncrypted()
 	case proxy.FieldStatus:
 		return m.Status()
 	case proxy.FieldExpiresAt:
@@ -35896,6 +36463,8 @@ func (m *ProxyMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldUsername(ctx)
 	case proxy.FieldPassword:
 		return m.OldPassword(ctx)
+	case proxy.FieldPasswordEncrypted:
+		return m.OldPasswordEncrypted(ctx)
 	case proxy.FieldStatus:
 		return m.OldStatus(ctx)
 	case proxy.FieldExpiresAt:
@@ -35977,6 +36546,13 @@ func (m *ProxyMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPassword(v)
+		return nil
+	case proxy.FieldPasswordEncrypted:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPasswordEncrypted(v)
 		return nil
 	case proxy.FieldStatus:
 		v, ok := value.(string)
@@ -36079,6 +36655,9 @@ func (m *ProxyMutation) ClearedFields() []string {
 	if m.FieldCleared(proxy.FieldPassword) {
 		fields = append(fields, proxy.FieldPassword)
 	}
+	if m.FieldCleared(proxy.FieldPasswordEncrypted) {
+		fields = append(fields, proxy.FieldPasswordEncrypted)
+	}
 	if m.FieldCleared(proxy.FieldExpiresAt) {
 		fields = append(fields, proxy.FieldExpiresAt)
 	}
@@ -36107,6 +36686,9 @@ func (m *ProxyMutation) ClearField(name string) error {
 		return nil
 	case proxy.FieldPassword:
 		m.ClearPassword()
+		return nil
+	case proxy.FieldPasswordEncrypted:
+		m.ClearPasswordEncrypted()
 		return nil
 	case proxy.FieldExpiresAt:
 		m.ClearExpiresAt()
@@ -36148,6 +36730,9 @@ func (m *ProxyMutation) ResetField(name string) error {
 		return nil
 	case proxy.FieldPassword:
 		m.ResetPassword()
+		return nil
+	case proxy.FieldPasswordEncrypted:
+		m.ResetPasswordEncrypted()
 		return nil
 	case proxy.FieldStatus:
 		m.ResetStatus()

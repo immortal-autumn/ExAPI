@@ -70,6 +70,26 @@ func (_u *PaymentProviderInstanceUpdate) SetNillableConfig(v *string) *PaymentPr
 	return _u
 }
 
+// SetConfigEncrypted sets the "config_encrypted" field.
+func (_u *PaymentProviderInstanceUpdate) SetConfigEncrypted(v string) *PaymentProviderInstanceUpdate {
+	_u.mutation.SetConfigEncrypted(v)
+	return _u
+}
+
+// SetNillableConfigEncrypted sets the "config_encrypted" field if the given value is not nil.
+func (_u *PaymentProviderInstanceUpdate) SetNillableConfigEncrypted(v *string) *PaymentProviderInstanceUpdate {
+	if v != nil {
+		_u.SetConfigEncrypted(*v)
+	}
+	return _u
+}
+
+// ClearConfigEncrypted clears the value of the "config_encrypted" field.
+func (_u *PaymentProviderInstanceUpdate) ClearConfigEncrypted() *PaymentProviderInstanceUpdate {
+	_u.mutation.ClearConfigEncrypted()
+	return _u
+}
+
 // SetSupportedTypes sets the "supported_types" field.
 func (_u *PaymentProviderInstanceUpdate) SetSupportedTypes(v string) *PaymentProviderInstanceUpdate {
 	_u.mutation.SetSupportedTypes(v)
@@ -268,6 +288,12 @@ func (_u *PaymentProviderInstanceUpdate) sqlSave(ctx context.Context) (_node int
 	if value, ok := _u.mutation.Config(); ok {
 		_spec.SetField(paymentproviderinstance.FieldConfig, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.ConfigEncrypted(); ok {
+		_spec.SetField(paymentproviderinstance.FieldConfigEncrypted, field.TypeString, value)
+	}
+	if _u.mutation.ConfigEncryptedCleared() {
+		_spec.ClearField(paymentproviderinstance.FieldConfigEncrypted, field.TypeString)
+	}
 	if value, ok := _u.mutation.SupportedTypes(); ok {
 		_spec.SetField(paymentproviderinstance.FieldSupportedTypes, field.TypeString, value)
 	}
@@ -354,6 +380,26 @@ func (_u *PaymentProviderInstanceUpdateOne) SetNillableConfig(v *string) *Paymen
 	if v != nil {
 		_u.SetConfig(*v)
 	}
+	return _u
+}
+
+// SetConfigEncrypted sets the "config_encrypted" field.
+func (_u *PaymentProviderInstanceUpdateOne) SetConfigEncrypted(v string) *PaymentProviderInstanceUpdateOne {
+	_u.mutation.SetConfigEncrypted(v)
+	return _u
+}
+
+// SetNillableConfigEncrypted sets the "config_encrypted" field if the given value is not nil.
+func (_u *PaymentProviderInstanceUpdateOne) SetNillableConfigEncrypted(v *string) *PaymentProviderInstanceUpdateOne {
+	if v != nil {
+		_u.SetConfigEncrypted(*v)
+	}
+	return _u
+}
+
+// ClearConfigEncrypted clears the value of the "config_encrypted" field.
+func (_u *PaymentProviderInstanceUpdateOne) ClearConfigEncrypted() *PaymentProviderInstanceUpdateOne {
+	_u.mutation.ClearConfigEncrypted()
 	return _u
 }
 
@@ -584,6 +630,12 @@ func (_u *PaymentProviderInstanceUpdateOne) sqlSave(ctx context.Context) (_node 
 	}
 	if value, ok := _u.mutation.Config(); ok {
 		_spec.SetField(paymentproviderinstance.FieldConfig, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ConfigEncrypted(); ok {
+		_spec.SetField(paymentproviderinstance.FieldConfigEncrypted, field.TypeString, value)
+	}
+	if _u.mutation.ConfigEncryptedCleared() {
+		_spec.ClearField(paymentproviderinstance.FieldConfigEncrypted, field.TypeString)
 	}
 	if value, ok := _u.mutation.SupportedTypes(); ok {
 		_spec.SetField(paymentproviderinstance.FieldSupportedTypes, field.TypeString, value)

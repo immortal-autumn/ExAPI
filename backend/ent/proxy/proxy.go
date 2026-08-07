@@ -33,6 +33,8 @@ const (
 	FieldUsername = "username"
 	// FieldPassword holds the string denoting the password field in the database.
 	FieldPassword = "password"
+	// FieldPasswordEncrypted holds the string denoting the password_encrypted field in the database.
+	FieldPasswordEncrypted = "password_encrypted"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldExpiresAt holds the string denoting the expires_at field in the database.
@@ -74,6 +76,7 @@ var Columns = []string{
 	FieldPort,
 	FieldUsername,
 	FieldPassword,
+	FieldPasswordEncrypted,
 	FieldStatus,
 	FieldExpiresAt,
 	FieldFallbackMode,
@@ -178,6 +181,11 @@ func ByUsername(opts ...sql.OrderTermOption) OrderOption {
 // ByPassword orders the results by the password field.
 func ByPassword(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPassword, opts...).ToFunc()
+}
+
+// ByPasswordEncrypted orders the results by the password_encrypted field.
+func ByPasswordEncrypted(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPasswordEncrypted, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

@@ -1169,6 +1169,32 @@ func (s *AuthService) ValidateToken(tokenString string) (*JWTClaims, error) {
 	return nil, ErrInvalidToken
 }
 
+// ValidateAccessToken validates the JWT and then consults the server-side
+// session-family revocation marker. Redis errors fail closed so authentication
+// never silently accepts a session whose revocation state is unknown.
+func (s *AuthService) ValidateAccessToken(ctx context.Context, tokenString string) (*JWTClaims, error) {
+	claims, err := s.ValidateToken(tokenString)
+	if err != nil {
+		return claims, err
+	}
+	if claims.SessionID == "" || s.refreshTokenCache == nil {
+		return claims, nil
+	}
+	atomicCache, ok := s.refreshTokenCache.(AtomicRefreshTokenCache)
+	if !ok {
+		return claims, nil
+	}
+	revoked, err := atomicCache.IsTokenFamilyRevoked(ctx, claims.SessionID)
+	if err != nil {
+		logger.LegacyPrintf("service.auth", "[Auth] Failed to read session revocation state: %v", err)
+		return nil, ErrServiceUnavailable
+	}
+	if revoked {
+		return nil, ErrTokenRevoked
+	}
+	return claims, nil
+}
+
 func randomHexString(byteLength int) (string, error) {
 	if byteLength <= 0 {
 		byteLength = 16
@@ -1489,10 +1515,14 @@ func (s *AuthService) GenerateTokenPair(ctx context.Context, user *User, familyI
 		return nil, fmt.Errorf("generate access token: %w", err)
 	}
 
-	// 生成Refresh Token
-	refreshToken, err := s.generateRefreshToken(ctx, user, familyID)
+	// Generate and atomically install the refresh token plus both indexes.
+	refreshToken, tokenHash, data, ttl, err := s.generateRefreshTokenMaterial(ctx, user, familyID, time.Time{})
 	if err != nil {
 		return nil, fmt.Errorf("generate refresh token: %w", err)
+	}
+	if err := s.issueRefreshToken(ctx, tokenHash, data, ttl); err != nil {
+		logger.LegacyPrintf("service.auth", "[Auth] Failed to atomically issue refresh token: %v", err)
+		return nil, ErrServiceUnavailable
 	}
 
 	return &TokenPair{
@@ -1502,12 +1532,14 @@ func (s *AuthService) GenerateTokenPair(ctx context.Context, user *User, familyI
 	}, nil
 }
 
-// generateRefreshToken 生成并存储Refresh Token
-func (s *AuthService) generateRefreshToken(ctx context.Context, user *User, familyID string) (string, error) {
+// generateRefreshTokenMaterial creates token material without changing Redis.
+// familyExpiresAt is fixed by the initial issue and inherited by every child,
+// preventing rotation from extending a session family indefinitely.
+func (s *AuthService) generateRefreshTokenMaterial(ctx context.Context, user *User, familyID string, familyExpiresAt time.Time) (string, string, *RefreshTokenData, time.Duration, error) {
 	// 生成随机Token
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
-		return "", fmt.Errorf("generate random bytes: %w", err)
+		return "", "", nil, 0, fmt.Errorf("generate random bytes: %w", err)
 	}
 	rawToken := refreshTokenPrefix + hex.EncodeToString(tokenBytes)
 
@@ -1518,13 +1550,22 @@ func (s *AuthService) generateRefreshToken(ctx context.Context, user *User, fami
 	if familyID == "" {
 		familyBytes := make([]byte, 16)
 		if _, err := rand.Read(familyBytes); err != nil {
-			return "", fmt.Errorf("generate family id: %w", err)
+			return "", "", nil, 0, fmt.Errorf("generate family id: %w", err)
 		}
 		familyID = hex.EncodeToString(familyBytes)
 	}
 
 	now := time.Now()
-	ttl := time.Duration(s.cfg.JWT.RefreshTokenExpireDays) * 24 * time.Hour
+	if familyExpiresAt.IsZero() {
+		familyExpiresAt = now.Add(s.refreshTokenFamilyTTL())
+	}
+	ttl := time.Until(familyExpiresAt)
+	if ttl <= 0 {
+		return "", "", nil, 0, ErrRefreshTokenExpired
+	}
+	if ttl < time.Millisecond {
+		return "", "", nil, 0, ErrRefreshTokenExpired
+	}
 
 	data := &RefreshTokenData{
 		UserID:       user.ID,
@@ -1532,27 +1573,29 @@ func (s *AuthService) generateRefreshToken(ctx context.Context, user *User, fami
 		FamilyID:     familyID,
 		BindingHash:  sessionBindingHashFromContext(ctx),
 		CreatedAt:    now,
-		ExpiresAt:    now.Add(ttl),
+		ExpiresAt:    familyExpiresAt,
+	}
+	return rawToken, tokenHash, data, ttl, nil
+}
+
+func (s *AuthService) issueRefreshToken(ctx context.Context, tokenHash string, data *RefreshTokenData, ttl time.Duration) error {
+	if atomicCache, ok := s.refreshTokenCache.(AtomicRefreshTokenCache); ok {
+		return atomicCache.IssueRefreshToken(ctx, tokenHash, data, ttl)
 	}
 
-	// 存储Token数据
+	// Compatibility path for non-production cache implementations.
 	if err := s.refreshTokenCache.StoreRefreshToken(ctx, tokenHash, data, ttl); err != nil {
-		return "", fmt.Errorf("store refresh token: %w", err)
+		return fmt.Errorf("store refresh token: %w", err)
 	}
-
-	// 添加到用户Token集合
-	if err := s.refreshTokenCache.AddToUserTokenSet(ctx, user.ID, tokenHash, ttl); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to add token to user set: %v", err)
-		// 不影响主流程
+	if err := s.refreshTokenCache.AddToUserTokenSet(ctx, data.UserID, tokenHash, ttl); err != nil {
+		_ = s.refreshTokenCache.DeleteRefreshToken(ctx, tokenHash)
+		return fmt.Errorf("index refresh token by user: %w", err)
 	}
-
-	// 添加到家族Token集合
-	if err := s.refreshTokenCache.AddToFamilyTokenSet(ctx, familyID, tokenHash, ttl); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to add token to family set: %v", err)
-		// 不影响主流程
+	if err := s.refreshTokenCache.AddToFamilyTokenSet(ctx, data.FamilyID, tokenHash, ttl); err != nil {
+		_ = s.refreshTokenCache.DeleteRefreshToken(ctx, tokenHash)
+		return fmt.Errorf("index refresh token by family: %w", err)
 	}
-
-	return rawToken, nil
+	return nil
 }
 
 // RefreshTokenPair 使用Refresh Token刷新Token对
@@ -1560,7 +1603,7 @@ func (s *AuthService) generateRefreshToken(ctx context.Context, user *User, fami
 func (s *AuthService) RefreshTokenPair(ctx context.Context, refreshToken string) (*TokenPairWithUser, error) {
 	// 检查 refreshTokenCache 是否可用
 	if s.refreshTokenCache == nil {
-		return nil, ErrRefreshTokenInvalid
+		return nil, ErrServiceUnavailable
 	}
 
 	// 验证Token格式
@@ -1573,9 +1616,15 @@ func (s *AuthService) RefreshTokenPair(ctx context.Context, refreshToken string)
 	// 获取Token数据
 	data, err := s.refreshTokenCache.GetRefreshToken(ctx, tokenHash)
 	if err != nil {
+		if errors.Is(err, ErrRefreshTokenConsumed) && data != nil && data.FamilyID != "" {
+			if revokeErr := s.revokeTokenFamily(ctx, data.FamilyID, s.refreshTokenFamilyTTL()); revokeErr != nil {
+				logger.LegacyPrintf("service.auth", "[Auth] Failed to revoke replayed token family: %v", revokeErr)
+				return nil, ErrServiceUnavailable
+			}
+			return nil, ErrRefreshTokenReused
+		}
 		if errors.Is(err, ErrRefreshTokenNotFound) {
-			// Token不存在，可能是已被使用（Token轮转）或已过期
-			logger.LegacyPrintf("service.auth", "[Auth] Refresh token not found, possible reuse attack")
+			// Unknown hashes are invalid; only known tombstones are reuse.
 			return nil, ErrRefreshTokenInvalid
 		}
 		logger.LegacyPrintf("service.auth", "[Auth] Error getting refresh token: %v", err)
@@ -1594,7 +1643,9 @@ func (s *AuthService) RefreshTokenPair(ctx context.Context, refreshToken string)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
 			// 用户已删除，撤销整个Token家族
-			_ = s.refreshTokenCache.DeleteTokenFamily(ctx, data.FamilyID)
+			if revokeErr := s.revokeTokenFamily(ctx, data.FamilyID, s.refreshTokenFamilyTTL()); revokeErr != nil {
+				return nil, ErrServiceUnavailable
+			}
 			return nil, ErrRefreshTokenInvalid
 		}
 		logger.LegacyPrintf("service.auth", "[Auth] Database error getting user for token refresh: %v", err)
@@ -1604,14 +1655,18 @@ func (s *AuthService) RefreshTokenPair(ctx context.Context, refreshToken string)
 	// 检查用户状态
 	if !user.IsActive() {
 		// 用户被禁用，撤销整个Token家族
-		_ = s.refreshTokenCache.DeleteTokenFamily(ctx, data.FamilyID)
+		if err := s.revokeTokenFamily(ctx, data.FamilyID, s.refreshTokenFamilyTTL()); err != nil {
+			return nil, ErrServiceUnavailable
+		}
 		return nil, ErrUserNotActive
 	}
 
 	// 检查TokenVersion（密码更改后所有Token失效）
 	if data.TokenVersion != resolvedTokenVersion(user) {
 		// TokenVersion不匹配，撤销整个Token家族
-		_ = s.refreshTokenCache.DeleteTokenFamily(ctx, data.FamilyID)
+		if err := s.revokeTokenFamily(ctx, data.FamilyID, s.refreshTokenFamilyTTL()); err != nil {
+			return nil, ErrServiceUnavailable
+		}
 		return nil, ErrTokenRevoked
 	}
 
@@ -1619,26 +1674,49 @@ func (s *AuthService) RefreshTokenPair(ctx context.Context, refreshToken string)
 	// data.BindingHash 为空表示功能开启前签发的旧会话，放行并在轮转时补齐绑定。
 	if s.settingService != nil && s.settingService.IsSessionBindingEnabled(ctx) && data.BindingHash != "" {
 		if current := sessionBindingHashFromContext(ctx); current != "" && current != data.BindingHash {
-			_ = s.refreshTokenCache.DeleteTokenFamily(ctx, data.FamilyID)
+			if err := s.revokeTokenFamily(ctx, data.FamilyID, s.refreshTokenFamilyTTL()); err != nil {
+				return nil, ErrServiceUnavailable
+			}
 			logger.LegacyPrintf("service.auth", "[Auth] Session binding mismatch on refresh for user %d, family revoked", data.UserID)
 			return nil, ErrSessionBindingMismatch
 		}
 	}
 
-	// Token轮转：立即使旧Token失效
-	if err := s.refreshTokenCache.DeleteRefreshToken(ctx, tokenHash); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to delete old refresh token: %v", err)
-		// 继续处理，不影响主流程
-	}
-
-	// 生成新的Token对，保持同一个家族ID
-	pair, err := s.GenerateTokenPair(ctx, user, data.FamilyID)
+	// Generate the proposed child without exposing it, then atomically consume
+	// the parent and install the child plus indexes.
+	bindingHash := sessionBindingHashFromContext(ctx)
+	accessToken, err := s.generateAccessToken(user, data.FamilyID, bindingHash)
 	if err != nil {
 		return nil, err
 	}
+	refreshToken, childHash, child, ttl, err := s.generateRefreshTokenMaterial(ctx, user, data.FamilyID, data.ExpiresAt)
+	if err != nil {
+		return nil, err
+	}
+	atomicCache, ok := s.refreshTokenCache.(AtomicRefreshTokenCache)
+	if !ok {
+		return nil, ErrServiceUnavailable
+	}
+	if err := atomicCache.RotateRefreshToken(ctx, tokenHash, data, childHash, child, ttl); err != nil {
+		switch {
+		case errors.Is(err, ErrRefreshTokenConsumed):
+			return nil, ErrRefreshTokenReused
+		case errors.Is(err, ErrRefreshTokenFamilyRevoked):
+			return nil, ErrTokenRevoked
+		case errors.Is(err, ErrRefreshTokenNotFound):
+			return nil, ErrRefreshTokenInvalid
+		default:
+			logger.LegacyPrintf("service.auth", "[Auth] Atomic refresh rotation failed: %v", err)
+			return nil, ErrServiceUnavailable
+		}
+	}
 	return &TokenPairWithUser{
-		TokenPair: *pair,
-		UserRole:  user.Role,
+		TokenPair: TokenPair{
+			AccessToken:  accessToken,
+			RefreshToken: refreshToken,
+			ExpiresIn:    s.GetAccessTokenExpiresIn(),
+		},
+		UserRole: user.Role,
 	}, nil
 }
 
@@ -1652,7 +1730,20 @@ func (s *AuthService) RevokeRefreshToken(ctx context.Context, refreshToken strin
 	}
 
 	tokenHash := hashToken(refreshToken)
-	return s.refreshTokenCache.DeleteRefreshToken(ctx, tokenHash)
+	data, err := s.refreshTokenCache.GetRefreshToken(ctx, tokenHash)
+	if err != nil && !errors.Is(err, ErrRefreshTokenConsumed) {
+		if errors.Is(err, ErrRefreshTokenNotFound) {
+			return nil
+		}
+		return ErrServiceUnavailable
+	}
+	if data == nil || data.FamilyID == "" {
+		return nil
+	}
+	if err := s.revokeTokenFamily(ctx, data.FamilyID, s.refreshTokenFamilyTTL()); err != nil {
+		return ErrServiceUnavailable
+	}
+	return nil
 }
 
 // RevokeSessionFamily 撤销单个会话家族（该会话的所有 refresh token）。
@@ -1661,7 +1752,7 @@ func (s *AuthService) RevokeSessionFamily(ctx context.Context, familyID string) 
 	if s.refreshTokenCache == nil || familyID == "" {
 		return nil
 	}
-	return s.refreshTokenCache.DeleteTokenFamily(ctx, familyID)
+	return s.revokeTokenFamily(ctx, familyID, s.refreshTokenFamilyTTL())
 }
 
 // RevokeAllUserSessions 撤销用户的所有会话（所有Refresh Token）
@@ -1670,7 +1761,25 @@ func (s *AuthService) RevokeAllUserSessions(ctx context.Context, userID int64) e
 	if s.refreshTokenCache == nil {
 		return nil // No-op if cache not configured
 	}
+	if atomicCache, ok := s.refreshTokenCache.(AtomicRefreshTokenCache); ok {
+		return atomicCache.RevokeUserTokenFamilies(ctx, userID, s.refreshTokenFamilyTTL())
+	}
 	return s.refreshTokenCache.DeleteUserRefreshTokens(ctx, userID)
+}
+
+func (s *AuthService) revokeTokenFamily(ctx context.Context, familyID string, ttl time.Duration) error {
+	if atomicCache, ok := s.refreshTokenCache.(AtomicRefreshTokenCache); ok {
+		return atomicCache.RevokeTokenFamily(ctx, familyID, ttl)
+	}
+	return s.refreshTokenCache.DeleteTokenFamily(ctx, familyID)
+}
+
+func (s *AuthService) refreshTokenFamilyTTL() time.Duration {
+	days := s.cfg.JWT.RefreshTokenExpireDays
+	if days <= 0 {
+		days = 30
+	}
+	return time.Duration(days) * 24 * time.Hour
 }
 
 // RevokeAllUserTokens invalidates both stateless access tokens and refresh sessions.

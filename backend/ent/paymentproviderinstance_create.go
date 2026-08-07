@@ -48,6 +48,20 @@ func (_c *PaymentProviderInstanceCreate) SetConfig(v string) *PaymentProviderIns
 	return _c
 }
 
+// SetConfigEncrypted sets the "config_encrypted" field.
+func (_c *PaymentProviderInstanceCreate) SetConfigEncrypted(v string) *PaymentProviderInstanceCreate {
+	_c.mutation.SetConfigEncrypted(v)
+	return _c
+}
+
+// SetNillableConfigEncrypted sets the "config_encrypted" field if the given value is not nil.
+func (_c *PaymentProviderInstanceCreate) SetNillableConfigEncrypted(v *string) *PaymentProviderInstanceCreate {
+	if v != nil {
+		_c.SetConfigEncrypted(*v)
+	}
+	return _c
+}
+
 // SetSupportedTypes sets the "supported_types" field.
 func (_c *PaymentProviderInstanceCreate) SetSupportedTypes(v string) *PaymentProviderInstanceCreate {
 	_c.mutation.SetSupportedTypes(v)
@@ -348,6 +362,10 @@ func (_c *PaymentProviderInstanceCreate) createSpec() (*PaymentProviderInstance,
 		_spec.SetField(paymentproviderinstance.FieldConfig, field.TypeString, value)
 		_node.Config = value
 	}
+	if value, ok := _c.mutation.ConfigEncrypted(); ok {
+		_spec.SetField(paymentproviderinstance.FieldConfigEncrypted, field.TypeString, value)
+		_node.ConfigEncrypted = &value
+	}
 	if value, ok := _c.mutation.SupportedTypes(); ok {
 		_spec.SetField(paymentproviderinstance.FieldSupportedTypes, field.TypeString, value)
 		_node.SupportedTypes = value
@@ -469,6 +487,24 @@ func (u *PaymentProviderInstanceUpsert) SetConfig(v string) *PaymentProviderInst
 // UpdateConfig sets the "config" field to the value that was provided on create.
 func (u *PaymentProviderInstanceUpsert) UpdateConfig() *PaymentProviderInstanceUpsert {
 	u.SetExcluded(paymentproviderinstance.FieldConfig)
+	return u
+}
+
+// SetConfigEncrypted sets the "config_encrypted" field.
+func (u *PaymentProviderInstanceUpsert) SetConfigEncrypted(v string) *PaymentProviderInstanceUpsert {
+	u.Set(paymentproviderinstance.FieldConfigEncrypted, v)
+	return u
+}
+
+// UpdateConfigEncrypted sets the "config_encrypted" field to the value that was provided on create.
+func (u *PaymentProviderInstanceUpsert) UpdateConfigEncrypted() *PaymentProviderInstanceUpsert {
+	u.SetExcluded(paymentproviderinstance.FieldConfigEncrypted)
+	return u
+}
+
+// ClearConfigEncrypted clears the value of the "config_encrypted" field.
+func (u *PaymentProviderInstanceUpsert) ClearConfigEncrypted() *PaymentProviderInstanceUpsert {
+	u.SetNull(paymentproviderinstance.FieldConfigEncrypted)
 	return u
 }
 
@@ -658,6 +694,27 @@ func (u *PaymentProviderInstanceUpsertOne) SetConfig(v string) *PaymentProviderI
 func (u *PaymentProviderInstanceUpsertOne) UpdateConfig() *PaymentProviderInstanceUpsertOne {
 	return u.Update(func(s *PaymentProviderInstanceUpsert) {
 		s.UpdateConfig()
+	})
+}
+
+// SetConfigEncrypted sets the "config_encrypted" field.
+func (u *PaymentProviderInstanceUpsertOne) SetConfigEncrypted(v string) *PaymentProviderInstanceUpsertOne {
+	return u.Update(func(s *PaymentProviderInstanceUpsert) {
+		s.SetConfigEncrypted(v)
+	})
+}
+
+// UpdateConfigEncrypted sets the "config_encrypted" field to the value that was provided on create.
+func (u *PaymentProviderInstanceUpsertOne) UpdateConfigEncrypted() *PaymentProviderInstanceUpsertOne {
+	return u.Update(func(s *PaymentProviderInstanceUpsert) {
+		s.UpdateConfigEncrypted()
+	})
+}
+
+// ClearConfigEncrypted clears the value of the "config_encrypted" field.
+func (u *PaymentProviderInstanceUpsertOne) ClearConfigEncrypted() *PaymentProviderInstanceUpsertOne {
+	return u.Update(func(s *PaymentProviderInstanceUpsert) {
+		s.ClearConfigEncrypted()
 	})
 }
 
@@ -1030,6 +1087,27 @@ func (u *PaymentProviderInstanceUpsertBulk) SetConfig(v string) *PaymentProvider
 func (u *PaymentProviderInstanceUpsertBulk) UpdateConfig() *PaymentProviderInstanceUpsertBulk {
 	return u.Update(func(s *PaymentProviderInstanceUpsert) {
 		s.UpdateConfig()
+	})
+}
+
+// SetConfigEncrypted sets the "config_encrypted" field.
+func (u *PaymentProviderInstanceUpsertBulk) SetConfigEncrypted(v string) *PaymentProviderInstanceUpsertBulk {
+	return u.Update(func(s *PaymentProviderInstanceUpsert) {
+		s.SetConfigEncrypted(v)
+	})
+}
+
+// UpdateConfigEncrypted sets the "config_encrypted" field to the value that was provided on create.
+func (u *PaymentProviderInstanceUpsertBulk) UpdateConfigEncrypted() *PaymentProviderInstanceUpsertBulk {
+	return u.Update(func(s *PaymentProviderInstanceUpsert) {
+		s.UpdateConfigEncrypted()
+	})
+}
+
+// ClearConfigEncrypted clears the value of the "config_encrypted" field.
+func (u *PaymentProviderInstanceUpsertBulk) ClearConfigEncrypted() *PaymentProviderInstanceUpsertBulk {
+	return u.Update(func(s *PaymentProviderInstanceUpsert) {
+		s.ClearConfigEncrypted()
 	})
 }
 

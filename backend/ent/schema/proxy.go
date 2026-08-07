@@ -4,6 +4,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 
 	"entgo.io/ent"
+	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
@@ -49,6 +50,12 @@ func (Proxy) Fields() []ent.Field {
 			MaxLen(100).
 			Optional().
 			Nillable(),
+		field.String("password_encrypted").
+			SchemaType(map[string]string{dialect.Postgres: "text"}).
+			Optional().
+			Nillable().
+			Sensitive().
+			Comment("Purpose-bound data-encryption envelope; preferred over legacy password."),
 		field.String("status").
 			MaxLen(20).
 			Default("active"),

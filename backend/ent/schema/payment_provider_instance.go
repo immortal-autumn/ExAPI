@@ -38,6 +38,12 @@ func (PaymentProviderInstance) Fields() []ent.Field {
 			Default(""),
 		field.String("config").
 			SchemaType(map[string]string{dialect.Postgres: "text"}),
+		field.String("config_encrypted").
+			SchemaType(map[string]string{dialect.Postgres: "text"}).
+			Optional().
+			Nillable().
+			Sensitive().
+			Comment("Purpose-bound data-encryption envelope; preferred over legacy config."),
 		field.String("supported_types").
 			MaxLen(200).
 			Default(""),

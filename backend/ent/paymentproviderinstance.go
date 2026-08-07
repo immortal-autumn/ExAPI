@@ -23,6 +23,8 @@ type PaymentProviderInstance struct {
 	Name string `json:"name,omitempty"`
 	// Config holds the value of the "config" field.
 	Config string `json:"config,omitempty"`
+	// Purpose-bound data-encryption envelope; preferred over legacy config.
+	ConfigEncrypted *string `json:"-"`
 	// SupportedTypes holds the value of the "supported_types" field.
 	SupportedTypes string `json:"supported_types,omitempty"`
 	// Enabled holds the value of the "enabled" field.
@@ -53,7 +55,7 @@ func (*PaymentProviderInstance) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case paymentproviderinstance.FieldID, paymentproviderinstance.FieldSortOrder:
 			values[i] = new(sql.NullInt64)
-		case paymentproviderinstance.FieldProviderKey, paymentproviderinstance.FieldName, paymentproviderinstance.FieldConfig, paymentproviderinstance.FieldSupportedTypes, paymentproviderinstance.FieldPaymentMode, paymentproviderinstance.FieldLimits:
+		case paymentproviderinstance.FieldProviderKey, paymentproviderinstance.FieldName, paymentproviderinstance.FieldConfig, paymentproviderinstance.FieldConfigEncrypted, paymentproviderinstance.FieldSupportedTypes, paymentproviderinstance.FieldPaymentMode, paymentproviderinstance.FieldLimits:
 			values[i] = new(sql.NullString)
 		case paymentproviderinstance.FieldCreatedAt, paymentproviderinstance.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -95,6 +97,13 @@ func (_m *PaymentProviderInstance) assignValues(columns []string, values []any) 
 				return fmt.Errorf("unexpected type %T for field config", values[i])
 			} else if value.Valid {
 				_m.Config = value.String
+			}
+		case paymentproviderinstance.FieldConfigEncrypted:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field config_encrypted", values[i])
+			} else if value.Valid {
+				_m.ConfigEncrypted = new(string)
+				*_m.ConfigEncrypted = value.String
 			}
 		case paymentproviderinstance.FieldSupportedTypes:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -194,6 +203,8 @@ func (_m *PaymentProviderInstance) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("config=")
 	builder.WriteString(_m.Config)
+	builder.WriteString(", ")
+	builder.WriteString("config_encrypted=<sensitive>")
 	builder.WriteString(", ")
 	builder.WriteString("supported_types=")
 	builder.WriteString(_m.SupportedTypes)

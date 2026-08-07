@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"sort"
 	"strings"
@@ -198,27 +199,26 @@ func updateProxyAndInvalidateProbeSnapshots(ctx context.Context, client *dbent.C
 }
 
 func lockProxyProbeIdentity(ctx context.Context, client *dbent.Client, proxyID int64) (proxyProbeIdentity, error) {
-	rows, err := client.QueryContext(ctx, `
-		SELECT protocol, host, port, COALESCE(username, ''), COALESCE(password, ''), status
-		FROM proxies
-		WHERE id = $1 AND deleted_at IS NULL
-		FOR NO KEY UPDATE
-	`, proxyID)
+	item, err := client.Proxy.Query().Where(proxy.IDEQ(proxyID)).ForUpdate().Only(ctx)
 	if err != nil {
-		return proxyProbeIdentity{}, err
-	}
-	defer func() { _ = rows.Close() }()
-	if !rows.Next() {
-		if err := rows.Err(); err != nil {
-			return proxyProbeIdentity{}, err
+		if dbent.IsNotFound(err) {
+			return proxyProbeIdentity{}, service.ErrProxyNotFound
 		}
-		return proxyProbeIdentity{}, service.ErrProxyNotFound
-	}
-	var identity proxyProbeIdentity
-	if err := rows.Scan(&identity.protocol, &identity.host, &identity.port, &identity.username, &identity.password, &identity.status); err != nil {
 		return proxyProbeIdentity{}, err
 	}
-	return identity, rows.Err()
+	identity := proxyProbeIdentity{
+		protocol: item.Protocol,
+		host:     item.Host,
+		port:     item.Port,
+		status:   item.Status,
+	}
+	if item.Username != nil {
+		identity.username = *item.Username
+	}
+	if item.Password != nil {
+		identity.password = *item.Password
+	}
+	return identity, nil
 }
 
 func invalidateProxyProbeSnapshots(ctx context.Context, exec sqlExecutor, proxyID int64) ([]int64, error) {
@@ -452,14 +452,23 @@ func (r *proxyRepository) ExistsByHostPortAuth(ctx context.Context, host string,
 	} else {
 		q = q.Where(proxy.UsernameEQ(username))
 	}
-	if password == "" {
-		q = q.Where(proxy.Or(proxy.PasswordIsNil(), proxy.PasswordEQ("")))
-	} else {
-		q = q.Where(proxy.PasswordEQ(password))
+	// Password envelopes are randomized and cannot be queried for equality.
+	// Restrict by non-secret identity, decrypt the small candidate set through
+	// the Ent interceptor, then compare in constant time.
+	candidates, err := q.All(ctx)
+	if err != nil {
+		return false, err
 	}
-
-	count, err := q.Count(ctx)
-	return count > 0, err
+	for _, candidate := range candidates {
+		stored := ""
+		if candidate.Password != nil {
+			stored = *candidate.Password
+		}
+		if subtle.ConstantTimeCompare([]byte(stored), []byte(password)) == 1 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // CountAccountsByProxyID returns the number of accounts using a specific proxy

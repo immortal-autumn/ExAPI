@@ -19,6 +19,8 @@ const (
 	FieldName = "name"
 	// FieldConfig holds the string denoting the config field in the database.
 	FieldConfig = "config"
+	// FieldConfigEncrypted holds the string denoting the config_encrypted field in the database.
+	FieldConfigEncrypted = "config_encrypted"
 	// FieldSupportedTypes holds the string denoting the supported_types field in the database.
 	FieldSupportedTypes = "supported_types"
 	// FieldEnabled holds the string denoting the enabled field in the database.
@@ -47,6 +49,7 @@ var Columns = []string{
 	FieldProviderKey,
 	FieldName,
 	FieldConfig,
+	FieldConfigEncrypted,
 	FieldSupportedTypes,
 	FieldEnabled,
 	FieldPaymentMode,
@@ -122,6 +125,11 @@ func ByName(opts ...sql.OrderTermOption) OrderOption {
 // ByConfig orders the results by the config field.
 func ByConfig(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldConfig, opts...).ToFunc()
+}
+
+// ByConfigEncrypted orders the results by the config_encrypted field.
+func ByConfigEncrypted(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldConfigEncrypted, opts...).ToFunc()
 }
 
 // BySupportedTypes orders the results by the supported_types field.

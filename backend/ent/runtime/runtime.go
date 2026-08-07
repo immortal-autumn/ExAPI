@@ -29,6 +29,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/pendingauthsession"
 	"github.com/Wei-Shaw/sub2api/ent/promocode"
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
+	"github.com/Wei-Shaw/sub2api/ent/protectedsetting"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/schema"
@@ -1302,43 +1303,43 @@ func init() {
 	// paymentproviderinstance.NameValidator is a validator for the "name" field. It is called by the builders before save.
 	paymentproviderinstance.NameValidator = paymentproviderinstanceDescName.Validators[0].(func(string) error)
 	// paymentproviderinstanceDescSupportedTypes is the schema descriptor for supported_types field.
-	paymentproviderinstanceDescSupportedTypes := paymentproviderinstanceFields[3].Descriptor()
+	paymentproviderinstanceDescSupportedTypes := paymentproviderinstanceFields[4].Descriptor()
 	// paymentproviderinstance.DefaultSupportedTypes holds the default value on creation for the supported_types field.
 	paymentproviderinstance.DefaultSupportedTypes = paymentproviderinstanceDescSupportedTypes.Default.(string)
 	// paymentproviderinstance.SupportedTypesValidator is a validator for the "supported_types" field. It is called by the builders before save.
 	paymentproviderinstance.SupportedTypesValidator = paymentproviderinstanceDescSupportedTypes.Validators[0].(func(string) error)
 	// paymentproviderinstanceDescEnabled is the schema descriptor for enabled field.
-	paymentproviderinstanceDescEnabled := paymentproviderinstanceFields[4].Descriptor()
+	paymentproviderinstanceDescEnabled := paymentproviderinstanceFields[5].Descriptor()
 	// paymentproviderinstance.DefaultEnabled holds the default value on creation for the enabled field.
 	paymentproviderinstance.DefaultEnabled = paymentproviderinstanceDescEnabled.Default.(bool)
 	// paymentproviderinstanceDescPaymentMode is the schema descriptor for payment_mode field.
-	paymentproviderinstanceDescPaymentMode := paymentproviderinstanceFields[5].Descriptor()
+	paymentproviderinstanceDescPaymentMode := paymentproviderinstanceFields[6].Descriptor()
 	// paymentproviderinstance.DefaultPaymentMode holds the default value on creation for the payment_mode field.
 	paymentproviderinstance.DefaultPaymentMode = paymentproviderinstanceDescPaymentMode.Default.(string)
 	// paymentproviderinstance.PaymentModeValidator is a validator for the "payment_mode" field. It is called by the builders before save.
 	paymentproviderinstance.PaymentModeValidator = paymentproviderinstanceDescPaymentMode.Validators[0].(func(string) error)
 	// paymentproviderinstanceDescSortOrder is the schema descriptor for sort_order field.
-	paymentproviderinstanceDescSortOrder := paymentproviderinstanceFields[6].Descriptor()
+	paymentproviderinstanceDescSortOrder := paymentproviderinstanceFields[7].Descriptor()
 	// paymentproviderinstance.DefaultSortOrder holds the default value on creation for the sort_order field.
 	paymentproviderinstance.DefaultSortOrder = paymentproviderinstanceDescSortOrder.Default.(int)
 	// paymentproviderinstanceDescLimits is the schema descriptor for limits field.
-	paymentproviderinstanceDescLimits := paymentproviderinstanceFields[7].Descriptor()
+	paymentproviderinstanceDescLimits := paymentproviderinstanceFields[8].Descriptor()
 	// paymentproviderinstance.DefaultLimits holds the default value on creation for the limits field.
 	paymentproviderinstance.DefaultLimits = paymentproviderinstanceDescLimits.Default.(string)
 	// paymentproviderinstanceDescRefundEnabled is the schema descriptor for refund_enabled field.
-	paymentproviderinstanceDescRefundEnabled := paymentproviderinstanceFields[8].Descriptor()
+	paymentproviderinstanceDescRefundEnabled := paymentproviderinstanceFields[9].Descriptor()
 	// paymentproviderinstance.DefaultRefundEnabled holds the default value on creation for the refund_enabled field.
 	paymentproviderinstance.DefaultRefundEnabled = paymentproviderinstanceDescRefundEnabled.Default.(bool)
 	// paymentproviderinstanceDescAllowUserRefund is the schema descriptor for allow_user_refund field.
-	paymentproviderinstanceDescAllowUserRefund := paymentproviderinstanceFields[9].Descriptor()
+	paymentproviderinstanceDescAllowUserRefund := paymentproviderinstanceFields[10].Descriptor()
 	// paymentproviderinstance.DefaultAllowUserRefund holds the default value on creation for the allow_user_refund field.
 	paymentproviderinstance.DefaultAllowUserRefund = paymentproviderinstanceDescAllowUserRefund.Default.(bool)
 	// paymentproviderinstanceDescCreatedAt is the schema descriptor for created_at field.
-	paymentproviderinstanceDescCreatedAt := paymentproviderinstanceFields[10].Descriptor()
+	paymentproviderinstanceDescCreatedAt := paymentproviderinstanceFields[11].Descriptor()
 	// paymentproviderinstance.DefaultCreatedAt holds the default value on creation for the created_at field.
 	paymentproviderinstance.DefaultCreatedAt = paymentproviderinstanceDescCreatedAt.Default.(func() time.Time)
 	// paymentproviderinstanceDescUpdatedAt is the schema descriptor for updated_at field.
-	paymentproviderinstanceDescUpdatedAt := paymentproviderinstanceFields[11].Descriptor()
+	paymentproviderinstanceDescUpdatedAt := paymentproviderinstanceFields[12].Descriptor()
 	// paymentproviderinstance.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	paymentproviderinstance.DefaultUpdatedAt = paymentproviderinstanceDescUpdatedAt.Default.(func() time.Time)
 	// paymentproviderinstance.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -1504,6 +1505,32 @@ func init() {
 	promocodeusageDescUsedAt := promocodeusageFields[3].Descriptor()
 	// promocodeusage.DefaultUsedAt holds the default value on creation for the used_at field.
 	promocodeusage.DefaultUsedAt = promocodeusageDescUsedAt.Default.(func() time.Time)
+	protectedsettingFields := schema.ProtectedSetting{}.Fields()
+	_ = protectedsettingFields
+	// protectedsettingDescKey is the schema descriptor for key field.
+	protectedsettingDescKey := protectedsettingFields[0].Descriptor()
+	// protectedsetting.KeyValidator is a validator for the "key" field. It is called by the builders before save.
+	protectedsetting.KeyValidator = func() func(string) error {
+		validators := protectedsettingDescKey.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(key string) error {
+			for _, fn := range fns {
+				if err := fn(key); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// protectedsettingDescUpdatedAt is the schema descriptor for updated_at field.
+	protectedsettingDescUpdatedAt := protectedsettingFields[2].Descriptor()
+	// protectedsetting.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	protectedsetting.DefaultUpdatedAt = protectedsettingDescUpdatedAt.Default.(func() time.Time)
+	// protectedsetting.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	protectedsetting.UpdateDefaultUpdatedAt = protectedsettingDescUpdatedAt.UpdateDefault.(func() time.Time)
 	proxyMixin := schema.Proxy{}.Mixin()
 	proxyMixinHooks1 := proxyMixin[1].Hooks()
 	proxy.Hooks[0] = proxyMixinHooks1[0]
@@ -1586,19 +1613,19 @@ func init() {
 	// proxy.PasswordValidator is a validator for the "password" field. It is called by the builders before save.
 	proxy.PasswordValidator = proxyDescPassword.Validators[0].(func(string) error)
 	// proxyDescStatus is the schema descriptor for status field.
-	proxyDescStatus := proxyFields[6].Descriptor()
+	proxyDescStatus := proxyFields[7].Descriptor()
 	// proxy.DefaultStatus holds the default value on creation for the status field.
 	proxy.DefaultStatus = proxyDescStatus.Default.(string)
 	// proxy.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	proxy.StatusValidator = proxyDescStatus.Validators[0].(func(string) error)
 	// proxyDescFallbackMode is the schema descriptor for fallback_mode field.
-	proxyDescFallbackMode := proxyFields[8].Descriptor()
+	proxyDescFallbackMode := proxyFields[9].Descriptor()
 	// proxy.DefaultFallbackMode holds the default value on creation for the fallback_mode field.
 	proxy.DefaultFallbackMode = proxyDescFallbackMode.Default.(string)
 	// proxy.FallbackModeValidator is a validator for the "fallback_mode" field. It is called by the builders before save.
 	proxy.FallbackModeValidator = proxyDescFallbackMode.Validators[0].(func(string) error)
 	// proxyDescExpiryWarnDays is the schema descriptor for expiry_warn_days field.
-	proxyDescExpiryWarnDays := proxyFields[10].Descriptor()
+	proxyDescExpiryWarnDays := proxyFields[11].Descriptor()
 	// proxy.DefaultExpiryWarnDays holds the default value on creation for the expiry_warn_days field.
 	proxy.DefaultExpiryWarnDays = proxyDescExpiryWarnDays.Default.(int)
 	redeemcodeFields := schema.RedeemCode{}.Fields()

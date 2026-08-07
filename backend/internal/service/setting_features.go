@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,12 @@ import (
 	"strconv"
 	"strings"
 )
+
+type adminAPIKeyDigestRepository interface {
+	StoreAdminAPIKeyDigest(ctx context.Context, candidate string) error
+	VerifyAdminAPIKey(ctx context.Context, candidate string) (bool, error)
+	HasAdminAPIKey(ctx context.Context) (bool, error)
+}
 
 // IsRegistrationEnabled 检查是否开放注册
 func (s *SettingService) IsRegistrationEnabled(ctx context.Context) bool {
@@ -437,8 +444,13 @@ func (s *SettingService) GenerateAdminAPIKey(ctx context.Context) (string, error
 
 	key := AdminAPIKeyPrefix + hex.EncodeToString(bytes)
 
-	// 存储到 settings 表
-	if err := s.settingRepo.Set(ctx, SettingKeyAdminAPIKey, key); err != nil {
+	var err error
+	if protected, ok := s.settingRepo.(adminAPIKeyDigestRepository); ok {
+		err = protected.StoreAdminAPIKeyDigest(ctx, key)
+	} else {
+		err = s.settingRepo.Set(ctx, SettingKeyAdminAPIKey, key)
+	}
+	if err != nil {
 		return "", fmt.Errorf("save admin api key: %w", err)
 	}
 
@@ -448,6 +460,13 @@ func (s *SettingService) GenerateAdminAPIKey(ctx context.Context) (string, error
 // GetAdminAPIKeyStatus 获取管理员 API Key 状态
 // 返回脱敏的 key、是否存在、错误
 func (s *SettingService) GetAdminAPIKeyStatus(ctx context.Context) (maskedKey string, exists bool, err error) {
+	if protected, ok := s.settingRepo.(adminAPIKeyDigestRepository); ok {
+		exists, err := protected.HasAdminAPIKey(ctx)
+		if err != nil || !exists {
+			return "", exists, err
+		}
+		return AdminAPIKeyPrefix + "********", true, nil
+	}
 	key, err := s.settingRepo.GetValue(ctx, SettingKeyAdminAPIKey)
 	if err != nil {
 		if errors.Is(err, ErrSettingNotFound) {
@@ -467,6 +486,20 @@ func (s *SettingService) GetAdminAPIKeyStatus(ctx context.Context) (maskedKey st
 	}
 
 	return maskedKey, true, nil
+}
+
+// VerifyAdminAPIKey validates a candidate without requiring recoverable key
+// material. Production repositories use a purpose-bound keyed digest and
+// migrate a matching legacy plaintext key during the bridge release.
+func (s *SettingService) VerifyAdminAPIKey(ctx context.Context, candidate string) (bool, error) {
+	if protected, ok := s.settingRepo.(adminAPIKeyDigestRepository); ok {
+		return protected.VerifyAdminAPIKey(ctx, candidate)
+	}
+	legacy, err := s.GetAdminAPIKey(ctx)
+	if err != nil || legacy == "" {
+		return false, err
+	}
+	return subtle.ConstantTimeCompare([]byte(candidate), []byte(legacy)) == 1, nil
 }
 
 // GetAdminAPIKey 获取完整的管理员 API Key（仅供内部验证使用）

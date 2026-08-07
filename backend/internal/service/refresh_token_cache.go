@@ -10,6 +10,14 @@ import (
 // This is used to abstract away the underlying cache implementation (e.g., redis.Nil).
 var ErrRefreshTokenNotFound = errors.New("refresh token not found")
 
+// ErrRefreshTokenConsumed distinguishes a rotated token from an unknown hash.
+// Callers must revoke the returned token family when this error is observed.
+var ErrRefreshTokenConsumed = errors.New("refresh token already consumed")
+
+// ErrRefreshTokenFamilyRevoked is returned when a token operation targets a
+// family that has already been revoked.
+var ErrRefreshTokenFamilyRevoked = errors.New("refresh token family revoked")
+
 // RefreshTokenData 存储在Redis中的Refresh Token数据
 type RefreshTokenData struct {
 	UserID       int64     `json:"user_id"`
@@ -71,4 +79,18 @@ type RefreshTokenCache interface {
 	// IsTokenInFamily 检查Token是否属于指定家族
 	// 用于验证Token家族关系
 	IsTokenInFamily(ctx context.Context, familyID string, tokenHash string) (bool, error)
+}
+
+// AtomicRefreshTokenCache is the fail-closed session state-machine used by the
+// production Redis repository. It is kept as an extension interface so test
+// doubles and downstream implementations of the legacy cache remain source
+// compatible while production issuance, rotation, and revocation are atomic.
+type AtomicRefreshTokenCache interface {
+	RefreshTokenCache
+
+	IssueRefreshToken(ctx context.Context, tokenHash string, data *RefreshTokenData, ttl time.Duration) error
+	RotateRefreshToken(ctx context.Context, parentHash string, parent *RefreshTokenData, childHash string, child *RefreshTokenData, ttl time.Duration) error
+	RevokeTokenFamily(ctx context.Context, familyID string, ttl time.Duration) error
+	RevokeUserTokenFamilies(ctx context.Context, userID int64, ttl time.Duration) error
+	IsTokenFamilyRevoked(ctx context.Context, familyID string) (bool, error)
 }

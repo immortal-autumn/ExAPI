@@ -76,6 +76,15 @@ func InitEnt(cfg *config.Config) (*ent.Client, *sql.DB, error) {
 
 	// 创建 Ent 客户端，绑定到已配置的数据库驱动。
 	client := ent.NewClient(ent.Driver(drv))
+	keyrings, err := config.LoadExternalKeyringsFromEnv()
+	if err != nil {
+		_ = client.Close()
+		return nil, nil, fmt.Errorf("load external keyrings: %w", err)
+	}
+	if err := installSecretBridge(client, keyrings.DataEncryption); err != nil {
+		_ = client.Close()
+		return nil, nil, err
+	}
 
 	// 启动阶段：从配置或数据库中确保系统密钥可用。
 	if err := ensureBootstrapSecrets(migrationCtx, client, cfg); err != nil {

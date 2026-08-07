@@ -1142,6 +1142,7 @@ var (
 		{Name: "provider_key", Type: field.TypeString, Size: 30},
 		{Name: "name", Type: field.TypeString, Size: 100, Default: ""},
 		{Name: "config", Type: field.TypeString, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "config_encrypted", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "supported_types", Type: field.TypeString, Size: 200, Default: ""},
 		{Name: "enabled", Type: field.TypeBool, Default: true},
 		{Name: "payment_mode", Type: field.TypeString, Size: 20, Default: ""},
@@ -1166,7 +1167,7 @@ var (
 			{
 				Name:    "paymentproviderinstance_enabled",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentProviderInstancesColumns[5]},
+				Columns: []*schema.Column{PaymentProviderInstancesColumns[6]},
 			},
 		},
 	}
@@ -1312,6 +1313,19 @@ var (
 			},
 		},
 	}
+	// ProtectedSettingsColumns holds the columns for the "protected_settings" table.
+	ProtectedSettingsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "key", Type: field.TypeString, Unique: true, Size: 100},
+		{Name: "envelope", Type: field.TypeString, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// ProtectedSettingsTable holds the schema information for the "protected_settings" table.
+	ProtectedSettingsTable = &schema.Table{
+		Name:       "protected_settings",
+		Columns:    ProtectedSettingsColumns,
+		PrimaryKey: []*schema.Column{ProtectedSettingsColumns[0]},
+	}
 	// ProxiesColumns holds the columns for the "proxies" table.
 	ProxiesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -1324,6 +1338,7 @@ var (
 		{Name: "port", Type: field.TypeInt},
 		{Name: "username", Type: field.TypeString, Nullable: true, Size: 100},
 		{Name: "password", Type: field.TypeString, Nullable: true, Size: 100},
+		{Name: "password_encrypted", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "status", Type: field.TypeString, Size: 20, Default: "active"},
 		{Name: "expires_at", Type: field.TypeTime, Nullable: true},
 		{Name: "fallback_mode", Type: field.TypeString, Size: 20, Default: "none"},
@@ -1338,7 +1353,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "proxies_proxies_backup_proxy",
-				Columns:    []*schema.Column{ProxiesColumns[14]},
+				Columns:    []*schema.Column{ProxiesColumns[15]},
 				RefColumns: []*schema.Column{ProxiesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -1347,7 +1362,7 @@ var (
 			{
 				Name:    "proxy_status",
 				Unique:  false,
-				Columns: []*schema.Column{ProxiesColumns[10]},
+				Columns: []*schema.Column{ProxiesColumns[11]},
 			},
 			{
 				Name:    "proxy_deleted_at",
@@ -1357,12 +1372,12 @@ var (
 			{
 				Name:    "proxy_expires_at",
 				Unique:  false,
-				Columns: []*schema.Column{ProxiesColumns[11]},
+				Columns: []*schema.Column{ProxiesColumns[12]},
 			},
 			{
 				Name:    "proxy_backup_proxy_id",
 				Unique:  false,
-				Columns: []*schema.Column{ProxiesColumns[14]},
+				Columns: []*schema.Column{ProxiesColumns[15]},
 			},
 		},
 	}
@@ -2024,6 +2039,7 @@ var (
 		PendingAuthSessionsTable,
 		PromoCodesTable,
 		PromoCodeUsagesTable,
+		ProtectedSettingsTable,
 		ProxiesTable,
 		RedeemCodesTable,
 		SecuritySecretsTable,
@@ -2132,6 +2148,9 @@ func init() {
 	PromoCodeUsagesTable.ForeignKeys[1].RefTable = UsersTable
 	PromoCodeUsagesTable.Annotation = &entsql.Annotation{
 		Table: "promo_code_usages",
+	}
+	ProtectedSettingsTable.Annotation = &entsql.Annotation{
+		Table: "protected_settings",
 	}
 	ProxiesTable.ForeignKeys[0].RefTable = ProxiesTable
 	ProxiesTable.Annotation = &entsql.Annotation{

@@ -117,6 +117,20 @@ func (_c *ProxyCreate) SetNillablePassword(v *string) *ProxyCreate {
 	return _c
 }
 
+// SetPasswordEncrypted sets the "password_encrypted" field.
+func (_c *ProxyCreate) SetPasswordEncrypted(v string) *ProxyCreate {
+	_c.mutation.SetPasswordEncrypted(v)
+	return _c
+}
+
+// SetNillablePasswordEncrypted sets the "password_encrypted" field if the given value is not nil.
+func (_c *ProxyCreate) SetNillablePasswordEncrypted(v *string) *ProxyCreate {
+	if v != nil {
+		_c.SetPasswordEncrypted(*v)
+	}
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *ProxyCreate) SetStatus(v string) *ProxyCreate {
 	_c.mutation.SetStatus(v)
@@ -400,6 +414,10 @@ func (_c *ProxyCreate) createSpec() (*Proxy, *sqlgraph.CreateSpec) {
 		_spec.SetField(proxy.FieldPassword, field.TypeString, value)
 		_node.Password = &value
 	}
+	if value, ok := _c.mutation.PasswordEncrypted(); ok {
+		_spec.SetField(proxy.FieldPasswordEncrypted, field.TypeString, value)
+		_node.PasswordEncrypted = &value
+	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(proxy.FieldStatus, field.TypeString, value)
 		_node.Status = value
@@ -618,6 +636,24 @@ func (u *ProxyUpsert) UpdatePassword() *ProxyUpsert {
 // ClearPassword clears the value of the "password" field.
 func (u *ProxyUpsert) ClearPassword() *ProxyUpsert {
 	u.SetNull(proxy.FieldPassword)
+	return u
+}
+
+// SetPasswordEncrypted sets the "password_encrypted" field.
+func (u *ProxyUpsert) SetPasswordEncrypted(v string) *ProxyUpsert {
+	u.Set(proxy.FieldPasswordEncrypted, v)
+	return u
+}
+
+// UpdatePasswordEncrypted sets the "password_encrypted" field to the value that was provided on create.
+func (u *ProxyUpsert) UpdatePasswordEncrypted() *ProxyUpsert {
+	u.SetExcluded(proxy.FieldPasswordEncrypted)
+	return u
+}
+
+// ClearPasswordEncrypted clears the value of the "password_encrypted" field.
+func (u *ProxyUpsert) ClearPasswordEncrypted() *ProxyUpsert {
+	u.SetNull(proxy.FieldPasswordEncrypted)
 	return u
 }
 
@@ -881,6 +917,27 @@ func (u *ProxyUpsertOne) UpdatePassword() *ProxyUpsertOne {
 func (u *ProxyUpsertOne) ClearPassword() *ProxyUpsertOne {
 	return u.Update(func(s *ProxyUpsert) {
 		s.ClearPassword()
+	})
+}
+
+// SetPasswordEncrypted sets the "password_encrypted" field.
+func (u *ProxyUpsertOne) SetPasswordEncrypted(v string) *ProxyUpsertOne {
+	return u.Update(func(s *ProxyUpsert) {
+		s.SetPasswordEncrypted(v)
+	})
+}
+
+// UpdatePasswordEncrypted sets the "password_encrypted" field to the value that was provided on create.
+func (u *ProxyUpsertOne) UpdatePasswordEncrypted() *ProxyUpsertOne {
+	return u.Update(func(s *ProxyUpsert) {
+		s.UpdatePasswordEncrypted()
+	})
+}
+
+// ClearPasswordEncrypted clears the value of the "password_encrypted" field.
+func (u *ProxyUpsertOne) ClearPasswordEncrypted() *ProxyUpsertOne {
+	return u.Update(func(s *ProxyUpsert) {
+		s.ClearPasswordEncrypted()
 	})
 }
 
@@ -1323,6 +1380,27 @@ func (u *ProxyUpsertBulk) UpdatePassword() *ProxyUpsertBulk {
 func (u *ProxyUpsertBulk) ClearPassword() *ProxyUpsertBulk {
 	return u.Update(func(s *ProxyUpsert) {
 		s.ClearPassword()
+	})
+}
+
+// SetPasswordEncrypted sets the "password_encrypted" field.
+func (u *ProxyUpsertBulk) SetPasswordEncrypted(v string) *ProxyUpsertBulk {
+	return u.Update(func(s *ProxyUpsert) {
+		s.SetPasswordEncrypted(v)
+	})
+}
+
+// UpdatePasswordEncrypted sets the "password_encrypted" field to the value that was provided on create.
+func (u *ProxyUpsertBulk) UpdatePasswordEncrypted() *ProxyUpsertBulk {
+	return u.Update(func(s *ProxyUpsert) {
+		s.UpdatePasswordEncrypted()
+	})
+}
+
+// ClearPasswordEncrypted clears the value of the "password_encrypted" field.
+func (u *ProxyUpsertBulk) ClearPasswordEncrypted() *ProxyUpsertBulk {
+	return u.Update(func(s *ProxyUpsert) {
+		s.ClearPasswordEncrypted()
 	})
 }
 

@@ -69,6 +69,11 @@ func Config(v string) predicate.PaymentProviderInstance {
 	return predicate.PaymentProviderInstance(sql.FieldEQ(FieldConfig, v))
 }
 
+// ConfigEncrypted applies equality check predicate on the "config_encrypted" field. It's identical to ConfigEncryptedEQ.
+func ConfigEncrypted(v string) predicate.PaymentProviderInstance {
+	return predicate.PaymentProviderInstance(sql.FieldEQ(FieldConfigEncrypted, v))
+}
+
 // SupportedTypes applies equality check predicate on the "supported_types" field. It's identical to SupportedTypesEQ.
 func SupportedTypes(v string) predicate.PaymentProviderInstance {
 	return predicate.PaymentProviderInstance(sql.FieldEQ(FieldSupportedTypes, v))
@@ -307,6 +312,81 @@ func ConfigEqualFold(v string) predicate.PaymentProviderInstance {
 // ConfigContainsFold applies the ContainsFold predicate on the "config" field.
 func ConfigContainsFold(v string) predicate.PaymentProviderInstance {
 	return predicate.PaymentProviderInstance(sql.FieldContainsFold(FieldConfig, v))
+}
+
+// ConfigEncryptedEQ applies the EQ predicate on the "config_encrypted" field.
+func ConfigEncryptedEQ(v string) predicate.PaymentProviderInstance {
+	return predicate.PaymentProviderInstance(sql.FieldEQ(FieldConfigEncrypted, v))
+}
+
+// ConfigEncryptedNEQ applies the NEQ predicate on the "config_encrypted" field.
+func ConfigEncryptedNEQ(v string) predicate.PaymentProviderInstance {
+	return predicate.PaymentProviderInstance(sql.FieldNEQ(FieldConfigEncrypted, v))
+}
+
+// ConfigEncryptedIn applies the In predicate on the "config_encrypted" field.
+func ConfigEncryptedIn(vs ...string) predicate.PaymentProviderInstance {
+	return predicate.PaymentProviderInstance(sql.FieldIn(FieldConfigEncrypted, vs...))
+}
+
+// ConfigEncryptedNotIn applies the NotIn predicate on the "config_encrypted" field.
+func ConfigEncryptedNotIn(vs ...string) predicate.PaymentProviderInstance {
+	return predicate.PaymentProviderInstance(sql.FieldNotIn(FieldConfigEncrypted, vs...))
+}
+
+// ConfigEncryptedGT applies the GT predicate on the "config_encrypted" field.
+func ConfigEncryptedGT(v string) predicate.PaymentProviderInstance {
+	return predicate.PaymentProviderInstance(sql.FieldGT(FieldConfigEncrypted, v))
+}
+
+// ConfigEncryptedGTE applies the GTE predicate on the "config_encrypted" field.
+func ConfigEncryptedGTE(v string) predicate.PaymentProviderInstance {
+	return predicate.PaymentProviderInstance(sql.FieldGTE(FieldConfigEncrypted, v))
+}
+
+// ConfigEncryptedLT applies the LT predicate on the "config_encrypted" field.
+func ConfigEncryptedLT(v string) predicate.PaymentProviderInstance {
+	return predicate.PaymentProviderInstance(sql.FieldLT(FieldConfigEncrypted, v))
+}
+
+// ConfigEncryptedLTE applies the LTE predicate on the "config_encrypted" field.
+func ConfigEncryptedLTE(v string) predicate.PaymentProviderInstance {
+	return predicate.PaymentProviderInstance(sql.FieldLTE(FieldConfigEncrypted, v))
+}
+
+// ConfigEncryptedContains applies the Contains predicate on the "config_encrypted" field.
+func ConfigEncryptedContains(v string) predicate.PaymentProviderInstance {
+	return predicate.PaymentProviderInstance(sql.FieldContains(FieldConfigEncrypted, v))
+}
+
+// ConfigEncryptedHasPrefix applies the HasPrefix predicate on the "config_encrypted" field.
+func ConfigEncryptedHasPrefix(v string) predicate.PaymentProviderInstance {
+	return predicate.PaymentProviderInstance(sql.FieldHasPrefix(FieldConfigEncrypted, v))
+}
+
+// ConfigEncryptedHasSuffix applies the HasSuffix predicate on the "config_encrypted" field.
+func ConfigEncryptedHasSuffix(v string) predicate.PaymentProviderInstance {
+	return predicate.PaymentProviderInstance(sql.FieldHasSuffix(FieldConfigEncrypted, v))
+}
+
+// ConfigEncryptedIsNil applies the IsNil predicate on the "config_encrypted" field.
+func ConfigEncryptedIsNil() predicate.PaymentProviderInstance {
+	return predicate.PaymentProviderInstance(sql.FieldIsNull(FieldConfigEncrypted))
+}
+
+// ConfigEncryptedNotNil applies the NotNil predicate on the "config_encrypted" field.
+func ConfigEncryptedNotNil() predicate.PaymentProviderInstance {
+	return predicate.PaymentProviderInstance(sql.FieldNotNull(FieldConfigEncrypted))
+}
+
+// ConfigEncryptedEqualFold applies the EqualFold predicate on the "config_encrypted" field.
+func ConfigEncryptedEqualFold(v string) predicate.PaymentProviderInstance {
+	return predicate.PaymentProviderInstance(sql.FieldEqualFold(FieldConfigEncrypted, v))
+}
+
+// ConfigEncryptedContainsFold applies the ContainsFold predicate on the "config_encrypted" field.
+func ConfigEncryptedContainsFold(v string) predicate.PaymentProviderInstance {
+	return predicate.PaymentProviderInstance(sql.FieldContainsFold(FieldConfigEncrypted, v))
 }
 
 // SupportedTypesEQ applies the EQ predicate on the "supported_types" field.

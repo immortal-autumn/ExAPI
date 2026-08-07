@@ -100,6 +100,11 @@ func Password(v string) predicate.Proxy {
 	return predicate.Proxy(sql.FieldEQ(FieldPassword, v))
 }
 
+// PasswordEncrypted applies equality check predicate on the "password_encrypted" field. It's identical to PasswordEncryptedEQ.
+func PasswordEncrypted(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldEQ(FieldPasswordEncrypted, v))
+}
+
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
 func Status(v string) predicate.Proxy {
 	return predicate.Proxy(sql.FieldEQ(FieldStatus, v))
@@ -638,6 +643,81 @@ func PasswordEqualFold(v string) predicate.Proxy {
 // PasswordContainsFold applies the ContainsFold predicate on the "password" field.
 func PasswordContainsFold(v string) predicate.Proxy {
 	return predicate.Proxy(sql.FieldContainsFold(FieldPassword, v))
+}
+
+// PasswordEncryptedEQ applies the EQ predicate on the "password_encrypted" field.
+func PasswordEncryptedEQ(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldEQ(FieldPasswordEncrypted, v))
+}
+
+// PasswordEncryptedNEQ applies the NEQ predicate on the "password_encrypted" field.
+func PasswordEncryptedNEQ(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldNEQ(FieldPasswordEncrypted, v))
+}
+
+// PasswordEncryptedIn applies the In predicate on the "password_encrypted" field.
+func PasswordEncryptedIn(vs ...string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldIn(FieldPasswordEncrypted, vs...))
+}
+
+// PasswordEncryptedNotIn applies the NotIn predicate on the "password_encrypted" field.
+func PasswordEncryptedNotIn(vs ...string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldNotIn(FieldPasswordEncrypted, vs...))
+}
+
+// PasswordEncryptedGT applies the GT predicate on the "password_encrypted" field.
+func PasswordEncryptedGT(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldGT(FieldPasswordEncrypted, v))
+}
+
+// PasswordEncryptedGTE applies the GTE predicate on the "password_encrypted" field.
+func PasswordEncryptedGTE(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldGTE(FieldPasswordEncrypted, v))
+}
+
+// PasswordEncryptedLT applies the LT predicate on the "password_encrypted" field.
+func PasswordEncryptedLT(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldLT(FieldPasswordEncrypted, v))
+}
+
+// PasswordEncryptedLTE applies the LTE predicate on the "password_encrypted" field.
+func PasswordEncryptedLTE(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldLTE(FieldPasswordEncrypted, v))
+}
+
+// PasswordEncryptedContains applies the Contains predicate on the "password_encrypted" field.
+func PasswordEncryptedContains(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldContains(FieldPasswordEncrypted, v))
+}
+
+// PasswordEncryptedHasPrefix applies the HasPrefix predicate on the "password_encrypted" field.
+func PasswordEncryptedHasPrefix(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldHasPrefix(FieldPasswordEncrypted, v))
+}
+
+// PasswordEncryptedHasSuffix applies the HasSuffix predicate on the "password_encrypted" field.
+func PasswordEncryptedHasSuffix(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldHasSuffix(FieldPasswordEncrypted, v))
+}
+
+// PasswordEncryptedIsNil applies the IsNil predicate on the "password_encrypted" field.
+func PasswordEncryptedIsNil() predicate.Proxy {
+	return predicate.Proxy(sql.FieldIsNull(FieldPasswordEncrypted))
+}
+
+// PasswordEncryptedNotNil applies the NotNil predicate on the "password_encrypted" field.
+func PasswordEncryptedNotNil() predicate.Proxy {
+	return predicate.Proxy(sql.FieldNotNull(FieldPasswordEncrypted))
+}
+
+// PasswordEncryptedEqualFold applies the EqualFold predicate on the "password_encrypted" field.
+func PasswordEncryptedEqualFold(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldEqualFold(FieldPasswordEncrypted, v))
+}
+
+// PasswordEncryptedContainsFold applies the ContainsFold predicate on the "password_encrypted" field.
+func PasswordEncryptedContainsFold(v string) predicate.Proxy {
+	return predicate.Proxy(sql.FieldContainsFold(FieldPasswordEncrypted, v))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.

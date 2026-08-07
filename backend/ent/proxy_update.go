@@ -158,6 +158,26 @@ func (_u *ProxyUpdate) ClearPassword() *ProxyUpdate {
 	return _u
 }
 
+// SetPasswordEncrypted sets the "password_encrypted" field.
+func (_u *ProxyUpdate) SetPasswordEncrypted(v string) *ProxyUpdate {
+	_u.mutation.SetPasswordEncrypted(v)
+	return _u
+}
+
+// SetNillablePasswordEncrypted sets the "password_encrypted" field if the given value is not nil.
+func (_u *ProxyUpdate) SetNillablePasswordEncrypted(v *string) *ProxyUpdate {
+	if v != nil {
+		_u.SetPasswordEncrypted(*v)
+	}
+	return _u
+}
+
+// ClearPasswordEncrypted clears the value of the "password_encrypted" field.
+func (_u *ProxyUpdate) ClearPasswordEncrypted() *ProxyUpdate {
+	_u.mutation.ClearPasswordEncrypted()
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *ProxyUpdate) SetStatus(v string) *ProxyUpdate {
 	_u.mutation.SetStatus(v)
@@ -429,6 +449,12 @@ func (_u *ProxyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.PasswordCleared() {
 		_spec.ClearField(proxy.FieldPassword, field.TypeString)
 	}
+	if value, ok := _u.mutation.PasswordEncrypted(); ok {
+		_spec.SetField(proxy.FieldPasswordEncrypted, field.TypeString, value)
+	}
+	if _u.mutation.PasswordEncryptedCleared() {
+		_spec.ClearField(proxy.FieldPasswordEncrypted, field.TypeString)
+	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(proxy.FieldStatus, field.TypeString, value)
 	}
@@ -667,6 +693,26 @@ func (_u *ProxyUpdateOne) SetNillablePassword(v *string) *ProxyUpdateOne {
 // ClearPassword clears the value of the "password" field.
 func (_u *ProxyUpdateOne) ClearPassword() *ProxyUpdateOne {
 	_u.mutation.ClearPassword()
+	return _u
+}
+
+// SetPasswordEncrypted sets the "password_encrypted" field.
+func (_u *ProxyUpdateOne) SetPasswordEncrypted(v string) *ProxyUpdateOne {
+	_u.mutation.SetPasswordEncrypted(v)
+	return _u
+}
+
+// SetNillablePasswordEncrypted sets the "password_encrypted" field if the given value is not nil.
+func (_u *ProxyUpdateOne) SetNillablePasswordEncrypted(v *string) *ProxyUpdateOne {
+	if v != nil {
+		_u.SetPasswordEncrypted(*v)
+	}
+	return _u
+}
+
+// ClearPasswordEncrypted clears the value of the "password_encrypted" field.
+func (_u *ProxyUpdateOne) ClearPasswordEncrypted() *ProxyUpdateOne {
+	_u.mutation.ClearPasswordEncrypted()
 	return _u
 }
 
@@ -970,6 +1016,12 @@ func (_u *ProxyUpdateOne) sqlSave(ctx context.Context) (_node *Proxy, err error)
 	}
 	if _u.mutation.PasswordCleared() {
 		_spec.ClearField(proxy.FieldPassword, field.TypeString)
+	}
+	if value, ok := _u.mutation.PasswordEncrypted(); ok {
+		_spec.SetField(proxy.FieldPasswordEncrypted, field.TypeString, value)
+	}
+	if _u.mutation.PasswordEncryptedCleared() {
+		_spec.ClearField(proxy.FieldPasswordEncrypted, field.TypeString)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(proxy.FieldStatus, field.TypeString, value)

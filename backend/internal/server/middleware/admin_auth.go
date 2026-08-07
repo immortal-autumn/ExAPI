@@ -2,7 +2,6 @@
 package middleware
 
 import (
-	"crypto/subtle"
 	"errors"
 	"strings"
 
@@ -124,14 +123,14 @@ func validateAdminAPIKey(
 	settingService *service.SettingService,
 	userService *service.UserService,
 ) bool {
-	storedKey, err := settingService.GetAdminAPIKey(c.Request.Context())
+	matched, err := settingService.VerifyAdminAPIKey(c.Request.Context(), key)
 	if err != nil {
 		AbortWithError(c, 500, "INTERNAL_ERROR", "Internal server error")
 		return false
 	}
 
 	// 未配置或不匹配，统一返回相同错误（避免信息泄露）
-	if storedKey == "" || subtle.ConstantTimeCompare([]byte(key), []byte(storedKey)) != 1 {
+	if !matched {
 		AbortWithError(c, 401, "INVALID_ADMIN_KEY", "Invalid admin API key")
 		return false
 	}
@@ -163,10 +162,18 @@ func validateJWTForAdmin(
 	auditService *service.AuditLogService,
 ) bool {
 	// 验证 JWT token
-	claims, err := authService.ValidateToken(token)
+	claims, err := authService.ValidateAccessToken(c.Request.Context(), token)
 	if err != nil {
+		if errors.Is(err, service.ErrServiceUnavailable) {
+			AbortWithError(c, 503, "AUTH_SERVICE_UNAVAILABLE", "Authentication service is temporarily unavailable")
+			return false
+		}
 		if errors.Is(err, service.ErrTokenExpired) {
 			AbortWithError(c, 401, "TOKEN_EXPIRED", "Token has expired")
+			return false
+		}
+		if errors.Is(err, service.ErrTokenRevoked) {
+			AbortWithError(c, 401, "TOKEN_REVOKED", "Token has been revoked")
 			return false
 		}
 		AbortWithError(c, 401, "INVALID_TOKEN", "Invalid token")
