@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"net"
+	"net/netip"
 	"net/textproto"
 	"net/url"
 	"os"
@@ -660,6 +662,10 @@ type PricingConfig struct {
 type ServerConfig struct {
 	Host                     string    `mapstructure:"host"`
 	Port                     int       `mapstructure:"port"`
+	PublicListenAddr         string    `mapstructure:"public_listen_addr"`
+	ControlListenAddr        string    `mapstructure:"control_listen_addr"`
+	ControlHosts             []string  `mapstructure:"control_hosts"`
+	OperatorPeerIPs          []string  `mapstructure:"operator_peer_ips"`
 	Mode                     string    `mapstructure:"mode"`                  // debug/release
 	EnableServerTiming       bool      `mapstructure:"enable_server_timing"`  // Admin UI Server-Timing response header
 	FrontendURL              string    `mapstructure:"frontend_url"`          // 前端基础 URL，用于生成邮件中的外部链接
@@ -1384,6 +1390,17 @@ func (s *ServerConfig) Address() string {
 	return fmt.Sprintf("%s:%d", s.Host, s.Port)
 }
 
+func (s *ServerConfig) PublicAddress() string {
+	if address := strings.TrimSpace(s.PublicListenAddr); address != "" {
+		return address
+	}
+	return s.Address()
+}
+
+func (s *ServerConfig) ControlAddress() string {
+	return strings.TrimSpace(s.ControlListenAddr)
+}
+
 // DatabaseConfig 数据库连接配置
 // 性能优化：新增连接池参数，避免频繁创建/销毁连接
 type DatabaseConfig struct {
@@ -1684,6 +1701,10 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 		// 配置文件不存在时使用默认值
 	}
 	trustedProxiesEnv, trustedProxiesEnvConfigured := os.LookupEnv("SERVER_TRUSTED_PROXIES")
+	publicListenAddrEnv, publicListenAddrConfigured := os.LookupEnv("EXAPI_PUBLIC_LISTEN_ADDR")
+	controlListenAddrEnv, controlListenAddrConfigured := os.LookupEnv("EXAPI_CONTROL_LISTEN_ADDR")
+	controlHostsEnv, controlHostsConfigured := os.LookupEnv("EXAPI_CONTROL_HOSTS")
+	operatorPeerIPsEnv, operatorPeerIPsConfigured := os.LookupEnv("EXAPI_OPERATOR_PEER_IPS")
 	forwardedClientIPHeadersEnv, forwardedClientIPHeadersEnvConfigured := os.LookupEnv("SECURITY_FORWARDED_CLIENT_IP_HEADERS")
 	trustedProxiesConfigured := viper.InConfig("server.trusted_proxies") ||
 		viper.IsSet("server.trusted_proxies") || trustedProxiesEnvConfigured
@@ -1694,6 +1715,18 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	}
 	if trustedProxiesEnvConfigured {
 		cfg.Server.TrustedProxies = normalizeStringSlice(strings.Split(trustedProxiesEnv, ","))
+	}
+	if publicListenAddrConfigured {
+		cfg.Server.PublicListenAddr = strings.TrimSpace(publicListenAddrEnv)
+	}
+	if controlListenAddrConfigured {
+		cfg.Server.ControlListenAddr = strings.TrimSpace(controlListenAddrEnv)
+	}
+	if controlHostsConfigured {
+		cfg.Server.ControlHosts = normalizeStringSlice(strings.Split(controlHostsEnv, ","))
+	}
+	if operatorPeerIPsConfigured {
+		cfg.Server.OperatorPeerIPs = normalizeStringSlice(strings.Split(operatorPeerIPsEnv, ","))
 	}
 	if forwardedClientIPHeadersEnvConfigured {
 		cfg.Security.ForwardedClientIPHeaders = normalizeStringSlice(strings.Split(forwardedClientIPHeadersEnv, ","))
@@ -1718,6 +1751,10 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 		cfg.Server.Mode = "debug"
 	}
 	cfg.Server.FrontendURL = strings.TrimSpace(cfg.Server.FrontendURL)
+	cfg.Server.PublicListenAddr = strings.TrimSpace(cfg.Server.PublicListenAddr)
+	cfg.Server.ControlListenAddr = strings.TrimSpace(cfg.Server.ControlListenAddr)
+	cfg.Server.ControlHosts = normalizeStringSlice(cfg.Server.ControlHosts)
+	cfg.Server.OperatorPeerIPs = normalizeStringSlice(cfg.Server.OperatorPeerIPs)
 	cfg.JWT.Secret = strings.TrimSpace(cfg.JWT.Secret)
 	cfg.LinuxDo.ClientID = strings.TrimSpace(cfg.LinuxDo.ClientID)
 	cfg.LinuxDo.ClientSecret = strings.TrimSpace(cfg.LinuxDo.ClientSecret)
@@ -1869,6 +1906,10 @@ func setDefaults() {
 	// Server
 	viper.SetDefault("server.host", "0.0.0.0")
 	viper.SetDefault("server.port", 8080)
+	viper.SetDefault("server.public_listen_addr", "")
+	viper.SetDefault("server.control_listen_addr", "127.0.0.1:8027")
+	viper.SetDefault("server.control_hosts", []string{"localhost", "127.0.0.1", "::1"})
+	viper.SetDefault("server.operator_peer_ips", []string{"127.0.0.1", "::1"})
 	viper.SetDefault("server.mode", "release")
 	viper.SetDefault("server.enable_server_timing", false)
 	viper.SetDefault("server.frontend_url", "")
@@ -2458,6 +2499,10 @@ func setEnvReachableDefaults() {
 	// called without arguments.
 	_ = viper.BindEnv("server.trusted_proxies", "SERVER_TRUSTED_PROXIES")
 	_ = viper.BindEnv("security.forwarded_client_ip_headers", "SECURITY_FORWARDED_CLIENT_IP_HEADERS")
+	_ = viper.BindEnv("server.public_listen_addr", "EXAPI_PUBLIC_LISTEN_ADDR")
+	_ = viper.BindEnv("server.control_listen_addr", "EXAPI_CONTROL_LISTEN_ADDR")
+	_ = viper.BindEnv("server.control_hosts", "EXAPI_CONTROL_HOSTS")
+	_ = viper.BindEnv("server.operator_peer_ips", "EXAPI_OPERATOR_PEER_IPS")
 
 	// Third-party login providers. These carry client secrets and are exactly
 	// the settings an operator expects to inject via the environment, but every
@@ -2503,6 +2548,9 @@ func (c *Config) Validate() error {
 	}
 	c.Security.ForwardedClientIPHeaders = forwardedClientIPHeaders
 	c.SetForwardedClientIPSettings(c.Security.TrustForwardedIPForAPIKeyACL, forwardedClientIPHeaders)
+	if err := validatePrivateListenerConfig(&c.Server); err != nil {
+		return err
+	}
 	if c.Server.ReadHeaderTimeout < 1 || c.Server.ReadHeaderTimeout > 60 {
 		return fmt.Errorf("server.read_header_timeout must be between 1 and 60 seconds")
 	}
@@ -3523,6 +3571,58 @@ func (c *Config) Validate() error {
 	}
 	if err := ValidateDingTalkConfig(c.DingTalk); err != nil {
 		return fmt.Errorf("dingtalk_connect: %w", err)
+	}
+	return nil
+}
+
+func validatePrivateListenerConfig(server *ServerConfig) error {
+	if server == nil {
+		return fmt.Errorf("server configuration is required")
+	}
+	publicAddr := server.PublicAddress()
+	controlAddr := server.ControlAddress()
+	if err := validateListenAddress("EXAPI_PUBLIC_LISTEN_ADDR", publicAddr); err != nil {
+		return err
+	}
+	if err := validateListenAddress("EXAPI_CONTROL_LISTEN_ADDR", controlAddr); err != nil {
+		return err
+	}
+	if publicAddr == controlAddr {
+		return fmt.Errorf("EXAPI_PUBLIC_LISTEN_ADDR and EXAPI_CONTROL_LISTEN_ADDR must be different")
+	}
+	if len(server.ControlHosts) == 0 {
+		return fmt.Errorf("EXAPI_CONTROL_HOSTS must contain at least one exact host")
+	}
+	for _, raw := range server.ControlHosts {
+		host := strings.Trim(strings.TrimSpace(raw), "[]")
+		if host == "" || strings.ContainsAny(host, "/?#@") {
+			return fmt.Errorf("EXAPI_CONTROL_HOSTS contains invalid host %q", raw)
+		}
+		if parsedHost, port, err := net.SplitHostPort(raw); err == nil {
+			if strings.Trim(strings.TrimSpace(parsedHost), "[]") == "" || port == "" {
+				return fmt.Errorf("EXAPI_CONTROL_HOSTS contains invalid host %q", raw)
+			}
+		}
+	}
+	if len(server.OperatorPeerIPs) == 0 {
+		return fmt.Errorf("EXAPI_OPERATOR_PEER_IPS must contain at least one direct peer IP")
+	}
+	for _, raw := range server.OperatorPeerIPs {
+		peer, err := netip.ParseAddr(strings.Trim(strings.TrimSpace(raw), "[]"))
+		if err != nil || !peer.IsValid() || peer.IsUnspecified() || peer.IsMulticast() {
+			return fmt.Errorf("EXAPI_OPERATOR_PEER_IPS contains invalid IP %q", raw)
+		}
+	}
+	return nil
+}
+
+func validateListenAddress(name, address string) error {
+	host, port, err := net.SplitHostPort(strings.TrimSpace(address))
+	if err != nil || strings.TrimSpace(port) == "" {
+		return fmt.Errorf("%s must be a valid host:port address", name)
+	}
+	if strings.ContainsAny(host, "/?#@") {
+		return fmt.Errorf("%s must be a valid host:port address", name)
 	}
 	return nil
 }

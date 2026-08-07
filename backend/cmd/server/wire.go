@@ -29,7 +29,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 		providePrivacyClientFactory,
 		provideServiceBuildInfo,
 		provideCleanup,
-		wire.Struct(new(Application), "Server", "PromptAudit", "Cleanup"),
+		wire.Struct(new(Application), "Servers", "PromptAudit", "Cleanup"),
 	)
 	return nil, nil
 }

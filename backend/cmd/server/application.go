@@ -1,13 +1,12 @@
 package main
 
 import (
-	"net/http"
-
 	"github.com/Wei-Shaw/sub2api/internal/securityaudit"
+	"github.com/Wei-Shaw/sub2api/internal/server"
 )
 
 type Application struct {
-	Server      *http.Server
+	Servers     *server.HTTPServers
 	PromptAudit *securityaudit.PromptService
 	Cleanup     *shutdownCoordinator
 }

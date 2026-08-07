@@ -14,14 +14,14 @@ import (
 func RegisterAdminRoutes(
 	v1 *gin.RouterGroup,
 	h *handler.Handlers,
-	adminAuth middleware.AdminAuthMiddleware,
+	operatorAuth func(*gin.Context),
 	auditLog middleware.AuditLogMiddleware,
 	stepUpAuth middleware.StepUpAuthMiddleware,
 	settingService *service.SettingService,
 	panelRateLimiter *middleware.PanelRateLimiter,
 ) {
 	admin := v1.Group("/admin")
-	admin.Use(gin.HandlerFunc(adminAuth))
+	admin.Use(gin.HandlerFunc(operatorAuth))
 	// 面板全局按用户限流（默认管理员豁免，可在系统设置中关闭豁免）
 	admin.Use(panelRateLimiter.Global())
 	// 审计中间件挂在认证之后：所有管理面变更类操作 + 敏感读取入审计日志

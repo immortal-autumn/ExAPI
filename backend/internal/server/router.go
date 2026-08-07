@@ -22,17 +22,14 @@ import (
 
 const frameSrcRefreshTimeout = 5 * time.Second
 
-// SetupRouter 配置路由器中间件和路由
-func SetupRouter(
+// SetupControlRouter configures the private operator listener. No gateway or
+// credential-issuing authentication routes are registered here.
+func SetupControlRouter(
 	r *gin.Engine,
 	handlers *handler.Handlers,
-	jwtAuth middleware2.JWTAuthMiddleware,
-	adminAuth middleware2.AdminAuthMiddleware,
-	apiKeyAuth middleware2.APIKeyAuthMiddleware,
+	operatorAuth middleware2.OperatorAuthMiddleware,
 	auditLog middleware2.AuditLogMiddleware,
-	stepUpAuth middleware2.StepUpAuthMiddleware,
-	apiKeyService *service.APIKeyService,
-	subscriptionService *service.SubscriptionService,
+	panelRateLimiter *middleware2.PanelRateLimiter,
 	opsService *service.OpsService,
 	settingService *service.SettingService,
 	cfg *config.Config,
@@ -57,7 +54,8 @@ func SetupRouter(
 	}
 	refreshFrameOrigins() // 启动时初始化
 
-	// 应用中间件
+	// The direct peer/Host boundary runs before CORS, the SPA, or any API.
+	r.Use(middleware2.ControlBoundary(cfg.Server))
 	r.Use(middleware2.RequestLogger())
 	// 将客户端 IP + UA 注入 request context，供 token 签发/会话绑定/审计日志统一读取。
 	// 解析模式按请求快照：兼容开关开启时信任原始转发头，关闭时使用 server.trusted_proxies。
@@ -70,9 +68,6 @@ func SetupRouter(
 		}
 		return nil
 	}))
-	// Defense in depth for single-user deployments: hide the control plane on
-	// the configured public host before the embedded SPA can serve fallback HTML.
-	r.Use(middleware2.PublicControlPlaneGuard())
 	r.Use(middleware2.ServerTiming(cfg.Server.EnableServerTiming))
 
 	// Serve embedded frontend with settings injection if available
@@ -94,47 +89,62 @@ func SetupRouter(
 		settingService.SetOnUpdateCallback(refreshFrameOrigins)
 	}
 
-	// 注册路由
-	registerRoutes(r, handlers, jwtAuth, adminAuth, apiKeyAuth, auditLog, stepUpAuth, apiKeyService, subscriptionService, opsService, settingService, cfg, db, redisClient)
+	registerControlRoutes(r, handlers, operatorAuth, auditLog, panelRateLimiter, settingService, cfg, db, redisClient)
 
 	return r
 }
 
-// registerRoutes 注册所有 HTTP 路由
-func registerRoutes(
+func SetupPublicRouter(
 	r *gin.Engine,
-	h *handler.Handlers,
-	jwtAuth middleware2.JWTAuthMiddleware,
-	adminAuth middleware2.AdminAuthMiddleware,
+	handlers *handler.Handlers,
 	apiKeyAuth middleware2.APIKeyAuthMiddleware,
-	auditLog middleware2.AuditLogMiddleware,
-	stepUpAuth middleware2.StepUpAuthMiddleware,
 	apiKeyService *service.APIKeyService,
 	subscriptionService *service.SubscriptionService,
 	opsService *service.OpsService,
+	settingService *service.SettingService,
+	compositeResolver *service.CompositeRouteResolver,
+	cfg *config.Config,
+	db *sql.DB,
+	redisClient *redis.Client,
+) *gin.Engine {
+	middleware2.SetIngressRejectRecorder(opsService)
+	r.Use(middleware2.RequestLogger())
+	r.Use(middleware2.SessionBindingContext(cfg))
+	r.Use(middleware2.Logger())
+	r.Use(middleware2.CORS(cfg.CORS))
+	r.Use(middleware2.SecurityHeaders(cfg.Security.CSP, nil))
+	r.Use(middleware2.ServerTiming(false))
+
+	routes.RegisterCommonRoutes(r, func(ctx context.Context) error {
+		return probeReadiness(ctx, db, redisClient)
+	})
+	routes.RegisterGatewayRoutes(r, handlers, apiKeyAuth, apiKeyService, subscriptionService, opsService, settingService, compositeResolver, cfg)
+	return r
+}
+
+func registerControlRoutes(
+	r *gin.Engine,
+	h *handler.Handlers,
+	operatorAuth middleware2.OperatorAuthMiddleware,
+	auditLog middleware2.AuditLogMiddleware,
+	panelRateLimiter *middleware2.PanelRateLimiter,
 	settingService *service.SettingService,
 	cfg *config.Config,
 	db *sql.DB,
 	redisClient *redis.Client,
 ) {
-	// 通用路由（健康检查、状态等）
 	routes.RegisterCommonRoutes(r, func(ctx context.Context) error {
 		return probeReadiness(ctx, db, redisClient)
 	})
 
-	// API v1
 	v1 := r.Group("/api/v1")
+	routes.RegisterOperatorRoutes(v1, h, operatorAuth, auditLog, panelRateLimiter)
+	routes.RegisterAdminRoutes(v1, h, operatorAuth, auditLog, privateOperatorStepUp(), settingService, panelRateLimiter)
+	v1.GET("/settings/public", h.Setting.GetPublicSettings)
+}
 
-	// 注册各模块路由
-	routes.RegisterAuthRoutes(v1, h, jwtAuth, auditLog, redisClient, settingService)
-	routes.RegisterUserRoutes(v1, h, jwtAuth, auditLog, settingService)
-	routes.RegisterAdminRoutes(v1, h, adminAuth, auditLog, stepUpAuth, settingService, nil)
-	routes.RegisterGatewayRoutes(r, h, apiKeyAuth, apiKeyService, subscriptionService, opsService, settingService, nil, cfg)
-	if config.SaaSFeaturesEnabled() {
-		routes.RegisterPaymentRoutes(v1, h.Payment, h.PaymentWebhook, h.Admin.Payment, jwtAuth, adminAuth, auditLog, settingService, nil)
-	}
-
-	handler.RegisterPageRoutes(v1, cfg.Pricing.DataDir, gin.HandlerFunc(jwtAuth), gin.HandlerFunc(adminAuth), settingService)
+func privateOperatorStepUp() middleware2.StepUpAuthMiddleware {
+	return middleware2.StepUpAuthMiddleware(func(c *gin.Context) { c.Next() })
 }
 
 func probeReadiness(ctx context.Context, db *sql.DB, redisClient *redis.Client) error {

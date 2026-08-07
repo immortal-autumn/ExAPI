@@ -174,44 +174,49 @@ func runMainServer() {
 		}
 	}
 
-	tracker := newActiveHandlerTracker(app.Server.Handler)
-	app.Server.Handler = tracker
-	serverErr := make(chan error, 1)
-	go func() {
-		serverErr <- app.Server.ListenAndServe()
-	}()
-
-	log.Printf("Server started on %s", app.Server.Addr)
+	if app.Servers == nil || app.Servers.Public == nil || app.Servers.Control == nil {
+		log.Fatal("Failed to initialize split public/control listeners")
+	}
+	type managedServer struct {
+		name    string
+		server  *http.Server
+		tracker *activeHandlerTracker
+	}
+	managed := []*managedServer{
+		{name: "public", server: app.Servers.Public},
+		{name: "control", server: app.Servers.Control},
+	}
+	type serveResult struct {
+		name string
+		err  error
+	}
+	serverErr := make(chan serveResult, len(managed))
+	for _, current := range managed {
+		current.tracker = newActiveHandlerTracker(current.server.Handler)
+		current.server.Handler = current.tracker
+		go func(item *managedServer) {
+			serverErr <- serveResult{name: item.name, err: item.server.ListenAndServe()}
+		}(current)
+		log.Printf("%s listener started on %s", current.name, current.server.Addr)
+	}
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	exitedServers := 0
 	select {
 	case <-quit:
-	case serveErr := <-serverErr:
-		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-			log.Printf("Server stopped unexpectedly: %v", serveErr)
+	case result := <-serverErr:
+		exitedServers++
+		if result.err != nil && !errors.Is(result.err, http.ErrServerClosed) {
+			log.Printf("%s listener stopped unexpectedly: %v", result.name, result.err)
 		}
-		tracker.StopAccepting()
-		ctx, cancel := context.WithTimeout(context.Background(), shutdownTotalGrace)
-		defer cancel()
-		producersComplete := app.Cleanup == nil || app.Cleanup.StopProducers(ctx)
-		connectionsComplete := app.Cleanup == nil || app.Cleanup.DrainConnections(ctx)
-		handlersComplete := tracker.WaitContext(ctx)
-		if !handlersComplete {
-			log.Printf("Server handlers did not drain before shutdown deadline")
-		}
-		workersComplete := app.Cleanup == nil || app.Cleanup.DrainWorkers(ctx)
-		flushComplete := app.Cleanup == nil || app.Cleanup.Flush(ctx)
-		if app.Cleanup != nil {
-			app.Cleanup.Close(ctx, producersComplete && connectionsComplete && handlersComplete && workersComplete && flushComplete)
-		}
-		shutdownFinished = true
-		return
 	}
 
-	log.Println("Shutting down server...")
+	log.Println("Shutting down listeners...")
 	// Phase 1: make readiness/admission fail before stopping any producer.
-	tracker.StopAccepting()
+	for _, current := range managed {
+		current.tracker.StopAccepting()
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTotalGrace)
 	defer cancel()
 	producersComplete := app.Cleanup == nil || app.Cleanup.StopProducers(ctx)
@@ -220,24 +225,39 @@ func runMainServer() {
 	// Phase 3: drain HTTP after producers are stopped. Hijacked upstream WS
 	// pools were closed by DrainConnections above.
 	httpCtx, httpCancel := context.WithTimeout(ctx, httpDrainGrace)
-	if err := app.Server.Shutdown(httpCtx); err != nil {
-		log.Printf("Server forced to shutdown: %v", err)
-		if closeErr := app.Server.Close(); closeErr != nil && !errors.Is(closeErr, http.ErrServerClosed) {
-			log.Printf("Server close failed: %v", closeErr)
-		}
+	var shutdownWG sync.WaitGroup
+	for _, current := range managed {
+		shutdownWG.Add(1)
+		go func(item *managedServer) {
+			defer shutdownWG.Done()
+			if err := item.server.Shutdown(httpCtx); err != nil {
+				log.Printf("%s listener forced to shutdown: %v", item.name, err)
+				if closeErr := item.server.Close(); closeErr != nil && !errors.Is(closeErr, http.ErrServerClosed) {
+					log.Printf("%s listener close failed: %v", item.name, closeErr)
+				}
+			}
+		}(current)
 	}
+	shutdownWG.Wait()
 	httpCancel()
-	select {
-	case serveErr := <-serverErr:
-		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-			log.Printf("Server exited with error: %v", serveErr)
+	for exitedServers < len(managed) {
+		select {
+		case result := <-serverErr:
+			exitedServers++
+			if result.err != nil && !errors.Is(result.err, http.ErrServerClosed) {
+				log.Printf("%s listener exited with error: %v", result.name, result.err)
+			}
+		case <-ctx.Done():
+			log.Printf("Listeners did not exit before shutdown deadline")
+			exitedServers = len(managed)
 		}
-	case <-ctx.Done():
-		log.Printf("Server listener did not exit before shutdown deadline")
 	}
-	handlersComplete := tracker.WaitContext(ctx)
-	if !handlersComplete {
-		log.Printf("Server handlers did not drain before shutdown deadline")
+	handlersComplete := true
+	for _, current := range managed {
+		if !current.tracker.WaitContext(ctx) {
+			log.Printf("%s listener handlers did not drain before shutdown deadline", current.name)
+			handlersComplete = false
+		}
 	}
 
 	// Phases 4-6: close queue admission and drain workers, flush buffered

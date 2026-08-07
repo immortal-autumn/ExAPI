@@ -23,26 +23,30 @@ import (
 
 // ProviderSet 提供服务器层的依赖
 var ProviderSet = wire.NewSet(
-	ProvideRouter,
-	ProvideHTTPServer,
+	ProvideControlRouter,
+	ProvidePublicRouter,
+	ProvideHTTPServers,
 )
 
-// ProvideRouter 提供路由器
-func ProvideRouter(
+type ControlRouter struct{ *gin.Engine }
+type PublicRouter struct{ *gin.Engine }
+
+type HTTPServers struct {
+	Public  *http.Server
+	Control *http.Server
+}
+
+func ProvideControlRouter(
 	cfg *config.Config,
 	handlers *handler.Handlers,
-	jwtAuth middleware2.JWTAuthMiddleware,
-	adminAuth middleware2.AdminAuthMiddleware,
-	apiKeyAuth middleware2.APIKeyAuthMiddleware,
+	operatorAuth middleware2.OperatorAuthMiddleware,
 	auditLog middleware2.AuditLogMiddleware,
-	stepUpAuth middleware2.StepUpAuthMiddleware,
-	apiKeyService *service.APIKeyService,
-	subscriptionService *service.SubscriptionService,
+	panelRateLimiter *middleware2.PanelRateLimiter,
 	opsService *service.OpsService,
 	settingService *service.SettingService,
 	db *sql.DB,
 	redisClient *redis.Client,
-) *gin.Engine {
+) *ControlRouter {
 	if cfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -87,7 +91,28 @@ func ProvideRouter(
 		service.SetWebSearchManager(websearch.NewManager(configs, redisClient))
 	})
 
-	return SetupRouter(r, handlers, jwtAuth, adminAuth, apiKeyAuth, auditLog, stepUpAuth, apiKeyService, subscriptionService, opsService, settingService, cfg, db, redisClient)
+	return &ControlRouter{SetupControlRouter(r, handlers, operatorAuth, auditLog, panelRateLimiter, opsService, settingService, cfg, db, redisClient)}
+}
+
+func ProvidePublicRouter(
+	cfg *config.Config,
+	handlers *handler.Handlers,
+	apiKeyAuth middleware2.APIKeyAuthMiddleware,
+	apiKeyService *service.APIKeyService,
+	subscriptionService *service.SubscriptionService,
+	opsService *service.OpsService,
+	settingService *service.SettingService,
+	compositeResolver *service.CompositeRouteResolver,
+	db *sql.DB,
+	redisClient *redis.Client,
+) *PublicRouter {
+	if cfg.Server.Mode == "release" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	r := gin.New()
+	r.Use(middleware2.Recovery())
+	configureTrustedProxies(r, cfg.Server)
+	return &PublicRouter{SetupPublicRouter(r, handlers, apiKeyAuth, apiKeyService, subscriptionService, opsService, settingService, compositeResolver, cfg, db, redisClient)}
 }
 
 func configureTrustedProxies(r *gin.Engine, cfg config.ServerConfig) {
@@ -111,9 +136,20 @@ func configureTrustedProxies(r *gin.Engine, cfg config.ServerConfig) {
 
 // ProvideHTTPServer 提供 HTTP 服务器
 func ProvideHTTPServer(cfg *config.Config, router *gin.Engine) *http.Server {
+	return provideHTTPServerAt(cfg.Server.PublicAddress(), cfg, router)
+}
+
+func ProvideHTTPServers(cfg *config.Config, public *PublicRouter, control *ControlRouter) *HTTPServers {
+	return &HTTPServers{
+		Public:  provideHTTPServerAt(cfg.Server.PublicAddress(), cfg, public.Engine),
+		Control: provideHTTPServerAt(cfg.Server.ControlAddress(), cfg, control.Engine),
+	}
+}
+
+func provideHTTPServerAt(address string, cfg *config.Config, router *gin.Engine) *http.Server {
 	httpHandler := http.Handler(router)
 	server := &http.Server{
-		Addr:           cfg.Server.Address(),
+		Addr:           address,
 		Handler:        httpHandler,
 		MaxHeaderBytes: cfg.Server.MaxHeaderBytes,
 		// ReadHeaderTimeout: 读取请求头的超时时间，防止慢速请求头攻击
