@@ -62,6 +62,12 @@ export default {
       dataImporting: '导入中...',
       dataImportSelectFile: '请选择数据文件',
       dataImportParseFailed: '数据解析失败',
+      dataImportLimits: {
+        too_many_files: '一次最多导入 10 个文件',
+        file_too_large: '单个文件不能超过 10 MiB',
+        total_too_large: '所选文件总大小不能超过 25 MiB',
+        too_many_objects: '一次最多导入 5,000 个账号与代理对象',
+      },
       dataImportFailed: '数据导入失败',
       dataImportResult: '导入结果',
       dataImportResultSummary: '创建 {proxy_created}，复用 {proxy_reused}，失败 {proxy_failed}',

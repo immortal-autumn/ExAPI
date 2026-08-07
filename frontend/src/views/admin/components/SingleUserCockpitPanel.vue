@@ -8,11 +8,11 @@
             <h2 class="text-sm font-semibold text-gray-900 dark:text-white">单用户控制台</h2>
           </div>
           <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            用于监控额度、检查唤醒就绪状态和切换上游账号的私有网关控制台。
+            用于监控额度、检查账号可调度状态和切换上游账号的私有网关控制台。
           </p>
         </div>
         <div class="flex gap-2">
-          <button class="btn btn-secondary btn-sm" :disabled="loading" @click="loadAccounts">
+          <button type="button" class="btn btn-secondary btn-sm" :disabled="loading" aria-label="刷新控制台摘要" @click="loadSummary">
             <Icon name="refresh" size="sm" :class="loading ? 'animate-spin' : ''" />
             <span>刷新</span>
           </button>
@@ -23,26 +23,50 @@
         </div>
       </div>
 
+      <div
+        v-if="loading && !summary"
+        class="flex min-h-52 items-center justify-center rounded-lg border border-gray-200 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400"
+        role="status"
+        aria-live="polite"
+      >
+        正在加载账号摘要…
+      </div>
+      <div
+        v-else-if="error || !summary"
+        class="flex min-h-52 flex-col items-center justify-center gap-3 rounded-lg border border-red-200 bg-red-50 p-6 text-center dark:border-red-900/60 dark:bg-red-950/20"
+        role="alert"
+      >
+        <Icon name="exclamationTriangle" size="lg" class="text-red-500" />
+        <div>
+          <p class="font-medium text-red-800 dark:text-red-200">账号摘要不可用</p>
+          <p class="mt-1 text-sm text-red-700 dark:text-red-300">{{ error || '无法读取控制台摘要。' }}</p>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" :disabled="loading" @click="loadSummary">
+          重试
+        </button>
+      </div>
+
+      <template v-else>
       <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-dark-800/60">
           <p class="text-xs text-gray-500 dark:text-gray-400">账号</p>
-          <p class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{{ summary.totalAccounts }}</p>
-          <p class="text-xs text-green-600 dark:text-green-400">{{ summary.activeAccounts }} 个正常</p>
+          <p class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{{ summary.accounts.total }}</p>
+          <p class="text-xs text-green-600 dark:text-green-400">{{ summary.accounts.active }} 个正常</p>
         </div>
         <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-dark-800/60">
-          <p class="text-xs text-gray-500 dark:text-gray-400">可唤醒</p>
-          <p class="mt-1 text-2xl font-bold text-violet-600 dark:text-violet-400">{{ summary.wakeupReadyAccounts }}</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">正常且可调度</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">可调度</p>
+          <p class="mt-1 text-2xl font-bold text-violet-600 dark:text-violet-400">{{ summary.accounts.dispatch_eligible }}</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">当前符合调度条件</p>
         </div>
         <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-dark-800/60">
           <p class="text-xs text-gray-500 dark:text-gray-400">额度预警</p>
-          <p class="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">{{ summary.quotaWatchAccounts.length }}</p>
+          <p class="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">{{ summary.accounts.quota_warning_total }}</p>
           <p class="text-xs text-gray-500 dark:text-gray-400">已使用配置限额的 70% 以上</p>
         </div>
         <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-dark-800/60">
           <p class="text-xs text-gray-500 dark:text-gray-400">异常账号</p>
-          <p class="mt-1 text-2xl font-bold" :class="summary.errorAccounts ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'">
-            {{ summary.errorAccounts }}
+          <p class="mt-1 text-2xl font-bold" :class="summary.accounts.error ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'">
+            {{ summary.accounts.error }}
           </p>
           <p class="text-xs text-gray-500 dark:text-gray-400">需要处理</p>
         </div>
@@ -56,19 +80,26 @@
               管理限额
             </button>
           </div>
-          <div v-if="summary.quotaWatchAccounts.length" class="space-y-3">
-            <div v-for="acct in summary.quotaWatchAccounts" :key="acct.id" class="space-y-1">
+          <div v-if="quotaWarnings.length" class="space-y-3">
+            <button
+              v-for="warning in quotaWarnings"
+              :key="warning.account_id"
+              type="button"
+              class="block w-full space-y-1 rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              :aria-label="`查看账号 ${warning.name}，额度使用 ${warning.percent}%`"
+              @click="goToAccount(warning.account_id)"
+            >
               <div class="flex items-center justify-between gap-3 text-sm">
-                <span class="truncate font-medium text-gray-900 dark:text-white">{{ acct.name }}</span>
-                <span :class="quotaTextClass(acct.quotaState.severity)">{{ acct.quotaState.percent }}%</span>
+                <span class="truncate font-medium text-gray-900 dark:text-white">{{ warning.name }}</span>
+                <span :class="quotaTextClass(warning.severity)">{{ warning.percent }}%</span>
               </div>
               <div class="h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                <div class="h-full rounded-full" :class="quotaBarClass(acct.quotaState.severity)" :style="{ width: `${Math.min(acct.quotaState.percent, 100)}%` }" />
+                <div class="h-full rounded-full" :class="quotaBarClass(warning.severity)" :style="{ width: `${Math.min(warning.percent, 100)}%` }" />
               </div>
               <p class="text-xs text-gray-500 dark:text-gray-400">
-                {{ acct.platform }} · {{ acct.quotaState.scope }} · ${{ formatCost(acct.quotaState.used) }} / ${{ formatCost(acct.quotaState.limit) }}
+                {{ warning.platform }} · {{ warning.scope }} · ${{ formatCost(warning.used) }} / ${{ formatCost(warning.limit) }}
               </p>
-            </div>
+            </button>
           </div>
           <p v-else class="text-sm text-gray-500 dark:text-gray-400">
             暂无用量超过 70% 的额度周期。请前往账号管理为各账号设置限额。
@@ -86,7 +117,7 @@
             <div v-for="platform in summary.platforms" :key="platform.platform" class="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2 text-sm dark:bg-dark-800/60">
               <div>
                 <p class="font-medium capitalize text-gray-900 dark:text-white">{{ platform.platform }}</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">{{ platform.schedulable }} 个可唤醒 · {{ platform.error }} 个异常</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ platform.dispatch_eligible }} 个可调度 · {{ platform.error }} 个异常</p>
               </div>
               <div class="text-right">
                 <p class="font-semibold text-gray-900 dark:text-white">{{ platform.active }}/{{ platform.total }}</p>
@@ -99,6 +130,8 @@
           </p>
         </div>
       </div>
+      <p class="sr-only" role="status" aria-live="polite">{{ loadAnnouncement }}</p>
+      </template>
     </section>
 
     <section class="card p-4">
@@ -120,9 +153,9 @@
         <div class="flex items-start gap-2">
           <Icon name="bolt" size="sm" class="mt-0.5 text-violet-600 dark:text-violet-300" />
           <div>
-            <p class="font-medium text-violet-900 dark:text-violet-100">唤醒任务建议</p>
+            <p class="font-medium text-violet-900 dark:text-violet-100">定时检测建议</p>
             <p class="mt-1 text-xs text-violet-700 dark:text-violet-200">
-              可将定时账号测试用作轻量唤醒任务。建议降低执行频率并限制 Token 用量；此处统计正常且可调度的账号。
+              可将定时账号测试用于低频健康检查。建议限制执行频率与 Token 用量；可调度统计不包含瞬时并发饱和状态。
             </p>
             <button class="mt-2 text-xs font-medium text-violet-700 hover:text-violet-600 dark:text-violet-200" @click="router.push('/admin/accounts')">
               按账号配置 →
@@ -131,67 +164,71 @@
         </div>
       </div>
 
-      <p v-if="copiedLabel" class="mt-3 text-xs text-green-600 dark:text-green-400">已复制：{{ copiedLabel }}</p>
-      <p v-if="error" class="mt-3 text-xs text-red-600 dark:text-red-400">{{ error }}</p>
+      <p class="mt-3 min-h-4 text-xs text-green-600 dark:text-green-400" role="status" aria-live="polite">
+        {{ copiedLabel ? `已复制：${copiedLabel}` : '' }}
+      </p>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, onMounted, ref } from 'vue'
+import { computed, defineComponent, h, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { adminAPI } from '@/api/admin'
 import Icon from '@/components/icons/Icon.vue'
-import type { Account } from '@/types'
+import { useAppStore } from '@/stores/app'
+import { useClipboard } from '@/composables/useClipboard'
+import type { CockpitQuotaSeverity, CockpitSummaryResponse } from '@/api/admin'
 import {
-  buildSingleUserCockpitSummary,
   getLocalIntegrationLinks,
-  type QuotaSeverity,
 } from '@/utils/singleUserCockpit'
 
 const router = useRouter()
-const accounts = ref<Account[]>([])
+const appStore = useAppStore()
+const { copyToClipboard } = useClipboard()
+const summary = ref<CockpitSummaryResponse | null>(null)
 const loading = ref(false)
 const error = ref('')
 const copiedLabel = ref('')
+const loadAnnouncement = ref('')
 let copyTimer: ReturnType<typeof setTimeout> | null = null
 
 const links = computed(() => getLocalIntegrationLinks({
   origin: typeof window !== 'undefined' ? window.location.origin : undefined,
+  apiBaseUrl: appStore.apiBaseUrl,
 }))
 
-const summary = computed(() => buildSingleUserCockpitSummary(accounts.value))
+const quotaWarnings = computed(() => summary.value?.quota_warnings.slice(0, 6) ?? [])
 
-async function loadAccounts() {
+async function loadSummary() {
   loading.value = true
   error.value = ''
   try {
-    const response = await adminAPI.accounts.list(1, 200, {
-      include_scheduler_score: 'true',
-      sort_by: 'name',
-      sort_order: 'asc',
-    })
-    accounts.value = response.items || []
+    summary.value = await adminAPI.cockpit.getSummary()
+    loadAnnouncement.value = `账号摘要已更新，共 ${summary.value.accounts.total} 个账号。`
   } catch (err) {
-    console.error('Failed to load single-user cockpit accounts:', err)
-    error.value = '加载账号摘要失败。'
+    console.error('Failed to load cockpit summary:', err)
+    summary.value = null
+    error.value = '加载账号摘要失败，请检查服务状态后重试。'
+    loadAnnouncement.value = error.value
   } finally {
     loading.value = false
   }
 }
 
 async function copyValue(value: string, label: string) {
-  try {
-    await navigator.clipboard.writeText(value)
+  const copied = await copyToClipboard(value)
+  if (copied) {
     copiedLabel.value = label
     if (copyTimer) clearTimeout(copyTimer)
     copyTimer = setTimeout(() => {
       copiedLabel.value = ''
     }, 2000)
-  } catch (err) {
-    console.error('Failed to copy integration value:', err)
-    error.value = '复制到剪贴板失败。'
   }
+}
+
+function goToAccount(accountID: number) {
+  void router.push({ path: '/admin/accounts', query: { account_id: String(accountID) } })
 }
 
 function formatCost(value: number): string {
@@ -200,27 +237,23 @@ function formatCost(value: number): string {
   return '0.00'
 }
 
-function quotaTextClass(severity: QuotaSeverity): string {
+function quotaTextClass(severity: CockpitQuotaSeverity): string {
   switch (severity) {
     case 'critical':
       return 'font-semibold text-red-600 dark:text-red-400'
     case 'warning':
       return 'font-semibold text-amber-600 dark:text-amber-400'
-    case 'healthy':
-      return 'font-semibold text-green-600 dark:text-green-400'
     default:
       return 'font-semibold text-gray-500 dark:text-gray-400'
   }
 }
 
-function quotaBarClass(severity: QuotaSeverity): string {
+function quotaBarClass(severity: CockpitQuotaSeverity): string {
   switch (severity) {
     case 'critical':
       return 'bg-red-500'
     case 'warning':
       return 'bg-amber-500'
-    case 'healthy':
-      return 'bg-green-500'
     default:
       return 'bg-gray-400'
   }
@@ -241,6 +274,7 @@ const IntegrationCopyRow = defineComponent({
         h('button', {
           class: 'btn btn-secondary btn-sm px-2',
           type: 'button',
+          'aria-label': `复制${props.label}`,
           onClick: () => emit('copy', props.value, props.label),
         }, '复制'),
       ]),
@@ -249,6 +283,10 @@ const IntegrationCopyRow = defineComponent({
 })
 
 onMounted(() => {
-  void loadAccounts()
+  void loadSummary()
+})
+
+onUnmounted(() => {
+  if (copyTimer) clearTimeout(copyTimer)
 })
 </script>

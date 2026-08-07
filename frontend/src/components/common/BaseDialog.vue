@@ -11,7 +11,7 @@
         @click.self="handleClose"
       >
         <!-- Modal panel -->
-        <div ref="dialogRef" :class="['modal-content', widthClasses]" @click.stop>
+        <div ref="dialogRef" :class="['modal-content', widthClasses]" tabindex="-1" @click.stop>
           <!-- Header -->
           <div class="modal-header">
             <h3 :id="dialogId" class="modal-title">
@@ -46,9 +46,16 @@
 import { computed, watch, onMounted, onUnmounted, ref, nextTick } from 'vue'
 import Icon from '@/components/icons/Icon.vue'
 
-// 生成唯一ID以避免多个对话框时ID冲突
-let dialogIdCounter = 0
-const dialogId = `modal-title-${++dialogIdCounter}`
+// Keep nested dialogs in one runtime stack so only the topmost instance handles
+// Escape/Tab and every aria-labelledby target remains unique.
+type DialogRuntime = { stack: symbol[]; nextID: number }
+const dialogRuntime = ((globalThis as typeof globalThis & { __EXAPI_DIALOG_RUNTIME__?: DialogRuntime }).__EXAPI_DIALOG_RUNTIME__ ??= {
+  stack: [],
+  nextID: 0,
+})
+const dialogId = `modal-title-${++dialogRuntime.nextID}`
+const dialogStack = dialogRuntime.stack
+const dialogToken = Symbol(dialogId)
 
 // 焦点管理
 const dialogRef = ref<HTMLElement | null>(null)
@@ -105,10 +112,51 @@ const handleClose = () => {
   }
 }
 
+const getFocusableElements = (): HTMLElement[] => {
+  if (!dialogRef.value) return []
+  return Array.from(dialogRef.value.querySelectorAll<HTMLElement>(
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )).filter((element) =>
+    !element.hasAttribute('hidden') &&
+    element.getAttribute('aria-hidden') !== 'true' &&
+    element.getAttribute('tabindex') !== '-1'
+  )
+}
+
 const handleEscape = (event: KeyboardEvent) => {
-  if (props.show && props.closeOnEscape && event.key === 'Escape') {
+  if (!props.show || dialogStack[dialogStack.length - 1] !== dialogToken) return
+
+  if (props.closeOnEscape && event.key === 'Escape') {
+    event.preventDefault()
     emit('close')
+    return
   }
+
+  if (event.key !== 'Tab' || !dialogRef.value) return
+  const focusable = getFocusableElements()
+
+  if (focusable.length === 0) {
+    event.preventDefault()
+    dialogRef.value.focus()
+    return
+  }
+
+  const first = focusable[0]!
+  const last = focusable[focusable.length - 1]!
+  const active = document.activeElement
+  if (event.shiftKey && (active === first || !dialogRef.value.contains(active))) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+const removeFromDialogStack = () => {
+  const index = dialogStack.lastIndexOf(dialogToken)
+  if (index >= 0) dialogStack.splice(index, 1)
+  document.body.classList.toggle('modal-open', dialogStack.length > 0)
 }
 
 // Prevent body scroll when modal is open and manage focus
@@ -119,18 +167,18 @@ watch(
       // 保存当前焦点元素
       previousActiveElement = document.activeElement as HTMLElement
       // 使用CSS类而不是直接操作style,更易于管理多个对话框
+      removeFromDialogStack()
+      dialogStack.push(dialogToken)
       document.body.classList.add('modal-open')
 
       // 等待DOM更新后设置焦点到对话框
       await nextTick()
       if (dialogRef.value) {
-        const firstFocusable = dialogRef.value.querySelector<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
-        firstFocusable?.focus()
+        const firstFocusable = getFocusableElements()[0]
+        ;(firstFocusable ?? dialogRef.value).focus()
       }
     } else {
-      document.body.classList.remove('modal-open')
+      removeFromDialogStack()
       // 恢复之前的焦点
       if (previousActiveElement && typeof previousActiveElement.focus === 'function') {
         previousActiveElement.focus()
@@ -147,7 +195,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleEscape)
-  // 确保组件卸载时移除滚动锁定
-  document.body.classList.remove('modal-open')
+  removeFromDialogStack()
 })
 </script>

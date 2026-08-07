@@ -327,7 +327,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, defineAsyncComponent, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
@@ -346,34 +346,35 @@ import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import Icon from '@/components/icons/Icon.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import Select from '@/components/common/Select.vue'
-import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
-import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import SingleUserCockpitPanel from './components/SingleUserCockpitPanel.vue'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
 import { isSingleUserPrivateControlPlaneBrowser } from '@/router/singleUserGatewayMode'
 
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Tooltip,
-  Legend,
-  Filler
-} from 'chart.js'
-import { Line } from 'vue-chartjs'
-
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Tooltip,
-  Legend,
-  Filler
+// The private cockpit never renders analytics. Keep chart components and the
+// Chart.js runtime behind dynamic imports so they cannot enter its static graph.
+const ModelDistributionChart = defineAsyncComponent(
+  () => import('@/components/charts/ModelDistributionChart.vue')
 )
+const TokenUsageTrend = defineAsyncComponent(
+  () => import('@/components/charts/TokenUsageTrend.vue')
+)
+const Line = defineAsyncComponent(
+  () => import('vue-chartjs').then((module) => module.Line)
+)
+
+const initializePublicCharts = async () => {
+  const {
+    Chart,
+    CategoryScale,
+    LinearScale,
+    PointElement,
+    LineElement,
+    Tooltip,
+    Legend,
+    Filler
+  } = await import('chart.js')
+  Chart.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler)
+}
 
 const appStore = useAppStore()
 const router = useRouter()
@@ -737,10 +738,11 @@ const loadChartData = async () => {
   ])
 }
 
-onMounted(() => {
+onMounted(async () => {
   if (privateGatewayControlPlane) return
+  await initializePublicCharts()
   void refreshBatchImageAccess()
-  loadDashboardStats()
+  void loadDashboardStats()
 })
 </script>
 

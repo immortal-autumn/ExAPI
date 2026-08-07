@@ -6,7 +6,7 @@
     close-on-click-outside
     @close="handleClose"
   >
-    <form id="import-proxy-data-form" class="space-y-4" @submit.prevent="handleImport">
+    <form id="import-proxy-data-form" class="space-y-4" :aria-busy="importing" @submit.prevent="handleImport">
       <div class="text-sm text-gray-600 dark:text-dark-300">
         {{ t('admin.proxies.dataImportHint') }}
       </div>
@@ -43,6 +43,8 @@
       <div
         v-if="result"
         class="space-y-2 rounded-xl border border-gray-200 p-4 dark:border-dark-700"
+        role="status"
+        aria-live="polite"
       >
         <div class="text-sm font-medium text-gray-900 dark:text-white">
           {{ t('admin.proxies.dataImportResult') }}
@@ -91,6 +93,11 @@ import BaseDialog from '@/components/common/BaseDialog.vue'
 import { adminAPI } from '@/api/admin'
 import { useAppStore } from '@/stores/app'
 import type { AdminDataImportResult } from '@/types'
+import {
+  exceedsImportObjectLimit,
+  getImportFileLimitViolation,
+  type ImportLimitViolation,
+} from '@/utils/importLimits'
 
 interface Props {
   show: boolean
@@ -110,6 +117,7 @@ const appStore = useAppStore()
 const importing = ref(false)
 const file = ref<File | null>(null)
 const result = ref<AdminDataImportResult | null>(null)
+const hasCreatedData = ref(false)
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const fileName = computed(() => file.value?.name || '')
@@ -122,6 +130,7 @@ watch(
     if (open) {
       file.value = null
       result.value = null
+      hasCreatedData.value = false
       if (fileInput.value) {
         fileInput.value.value = ''
       }
@@ -135,12 +144,30 @@ const openFilePicker = () => {
 
 const handleFileChange = (event: Event) => {
   const target = event.target as HTMLInputElement
-  file.value = target.files?.[0] || null
+  const selected = target.files?.[0] || null
+  if (!selected) return
+  const violation = getImportFileLimitViolation([selected])
+  if (violation) {
+    showLimitViolation(violation)
+    target.value = ''
+    return
+  }
+  file.value = selected
+  result.value = null
+  target.value = ''
 }
 
 const handleClose = () => {
   if (importing.value) return
+  if (hasCreatedData.value) {
+    hasCreatedData.value = false
+    emit('imported')
+  }
   emit('close')
+}
+
+const showLimitViolation = (violation: ImportLimitViolation) => {
+  appStore.showError(t(`admin.proxies.dataImportLimits.${violation}`))
 }
 
 const readFileAsText = async (sourceFile: File): Promise<string> => {
@@ -169,8 +196,17 @@ const handleImport = async () => {
 
   importing.value = true
   try {
+    const fileViolation = getImportFileLimitViolation([file.value])
+    if (fileViolation) {
+      showLimitViolation(fileViolation)
+      return
+    }
     const text = await readFileAsText(file.value)
     const dataPayload = JSON.parse(text)
+    if (exceedsImportObjectLimit([dataPayload])) {
+      showLimitViolation('too_many_objects')
+      return
+    }
 
     const res = await adminAPI.proxies.importData({ data: dataPayload })
 
@@ -183,6 +219,7 @@ const handleImport = async () => {
     }
 
     if (res.proxy_failed > 0) {
+      hasCreatedData.value = res.proxy_created > 0
       appStore.showError(t('admin.proxies.dataImportCompletedWithErrors', msgParams))
     } else {
       appStore.showSuccess(t('admin.proxies.dataImportSuccess', msgParams))

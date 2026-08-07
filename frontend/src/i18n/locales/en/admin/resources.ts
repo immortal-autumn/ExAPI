@@ -62,6 +62,12 @@ export default {
       dataImporting: 'Importing...',
       dataImportSelectFile: 'Please select a data file',
       dataImportParseFailed: 'Failed to parse data',
+      dataImportLimits: {
+        too_many_files: 'You can import at most 10 files at once',
+        file_too_large: 'Each file must be 10 MiB or smaller',
+        total_too_large: 'Selected files must total 25 MiB or less',
+        too_many_objects: 'You can import at most 5,000 account and proxy objects at once',
+      },
       dataImportFailed: 'Failed to import data',
       dataImportResult: 'Import Result',
       dataImportResultSummary: 'Created {proxy_created}, reused {proxy_reused}, failed {proxy_failed}',

@@ -238,11 +238,14 @@
                 class="mt-2 border-t border-gray-200 pt-2 first:mt-0 first:border-0 first:pt-0 dark:border-dark-600"
               >
                 <a
-                  :href="r.url"
+                  v-if="safeWebSearchResultURL(r.url)"
+                  :href="safeWebSearchResultURL(r.url)"
                   target="_blank"
+                  rel="noopener noreferrer"
                   class="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
                   >{{ r.title }}</a
                 >
+                <span v-else class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ r.title }}</span>
                 <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                   {{ r.snippet }}
                 </p>
@@ -582,6 +585,7 @@
 
       <!-- Provider dialogs placed outside the settings form to prevent form submission bubbling -->
       <PaymentProviderDialog
+        v-if="!privateProduct && showProviderDialog"
         ref="providerDialogRef"
         :show="showProviderDialog"
         :saving="providerSaving"
@@ -652,14 +656,13 @@ import type { ProviderInstance } from "@/types/payment";
 import AppLayout from "@/components/layout/AppLayout.vue";
 import Icon from "@/components/icons/Icon.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
-import PaymentProviderDialog from "@/components/payment/PaymentProviderDialog.vue";
 const GeneralSettingsTab = defineAsyncComponent(() => import("@/views/admin/settings/tabs/GeneralSettingsTab.vue"));
 import AgreementSettingsTab from "@/views/admin/settings/tabs/AgreementSettingsTab.vue";
 import FeaturesSettingsTab from "@/views/admin/settings/tabs/FeaturesSettingsTab.vue";
 const SecuritySettingsTab = defineAsyncComponent(() => import("@/views/admin/settings/tabs/SecuritySettingsTab.vue"));
 const GatewaySettingsTab = defineAsyncComponent(() => import("@/views/admin/settings/tabs/GatewaySettingsTab.vue"));
 import UserSettingsTab from "@/views/admin/settings/tabs/UserSettingsTab.vue";
-import PaymentSettingsTab from "@/views/admin/settings/tabs/PaymentSettingsTab.vue";
+const PaymentSettingsTab = defineAsyncComponent(() => import("@/views/admin/settings/tabs/PaymentSettingsTab.vue"));
 const EmailSettingsTab = defineAsyncComponent(() => import("@/views/admin/settings/tabs/EmailSettingsTab.vue"));
 const BackupSettingsTab = defineAsyncComponent(() => import("@/views/admin/settings/tabs/BackupSettingsTab.vue"));
 import { useClipboard } from "@/composables/useClipboard";
@@ -667,7 +670,7 @@ import { affiliatesAPI, type AffiliateAdminEntry, type SimpleUser as AffiliateSi
 import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiError";
 import { useAppStore } from "@/stores";
 import { useAdminSettingsStore } from "@/stores/adminSettings";
-import { normalizeVisibleMethod } from "@/components/payment/paymentFlow";
+import { sanitizeUrl } from '@/utils/url'
 import {
   isRegistrationEmailSuffixDomainValid,
   normalizeRegistrationEmailSuffixDomain,
@@ -695,6 +698,24 @@ const isZhLocale = computed(() => locale.value.startsWith("zh"));
 function localText(zh: string, en: string): string {
   return isZhLocale.value ? zh : en;
 }
+
+function safeWebSearchResultURL(value: string): string {
+  return sanitizeUrl(value)
+}
+
+function normalizeVisibleMethod(method: string): 'alipay' | 'wxpay' | 'stripe' | 'airwallex' | '' {
+  const aliases: Record<string, 'alipay' | 'wxpay' | 'stripe' | 'airwallex'> = {
+    alipay: 'alipay',
+    alipay_direct: 'alipay',
+    wxpay: 'wxpay',
+    wxpay_direct: 'wxpay',
+    stripe: 'stripe',
+    airwallex: 'airwallex',
+  }
+  return aliases[method.trim()] ?? ''
+}
+
+const PaymentProviderDialog = defineAsyncComponent(() => import('@/components/payment/PaymentProviderDialog.vue'))
 
 const paymentGuideHref = computed(() =>
   locale.value.startsWith("zh")

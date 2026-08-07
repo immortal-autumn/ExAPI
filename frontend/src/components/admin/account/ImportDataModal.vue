@@ -6,7 +6,7 @@
     close-on-click-outside
     @close="handleClose"
   >
-    <form id="import-data-form" class="space-y-4" @submit.prevent="handleImport">
+    <form id="import-data-form" class="space-y-4" :aria-busy="importing" @submit.prevent="handleImport">
       <div class="text-sm text-gray-600 dark:text-dark-300">
         {{ t('admin.accounts.dataImportHint') }}
       </div>
@@ -54,6 +54,8 @@
       <div
         v-if="result"
         class="space-y-2 rounded-xl border border-gray-200 p-4 dark:border-dark-700"
+        role="status"
+        aria-live="polite"
       >
         <div class="text-sm font-medium text-gray-900 dark:text-white">
           {{ t('admin.accounts.dataImportResult') }}
@@ -102,6 +104,11 @@ import BaseDialog from '@/components/common/BaseDialog.vue'
 import { adminAPI } from '@/api/admin'
 import { useAppStore } from '@/stores/app'
 import type { AdminDataImportResult, AdminDataPayload } from '@/types'
+import {
+  exceedsImportObjectLimit,
+  getImportFileLimitViolation,
+  type ImportLimitViolation,
+} from '@/utils/importLimits'
 
 interface Props {
   show: boolean
@@ -174,12 +181,21 @@ const isJsonFile = (sourceFile: File) => {
   return name.endsWith('.json') || sourceFile.type === 'application/json'
 }
 
+const showLimitViolation = (violation: ImportLimitViolation) => {
+  appStore.showError(t(`admin.accounts.dataImportLimits.${violation}`))
+}
+
 const setSelectedFiles = (sourceFiles: FileList | File[] | null | undefined) => {
   if (importing.value) return
   const incoming = Array.from(sourceFiles || [])
   const picked = incoming.filter(isJsonFile)
   if (!picked.length) {
     appStore.showError(t('admin.accounts.dataImportSelectFile'))
+    return
+  }
+  const violation = getImportFileLimitViolation(picked)
+  if (violation) {
+    showLimitViolation(violation)
     return
   }
   if (picked.length < incoming.length) {
@@ -274,6 +290,11 @@ const handleImport = async () => {
 
   importing.value = true
   try {
+    const fileViolation = getImportFileLimitViolation(files.value)
+    if (fileViolation) {
+      showLimitViolation(fileViolation)
+      return
+    }
     const dataPayloads: AdminDataPayload[] = []
     for (const sourceFile of files.value) {
       let parsed: unknown
@@ -290,6 +311,10 @@ const handleImport = async () => {
         return
       }
       dataPayloads.push(parsed)
+    }
+    if (exceedsImportObjectLimit(dataPayloads)) {
+      showLimitViolation('too_many_objects')
+      return
     }
     const dataPayload = mergeDataPayloads(dataPayloads)
 

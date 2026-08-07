@@ -38,6 +38,12 @@ export default {
       dataImportParseFailedFile: '文件 {name} 解析失败',
       dataImportInvalidFile: '文件 {name} 不是受支持的导出数据文件',
       dataImportIgnoredFiles: '已忽略 {count} 个非 JSON 文件',
+      dataImportLimits: {
+        too_many_files: '一次最多导入 10 个文件',
+        file_too_large: '单个文件不能超过 10 MiB',
+        total_too_large: '所选文件总大小不能超过 25 MiB',
+        too_many_objects: '一次最多导入 5,000 个账号与代理对象',
+      },
       dataImportFailed: '数据导入失败',
       dataImportResult: '导入结果',
       dataImportResultSummary: '代理创建 {proxy_created}，复用 {proxy_reused}，失败 {proxy_failed}；账号创建 {account_created}，失败 {account_failed}',

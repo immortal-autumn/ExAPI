@@ -185,12 +185,12 @@
 
           <template #cell-location="{ row }">
             <div class="flex items-center gap-2">
-              <img
+              <span
                 v-if="row.country_code"
-                :src="flagUrl(row.country_code)"
-                :alt="row.country || row.country_code"
-                class="h-4 w-6 rounded-sm"
-              />
+                class="text-base leading-none"
+                role="img"
+                :aria-label="row.country || row.country_code"
+              >{{ countryFlag(row.country_code) }}</span>
               <span v-if="formatLocation(row)" class="text-sm text-gray-700 dark:text-gray-200">
                 {{ formatLocation(row) }}
               </span>
@@ -417,7 +417,6 @@
             {{ t('admin.proxies.batchAdd') }}
           </button>
         </div>
-        <ProxyAdBanner />
       </div>
 
       <!-- Standard Add Form -->
@@ -839,6 +838,7 @@
       @close="showImportData = false"
       @imported="handleDataImported"
     />
+    <TotpStepUpDialog :controller="proxyExportStepUp" />
 
     <BaseDialog
       :show="showQualityReportDialog"
@@ -980,10 +980,11 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ImportDataModal from '@/components/admin/proxy/ImportDataModal.vue'
 import Select from '@/components/common/Select.vue'
-import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
 import Icon from '@/components/icons/Icon.vue'
 import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
 import { useClipboard } from '@/composables/useClipboard'
+import { useStepUp, isStepUpBlocked, isStepUpCancelled, stepUpBlockReason } from '@/composables/useStepUp'
+import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
 import { useSwipeSelect } from '@/composables/useSwipeSelect'
 import { useTableSelection } from '@/composables/useTableSelection'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
@@ -993,6 +994,7 @@ import { proxyExpiryBadgeClass, proxyExpiryLabelKey } from '@/utils/proxyExpiry'
 const { t } = useI18n()
 const appStore = useAppStore()
 const { copyToClipboard } = useClipboard()
+const proxyExportStepUp = useStepUp()
 
 const columns = computed<Column[]>(() => [
   { key: 'select', label: '', sortable: false },
@@ -1532,8 +1534,11 @@ const formatLocation = (proxy: Proxy) => {
   return parts.join(' · ')
 }
 
-const flagUrl = (code: string) =>
-  `https://unpkg.com/flag-icons/flags/4x3/${code.toLowerCase()}.svg`
+const countryFlag = (code: string) => {
+  const normalized = code.trim().toUpperCase()
+  if (!/^[A-Z]{2}$/.test(normalized)) return '🌐'
+  return String.fromCodePoint(...Array.from(normalized).map((letter) => 127397 + letter.charCodeAt(0)))
+}
 
 const startTestingProxy = (proxyId: number) => {
   testingProxyIds.value = new Set([...testingProxyIds.value, proxyId])
@@ -1904,13 +1909,13 @@ const handleExportData = async () => {
   if (exportingData.value) return
   exportingData.value = true
   try {
-    const dataPayload = await adminAPI.proxies.exportData(
+    const dataPayload = await proxyExportStepUp.run(() => adminAPI.proxies.exportData(
       selectedCount.value > 0
         ? { ids: Array.from(selectedProxyIds.value) }
         : {
             filters: buildProxyQueryFilters()
           }
-    )
+    ))
     const timestamp = formatExportTimestamp()
     const filename = `exapi-proxy-${timestamp}.json`
     const blob = new Blob([JSON.stringify(dataPayload, null, 2)], { type: 'application/json' })
@@ -1922,7 +1927,17 @@ const handleExportData = async () => {
     URL.revokeObjectURL(url)
     appStore.showSuccess(t('admin.proxies.dataExported'))
   } catch (error: any) {
-    appStore.showError(error?.message || t('admin.proxies.dataExportFailed'))
+    if (isStepUpCancelled(error)) {
+      // The operator explicitly cancelled the sensitive export.
+    } else if (isStepUpBlocked(error)) {
+      appStore.showError(
+        stepUpBlockReason(error) === 'STEP_UP_ADMIN_API_KEY_FORBIDDEN'
+          ? t('stepUp.adminApiKeyForbidden')
+          : t('stepUp.notEnabled')
+      )
+    } else {
+      appStore.showError(error?.message || t('admin.proxies.dataExportFailed'))
+    }
   } finally {
     exportingData.value = false
     showExportDataDialog.value = false

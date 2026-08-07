@@ -144,6 +144,12 @@ export default defineConfig(({ mode }) => {
               return 'vendor-stripe'
             }
 
+            // Keep Airwallex equally visible to the private bundle gate. If a
+            // payment import becomes static, check:private-bundle will fail.
+            if (id.includes('/@airwallex/components-sdk/')) {
+              return 'vendor-airwallex'
+            }
+
             // 其他小型第三方库合并
             return 'vendor-misc'
           }

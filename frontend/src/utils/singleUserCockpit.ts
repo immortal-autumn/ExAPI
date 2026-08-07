@@ -24,14 +24,14 @@ export interface SingleUserCockpitSummary {
   activeAccounts: number
   errorAccounts: number
   inactiveAccounts: number
-  wakeupReadyAccounts: number
+  schedulableAccounts: number
   quotaWatchAccounts: Array<Account & { quotaState: AccountQuotaState }>
   platforms: PlatformAccountSummary[]
 }
 
 export interface LocalIntegrationInput {
   origin?: string
-  publicHost?: string
+  apiBaseUrl?: string
   wireGuardURL?: string
 }
 
@@ -104,7 +104,7 @@ export function buildSingleUserCockpitSummary(accounts: Account[]): SingleUserCo
   let activeAccounts = 0
   let errorAccounts = 0
   let inactiveAccounts = 0
-  let wakeupReadyAccounts = 0
+  let schedulableAccounts = 0
 
   for (const account of accounts) {
     if (!platformMap.has(account.platform)) {
@@ -129,8 +129,8 @@ export function buildSingleUserCockpitSummary(accounts: Account[]): SingleUserCo
       inactiveAccounts += 1
     }
 
-    if (account.status === 'active' && account.schedulable) {
-      wakeupReadyAccounts += 1
+    if (isAccountSchedulable(account)) {
+      schedulableAccounts += 1
       platform.schedulable += 1
     }
 
@@ -147,23 +147,56 @@ export function buildSingleUserCockpitSummary(accounts: Account[]): SingleUserCo
     activeAccounts,
     errorAccounts,
     inactiveAccounts,
-    wakeupReadyAccounts,
+    schedulableAccounts,
     quotaWatchAccounts: quotaWatchAccounts.slice(0, 6),
     platforms: Array.from(platformMap.values()).sort((a, b) => a.platform.localeCompare(b.platform)),
   }
+}
+
+function isAccountSchedulable(account: Account): boolean {
+  if (account.status !== 'active' || !account.schedulable) return false
+  const now = Date.now()
+  if (account.expires_at != null && Number(account.expires_at) * 1000 <= now) return false
+  for (const until of [account.rate_limit_reset_at, account.overload_until, account.temp_unschedulable_until]) {
+    if (until && Date.parse(until) > now) return false
+  }
+  const quota = getAccountQuotaState(account)
+  return quota.scope === 'none' || quota.percent < 100
 }
 
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '')
 }
 
+export function resolvePublicAPIBaseURL(configured: unknown, origin?: string): string {
+  const runtimeOrigin = trimTrailingSlash(String(origin || '').trim())
+  const fallback = runtimeOrigin ? `${runtimeOrigin}/v1` : '/v1'
+  const candidate = String(configured || '').trim()
+  if (!candidate || candidate.startsWith('//') || candidate.includes('\\')) return fallback
+
+  try {
+    if (candidate.startsWith('/')) {
+      if (!runtimeOrigin) return trimTrailingSlash(candidate)
+      const resolved = new URL(candidate, `${runtimeOrigin}/`)
+      if (resolved.origin !== new URL(runtimeOrigin).origin) return fallback
+      return trimTrailingSlash(resolved.toString())
+    }
+
+    const resolved = new URL(candidate)
+    if (resolved.protocol !== 'http:' && resolved.protocol !== 'https:') return fallback
+    if (resolved.username || resolved.password) return fallback
+    return trimTrailingSlash(resolved.toString())
+  } catch {
+    return fallback
+  }
+}
+
 export function getLocalIntegrationLinks(input: LocalIntegrationInput): LocalIntegrationLinks {
-  const publicHost = input.publicHost?.trim() || 'sub2api.research.for-immortal.cn'
   const origin = trimTrailingSlash(input.origin?.trim() || '')
   const privateControlPanelURL = trimTrailingSlash(input.wireGuardURL?.trim() || origin || 'http://100.97.17.1:8027') + '/'
 
   return {
-    publicGatewayBaseURL: `https://${publicHost}/v1`,
+    publicGatewayBaseURL: resolvePublicAPIBaseURL(input.apiBaseUrl, origin),
     privateControlPanelURL,
     localControlPanelURL: 'http://127.0.0.1:8027/',
   }
