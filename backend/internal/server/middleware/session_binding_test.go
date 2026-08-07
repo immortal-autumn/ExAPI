@@ -3,6 +3,7 @@
 package middleware
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -125,6 +126,27 @@ func TestSecurityClientIPFallsBackWithoutInjectedBinding(t *testing.T) {
 
 	require.Equal(t, 200, w.Code)
 	require.Equal(t, "9.9.9.9", w.Body.String())
+}
+
+func TestControlPeerContextIgnoresForwardedHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	require.NoError(t, r.SetTrustedProxies(nil))
+	r.Use(ControlPeerContext())
+	r.GET("/", func(c *gin.Context) {
+		require.Equal(t, "100.97.17.25", SecurityClientIP(c))
+		require.Equal(t, "100.97.17.25", requestSessionBinding(c).IP)
+		require.Equal(t, "100.97.17.25", ip.GetClientIP(c))
+		c.Status(204)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "100.97.17.25:42100"
+	req.Header.Set("X-Forwarded-For", "203.0.113.9")
+	req.Header.Set("X-Real-IP", "203.0.113.10")
+	recorder := httptest.NewRecorder()
+	r.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusNoContent, recorder.Code)
 }
 
 func TestRequestSessionBindingPrefersInjectedBinding(t *testing.T) {

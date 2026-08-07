@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
@@ -22,6 +23,9 @@ func RegisterPaymentRoutes(
 	settingService *service.SettingService,
 	panelRateLimiter *middleware.PanelRateLimiter,
 ) {
+	if config.SingleUserPrivateControlPlaneEnabled() {
+		return
+	}
 	// --- User-facing payment endpoints (authenticated) ---
 	authenticated := v1.Group("/payment")
 	authenticated.Use(gin.HandlerFunc(jwtAuth))

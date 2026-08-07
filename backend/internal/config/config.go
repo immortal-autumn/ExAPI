@@ -3581,13 +3581,13 @@ func validatePrivateListenerConfig(server *ServerConfig) error {
 	}
 	publicAddr := server.PublicAddress()
 	controlAddr := server.ControlAddress()
-	if err := validateListenAddress("EXAPI_PUBLIC_LISTEN_ADDR", publicAddr); err != nil {
+	if err := validateListenAddress("EXAPI_PUBLIC_LISTEN_ADDR", publicAddr, false); err != nil {
 		return err
 	}
-	if err := validateListenAddress("EXAPI_CONTROL_LISTEN_ADDR", controlAddr); err != nil {
+	if err := validateListenAddress("EXAPI_CONTROL_LISTEN_ADDR", controlAddr, true); err != nil {
 		return err
 	}
-	if publicAddr == controlAddr {
+	if listenAddressesEqual(publicAddr, controlAddr) {
 		return fmt.Errorf("EXAPI_PUBLIC_LISTEN_ADDR and EXAPI_CONTROL_LISTEN_ADDR must be different")
 	}
 	if len(server.ControlHosts) == 0 {
@@ -3616,7 +3616,7 @@ func validatePrivateListenerConfig(server *ServerConfig) error {
 	return nil
 }
 
-func validateListenAddress(name, address string) error {
+func validateListenAddress(name, address string, rejectUnspecified bool) error {
 	host, port, err := net.SplitHostPort(strings.TrimSpace(address))
 	if err != nil || strings.TrimSpace(port) == "" {
 		return fmt.Errorf("%s must be a valid host:port address", name)
@@ -3624,7 +3624,38 @@ func validateListenAddress(name, address string) error {
 	if strings.ContainsAny(host, "/?#@") {
 		return fmt.Errorf("%s must be a valid host:port address", name)
 	}
+	if rejectUnspecified {
+		host = strings.Trim(strings.TrimSpace(host), "[]")
+		if host == "" {
+			return fmt.Errorf("%s must bind to an explicit WireGuard/loopback address", name)
+		}
+		if parsed := net.ParseIP(host); parsed != nil && parsed.IsUnspecified() {
+			return fmt.Errorf("%s must not bind to an unspecified address", name)
+		}
+	}
 	return nil
+}
+
+// listenAddressesEqual compares the actual bind authority rather than raw
+// spelling. In particular, :8080 and 0.0.0.0:8080 represent the same wildcard
+// listener and must not be accepted as separate public/control sockets.
+func listenAddressesEqual(left, right string) bool {
+	leftHost, leftPort, leftErr := net.SplitHostPort(strings.TrimSpace(left))
+	rightHost, rightPort, rightErr := net.SplitHostPort(strings.TrimSpace(right))
+	if leftErr != nil || rightErr != nil || leftPort != rightPort {
+		return false
+	}
+	normalize := func(host string) string {
+		host = strings.Trim(strings.ToLower(strings.TrimSpace(host)), "[]")
+		if host == "" || host == "0.0.0.0" || host == "::" {
+			return "<unspecified>"
+		}
+		if parsed, err := netip.ParseAddr(host); err == nil {
+			return parsed.Unmap().String()
+		}
+		return host
+	}
+	return normalize(leftHost) == normalize(rightHost)
 }
 
 func normalizeStringSlice(values []string) []string {

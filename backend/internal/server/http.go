@@ -53,7 +53,11 @@ func ProvideControlRouter(
 
 	r := gin.New()
 	r.Use(middleware2.Recovery())
-	configureTrustedProxies(r, cfg.Server)
+	// The control listener terminates directly on the WireGuard/loopback bind.
+	// Forwarded client addresses are never authoritative on this router.
+	if err := r.SetTrustedProxies(nil); err != nil {
+		log.Printf("Failed to disable trusted proxies on control listener: %v", err)
+	}
 
 	// Wire up websearch Manager builder so it initializes on startup and rebuilds on config save.
 	settingService.SetWebSearchManagerBuilder(context.Background(), func(cfg *service.WebSearchEmulationConfig, proxyURLs map[int64]string) {

@@ -254,7 +254,7 @@ func NewAuditLogMiddleware(auditService *service.AuditLogService) AuditLogMiddle
 		entry.ActorEmail = c.GetString(ContextKeyAuthEmail)
 		entry.AuthMethod = c.GetString("auth_method")
 		if entry.AuthMethod == "" && entry.ActorUserID != nil {
-			entry.AuthMethod = service.AuditAuthMethodJWT
+			entry.AuthMethod = service.AuditAuthMethodWireGuardPeer
 		}
 		if v, ok := c.Get(auditCtxKeyActorID); ok {
 			if id, ok := v.(int64); ok && id > 0 {

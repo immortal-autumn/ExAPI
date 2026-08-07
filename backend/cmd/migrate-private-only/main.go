@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -21,6 +22,7 @@ import (
 func main() {
 	confirmation := flag.String("confirm", "", "required exact confirmation: DROP-SAAS-DATA-KEEP-USER-<lowest-active-admin-id>")
 	backupDir := flag.String("backup-dir", os.Getenv("EXAPI_BACKUP_DIR"), "directory whose pre-cutover backups are purged after commit")
+	reportPath := flag.String("report-file", os.Getenv("EXAPI_PRIVATE_MIGRATION_REPORT"), "write the signed migration report to this 0600 file")
 	flag.Parse()
 	if strings.TrimSpace(*confirmation) == "" {
 		log.Fatal("refusing to run without --confirm DROP-SAAS-DATA-KEEP-USER-<operator-id>")
@@ -40,7 +42,16 @@ func main() {
 	}
 	defer client.Close()
 
-	if _, err := privatecutover.Run(context.Background(), db, *confirmation, reportKey, *backupDir, nil, os.Stdout); err != nil {
+	var report io.Writer = os.Stdout
+	if strings.TrimSpace(*reportPath) != "" {
+		file, err := os.OpenFile(*reportPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+		if err != nil {
+			log.Fatalf("open report file: %v", err)
+		}
+		defer file.Close()
+		report = file
+	}
+	if _, err := privatecutover.Run(context.Background(), db, *confirmation, reportKey, *backupDir, nil, report); err != nil {
 		log.Fatalf("private-only cutover failed: %v", err)
 	}
 }

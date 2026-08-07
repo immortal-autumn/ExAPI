@@ -23,8 +23,9 @@ func TestPrivateUserRouteMatrix(t *testing.T) {
 		ChannelMonitor:   &handler.ChannelMonitorUserHandler{},
 		AvailableChannel: &handler.AvailableChannelHandler{},
 	}
-	auth := servermiddleware.JWTAuthMiddleware(func(c *gin.Context) { c.Next() })
-	RegisterUserRoutes(v1, h, auth, nil, nil)
+	auth := servermiddleware.OperatorAuthMiddleware(func(c *gin.Context) { c.Next() })
+	audit := servermiddleware.AuditLogMiddleware(func(c *gin.Context) { c.Next() })
+	RegisterOperatorRoutes(v1, h, auth, audit, nil)
 
 	paths := make(map[string]struct{})
 	for _, route := range router.Routes() {
@@ -119,6 +120,7 @@ func TestPrivateAdminRouteMatrix(t *testing.T) {
 		"/api/v1/admin/subscriptions",
 		"/api/v1/admin/user-attributes",
 		"/api/v1/admin/affiliates/users",
+		"/api/v1/admin/backups/:id/restore",
 	} {
 		if _, ok := paths[path]; ok {
 			t.Errorf("SaaS admin route %s is registered in private mode", path)
@@ -152,14 +154,6 @@ func TestPrivateAuthRouteMatrix(t *testing.T) {
 		"/api/v1/auth/logout",
 		"/api/v1/auth/me",
 		"/api/v1/auth/revoke-all-sessions",
-		"/api/v1/settings/public",
-	} {
-		if _, ok := paths[path]; !ok {
-			t.Errorf("required private auth route %s is not registered", path)
-		}
-	}
-
-	for _, path := range []string{
 		"/api/v1/auth/register",
 		"/api/v1/auth/send-verify-code",
 		"/api/v1/auth/validate-promo-code",

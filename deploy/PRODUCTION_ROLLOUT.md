@@ -5,6 +5,28 @@ recovery, artifact, canary, monitoring, and observation record for the exact
 image digest has passed and the final manifest has been signed and copied
 off-host.
 
+## ExAPI private-only preflight
+
+ExAPI v0.2.0 runs two independent listeners. Set
+`EXAPI_PUBLIC_LISTEN_ADDR` for the API-key gateway and
+`EXAPI_CONTROL_LISTEN_ADDR`, `EXAPI_CONTROL_HOSTS`, and
+`EXAPI_OPERATOR_PEER_IPS` for the direct WireGuard operator listener. The
+control port must not be published through the public reverse proxy.
+
+Before starting a migrated database, run the offline command below from the
+release image (never from the online server process):
+
+```text
+/app/migrate-private-only \
+  --confirm DROP-SAAS-DATA-KEEP-USER-<lowest-active-admin-id> \
+  --report-file /app/data/private-migration-report.json
+```
+
+The command takes a serializable transaction/advisory lock, retains the
+lowest-ID active admin, drops customer/commercial tables, records
+`private_schema_version=1`, purges pre-cutover backups, and emits a signed
+report. Do not run it until the verified pre-cutover recovery set exists.
+
 ## External prerequisites
 
 The rollout is blocked until the operator supplies all of the following:

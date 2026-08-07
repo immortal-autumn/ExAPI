@@ -12,8 +12,8 @@ func TestSingleUserPrivateControlPlaneEnabled(t *testing.T) {
 		{name: "true mixed case", value: " TrUe ", want: true},
 		{name: "yes", value: "yes", want: true},
 		{name: "on", value: "ON", want: true},
-		{name: "zero explicitly selects standard mode", value: "0", want: false},
-		{name: "false explicitly selects standard mode", value: "false", want: false},
+		{name: "zero cannot select a legacy mode", value: "0", want: true},
+		{name: "false cannot select a legacy mode", value: "false", want: true},
 		{name: "empty fails closed to private mode", value: "", want: true},
 		{name: "unknown fails closed to private mode", value: "enabled", want: true},
 	}
@@ -34,8 +34,7 @@ func TestSaaSFeaturesEnabled(t *testing.T) {
 		t.Fatal("SaaSFeaturesEnabled() = true in private single-user mode")
 	}
 
-	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "false")
-	if !SaaSFeaturesEnabled() {
-		t.Fatal("SaaSFeaturesEnabled() = false outside private single-user mode")
+	if SaaSFeaturesEnabled() {
+		t.Fatal("SaaSFeaturesEnabled() = true in private-only mode")
 	}
 }

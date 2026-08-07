@@ -24,6 +24,7 @@ services:
         hard: 100000
     ports:
       - "${BIND_HOST:-127.0.0.1}:${SERVER_PORT:-8080}:8080"
+      - "${EXAPI_CONTROL_BIND_HOST:-127.0.0.1}:${EXAPI_CONTROL_PORT:-8027}:8027"
     volumes:
       - sub2api_data:/app/data
     extra_hosts:
@@ -39,6 +40,10 @@ services:
       # =======================================================================
       - SERVER_HOST=0.0.0.0
       - SERVER_PORT=8080
+      - EXAPI_PUBLIC_LISTEN_ADDR=${EXAPI_PUBLIC_LISTEN_ADDR:-0.0.0.0:8080}
+      - EXAPI_CONTROL_LISTEN_ADDR=${EXAPI_CONTROL_LISTEN_ADDR:-0.0.0.0:8027}
+      - EXAPI_CONTROL_HOSTS=${EXAPI_CONTROL_HOSTS:-localhost,127.0.0.1,::1}
+      - EXAPI_OPERATOR_PEER_IPS=${EXAPI_OPERATOR_PEER_IPS:-127.0.0.1,::1}
       - SERVER_MODE=${SERVER_MODE:-release}
       - ENABLE_SERVER_TIMING=${ENABLE_SERVER_TIMING:-false}
       - RUN_MODE=${RUN_MODE:-standard}

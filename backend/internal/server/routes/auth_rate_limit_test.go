@@ -3,18 +3,15 @@ package routes
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	servermiddleware "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 )
 
-func newAuthRoutesTestRouter(redisClient *redis.Client) *gin.Engine {
+func newAuthRoutesTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	v1 := router.Group("/api/v1")
@@ -31,26 +28,15 @@ func newAuthRoutesTestRouter(redisClient *redis.Client) *gin.Engine {
 		servermiddleware.AuditLogMiddleware(func(c *gin.Context) {
 			c.Next()
 		}),
-		redisClient,
+		nil,
 		nil,
 	)
 
 	return router
 }
 
-func TestAuthRoutesRateLimitFailCloseWhenRedisUnavailable(t *testing.T) {
-	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "false")
-	rdb := redis.NewClient(&redis.Options{
-		Addr:         "127.0.0.1:1",
-		DialTimeout:  50 * time.Millisecond,
-		ReadTimeout:  50 * time.Millisecond,
-		WriteTimeout: 50 * time.Millisecond,
-	})
-	t.Cleanup(func() {
-		_ = rdb.Close()
-	})
-
-	router := newAuthRoutesTestRouter(rdb)
+func TestLegacyAuthRoutesRemainAbsent(t *testing.T) {
+	router := newAuthRoutesTestRouter()
 	paths := []string{
 		"/api/v1/auth/register",
 		"/api/v1/auth/login",
@@ -60,14 +46,12 @@ func TestAuthRoutesRateLimitFailCloseWhenRedisUnavailable(t *testing.T) {
 	}
 
 	for _, path := range paths {
-		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
-		req.Header.Set("Content-Type", "application/json")
+		req := httptest.NewRequest(http.MethodPost, path, nil)
 		req.RemoteAddr = "203.0.113.10:12345"
 
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
-		require.Equal(t, http.StatusTooManyRequests, w.Code, "path=%s", path)
-		require.Contains(t, w.Body.String(), "rate limit exceeded", "path=%s", path)
+		require.Equal(t, http.StatusNotFound, w.Code, "path=%s", path)
 	}
 }

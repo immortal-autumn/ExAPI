@@ -1,24 +1,14 @@
 package config
 
-import (
-	"os"
-	"strings"
-)
-
-// SingleUserPrivateControlPlaneEnabled reports whether the process is running
-// as a private single-operator gateway control plane. ExAPI fails closed: only
-// an explicit false value enables the legacy multi-user/SaaS surface.
+// SingleUserPrivateControlPlaneEnabled reports the only supported ExAPI
+// deployment mode. The old environment-variable escape hatch was removed so
+// commercial/customer routes cannot be re-enabled accidentally.
 func SingleUserPrivateControlPlaneEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE"))) {
-	case "0", "false", "no", "off":
-		return false
-	default:
-		return true
-	}
+	return true
 }
 
-// SaaSFeaturesEnabled reports whether multi-user commercial surfaces should be
-// registered. Private gateway mode deliberately omits those routes.
+// SaaSFeaturesEnabled is retained as a source-compatibility predicate while
+// the commercial/customer product is removed from ExAPI.
 func SaaSFeaturesEnabled() bool {
-	return !SingleUserPrivateControlPlaneEnabled()
+	return false
 }

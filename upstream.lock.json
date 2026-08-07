@@ -1,0 +1,27 @@
+{
+  "repository": "https://github.com/Wei-Shaw/sub2api.git",
+  "base_tag": "v0.1.171",
+  "base_commit": "f0e7a9c7a23a7d02fb159b62fa809621eb0475a6",
+  "selected_hotfixes": [
+    {"commit": "66ad405dd", "applied_commit": "89fca14db", "subject": "TCP dial timeout"},
+    {"commit": "e2652eb85", "applied_commit": "7fc7c3948", "subject": "billing quantization"},
+    {"commit": "7d38e6712", "applied_commit": "223f1e10f", "subject": "OpenAI transient failure streak"},
+    {"commit": "fc5a1b78d", "applied_commit": "50b347d8c", "subject": "Codex WS prewarm continuation"},
+    {"commit": "ce1498313", "applied_commit": "23732845f", "subject": "Gemini 3.6 Flash"},
+    {"commit": "82ccc187c", "applied_commit": "d3cf09b76", "subject": "custom Ops error ranges"},
+    {"commit": "5b7a64334", "applied_commit": "6732420d3", "subject": "Grok video task IDs"},
+    {"commit": "e93f6b995", "applied_commit": "c385773c8", "subject": "HTML count-token recovery"},
+    {"commit": "dbb42881c", "applied_commit": "dfc23aa6e", "subject": "default codex-tui identity"},
+    {"commit": "b6e53c932", "applied_commit": "d62f88b30", "subject": "matching frontend copy"},
+    {"commit": "e687ca3e9", "applied_commit": "6114d1bf1", "subject": "Ops sink retry backoff"}
+  ],
+  "excluded_categories": [
+    "payments",
+    "subscriptions",
+    "model-plaza",
+    "captcha",
+    "sponsor",
+    "customer-oauth",
+    "version-sync"
+  ]
+}

@@ -47,3 +47,18 @@ func TestCommonReadyChecksDependencies(t *testing.T) {
 		})
 	}
 }
+
+func TestCommonRoutesExcludeLegacySetupAndTelemetry(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	RegisterCommonRoutes(r, func(context.Context) error { return nil })
+
+	for _, request := range []*http.Request{
+		httptest.NewRequest(http.MethodGet, "/setup/status", nil),
+		httptest.NewRequest(http.MethodPost, "/api/event_logging/batch", nil),
+	} {
+		response := httptest.NewRecorder()
+		r.ServeHTTP(response, request)
+		require.Equal(t, http.StatusNotFound, response.Code, request.URL.Path)
+	}
+}

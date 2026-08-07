@@ -17,6 +17,11 @@ func RegisterUserRoutes(
 	auditLog middleware.AuditLogMiddleware,
 	settingService *service.SettingService,
 ) {
+	// Per-user/password/TOTP APIs are removed from the private-only product.
+	// Gateway-management APIs are registered by RegisterOperatorRoutes instead.
+	if config.SingleUserPrivateControlPlaneEnabled() {
+		return
+	}
 	authenticated := v1.Group("")
 	authenticated.Use(gin.HandlerFunc(jwtAuth))
 	authenticated.Use(middleware.BackendModeUserGuard(settingService))

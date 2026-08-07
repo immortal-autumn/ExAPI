@@ -38,6 +38,9 @@ func RegisterOperatorRoutes(
 			"concurrency": current.Concurrency,
 		})
 	})
+	// This legacy path is retained for frontend configuration bootstrap, but it
+	// is private operator data now and inherits the peer/operator boundary.
+	operator.GET("/settings/public", h.Setting.GetPublicSettings)
 
 	keys := operator.Group("/keys")
 	{

@@ -186,6 +186,14 @@ func Run(ctx context.Context, db *sql.DB, confirmation string, reportKey []byte,
 	if err := json.Unmarshal(signed, &report); err != nil {
 		return MigrationReport{}, err
 	}
+	// The report digest is only knowable after the post-commit backup purge has
+	// been enumerated. Persist it in a short, isolated update so the durable
+	// cutover marker can be checked against the signed report later. The
+	// destructive transaction has already committed at this point; failure is
+	// surfaced to the caller rather than silently leaving an unverifiable state.
+	if err := recordReportDigest(ctx, db, report.ReportSHA256); err != nil {
+		return MigrationReport{}, err
+	}
 	if output != nil {
 		if _, err := output.Write(signed); err != nil {
 			return MigrationReport{}, err
@@ -193,6 +201,24 @@ func Run(ctx context.Context, db *sql.DB, confirmation string, reportKey []byte,
 		_, _ = output.Write([]byte("\n"))
 	}
 	return report, nil
+}
+
+func recordReportDigest(ctx context.Context, db *sql.DB, digest string) error {
+	if strings.TrimSpace(digest) == "" {
+		return errors.New("migration report digest is required")
+	}
+	result, err := db.ExecContext(ctx, `UPDATE exapi_private_state SET report_sha256 = $1 WHERE id = true`, digest)
+	if err != nil {
+		return fmt.Errorf("record migration report digest: %w", err)
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("verify migration report digest persistence: %w", err)
+	}
+	if updated != 1 {
+		return fmt.Errorf("record migration report digest: expected one private state row, updated %d", updated)
+	}
+	return nil
 }
 
 func quoteIdentifier(identifier string) string {

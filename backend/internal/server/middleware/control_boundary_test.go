@@ -67,6 +67,18 @@ func TestControlBoundaryRequiresMarkerOnControlAPI(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), "CONTROL_REQUEST_REQUIRED")
 }
 
+func TestControlBoundaryRequiresFetchMetadataOnControlAPI(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "http://100.97.17.1:8027/api/v1/operator/me", nil)
+	request.Host = "100.97.17.1:8027"
+	request.RemoteAddr = "100.97.17.25:42100"
+	request.Header.Set(ControlRequestHeader, "1")
+	recorder := httptest.NewRecorder()
+
+	controlBoundaryTestRouter().ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
 func TestControlBoundaryRejectsCrossOriginAndCrossSiteMutations(t *testing.T) {
 	for _, mutate := range []func(*http.Request){
 		func(request *http.Request) { request.Header.Set("Origin", "https://attacker.invalid") },

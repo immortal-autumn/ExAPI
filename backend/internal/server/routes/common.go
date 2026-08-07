@@ -12,7 +12,9 @@ const readinessTimeout = 2 * time.Second
 
 type ReadinessProbe func(context.Context) error
 
-// RegisterCommonRoutes 注册通用路由（健康检查、状态等）
+// RegisterCommonRoutes exposes only process/dependency probes shared by the
+// public and control listeners. Setup and browser telemetry endpoints are not
+// part of the private-only runtime contract.
 func RegisterCommonRoutes(r *gin.Engine, readinessProbe ReadinessProbe) {
 	// 存活检查只反映进程是否能处理 HTTP 请求。
 	r.GET("/health", func(c *gin.Context) {
@@ -28,22 +30,5 @@ func RegisterCommonRoutes(r *gin.Engine, readinessProbe ReadinessProbe) {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "ready"})
-	})
-
-	// Claude Code 遥测日志（忽略，直接返回200）
-	r.POST("/api/event_logging/batch", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
-
-	// Setup status endpoint (always returns needs_setup: false in normal mode)
-	// This is used by the frontend to detect when the service has restarted after setup
-	r.GET("/setup/status", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"code": 0,
-			"data": gin.H{
-				"needs_setup": false,
-				"step":        "completed",
-			},
-		})
 	})
 }

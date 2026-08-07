@@ -35,13 +35,12 @@ func ControlBoundary(server config.ServerConfig) gin.HandlerFunc {
 			return
 		}
 
-		if !controlOriginAllowed(c.Request) || !controlFetchMetadataAllowed(c.Request) {
-			c.AbortWithStatus(http.StatusForbidden)
-			return
-		}
-
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") && !controlRequestMarked(c.Request) {
 			AbortWithError(c, http.StatusForbidden, "CONTROL_REQUEST_REQUIRED", "Private control request marker required")
+			return
+		}
+		if !controlOriginAllowed(c.Request) || !controlFetchMetadataAllowed(c.Request) {
+			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
 		c.Next()
@@ -86,6 +85,13 @@ func controlOriginAllowed(request *http.Request) bool {
 	raw := strings.TrimSpace(request.Header.Get("Origin"))
 	unsafe := request.Method != http.MethodGet && request.Method != http.MethodHead && request.Method != http.MethodOptions
 	if raw == "" {
+		if isWebSocketRequest(request) {
+			return true
+		}
+		if strings.HasPrefix(request.URL.Path, "/api/") {
+			site := strings.ToLower(strings.TrimSpace(request.Header.Get("Sec-Fetch-Site")))
+			return !unsafe && (site == "same-origin" || site == "none")
+		}
 		return !unsafe
 	}
 	origin, err := url.Parse(raw)
@@ -99,6 +105,9 @@ func controlFetchMetadataAllowed(request *http.Request) bool {
 	site := strings.ToLower(strings.TrimSpace(request.Header.Get("Sec-Fetch-Site")))
 	mode := strings.ToLower(strings.TrimSpace(request.Header.Get("Sec-Fetch-Mode")))
 	unsafe := request.Method != http.MethodGet && request.Method != http.MethodHead && request.Method != http.MethodOptions
+	if strings.HasPrefix(request.URL.Path, "/api/") && site == "" && !isWebSocketRequest(request) {
+		return false
+	}
 	if site != "" && site != "same-origin" && site != "none" {
 		return false
 	}

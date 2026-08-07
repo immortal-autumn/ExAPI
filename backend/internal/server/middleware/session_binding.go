@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -9,6 +10,26 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// ControlPeerContext snapshots the direct socket peer for the private control
+// listener. Forwarding headers are explicitly disabled and never participate
+// in operator rate limits, audit entries, or access logs.
+func ControlPeerContext() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ip.SetForwardedIPSettings(c, false, nil)
+		peer := strings.TrimSpace(c.Request.RemoteAddr)
+		if host, _, err := net.SplitHostPort(peer); err == nil {
+			peer = host
+		} else {
+			peer = strings.Trim(peer, "[]")
+		}
+		userAgent := normalizePersistentText(c.Request.UserAgent(), maxPersistentUserAgentBytes)
+		c.Request.Header.Set("User-Agent", userAgent)
+		binding := &service.SessionBinding{IP: peer, UserAgent: userAgent}
+		c.Request = c.Request.WithContext(service.WithSessionBinding(c.Request.Context(), binding))
+		c.Next()
+	}
+}
 
 // SessionBindingContext 全局中间件：将请求的客户端 IP 与 User-Agent 注入
 // request context，供 token 签发路径（登录 / 刷新 / OAuth 回调）读取并写入会话绑定，

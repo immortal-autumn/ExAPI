@@ -17,6 +17,17 @@ server:
   # Port to listen on
   # 监听端口
   port: 8080
+  # Split listener addresses. The public listener serves only the API-key
+  # gateway; the control listener is for the direct WireGuard operator peer.
+  public_listen_addr: "0.0.0.0:8080"
+  control_listen_addr: "0.0.0.0:8027"
+  control_hosts:
+    - "localhost"
+    - "127.0.0.1"
+    - "::1"
+  operator_peer_ips:
+    - "127.0.0.1"
+    - "::1"
   # Mode: "debug" for development, "release" for production
   # 运行模式："debug" 用于开发，"release" 用于生产环境
   mode: "release"

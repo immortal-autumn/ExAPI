@@ -26,11 +26,7 @@ func RegisterAdminRoutes(
 	admin.Use(panelRateLimiter.Global())
 	// 审计中间件挂在认证之后：所有管理面变更类操作 + 敏感读取入审计日志
 	admin.Use(gin.HandlerFunc(auditLog))
-	admin.Use(middleware.AdminComplianceGuard(settingService))
 	{
-		// 部署与运营合规确认
-		registerAdminComplianceRoutes(admin, h)
-
 		// 仪表盘
 		registerDashboardRoutes(admin, h)
 		admin.GET("/cockpit-summary", h.Admin.Account.GetCockpitSummary)
@@ -530,10 +526,6 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		adminSettings.GET("/email-templates/:event/:locale", h.Admin.Setting.GetEmailTemplate)
 		adminSettings.PUT("/email-templates/:event/:locale", h.Admin.Setting.UpdateEmailTemplate)
 		adminSettings.POST("/email-templates/:event/:locale/restore-official", h.Admin.Setting.RestoreOfficialEmailTemplate)
-		// Admin API Key 管理
-		adminSettings.GET("/admin-api-key", h.Admin.Setting.GetAdminAPIKey)
-		adminSettings.POST("/admin-api-key/regenerate", h.Admin.Setting.RegenerateAdminAPIKey)
-		adminSettings.DELETE("/admin-api-key", h.Admin.Setting.DeleteAdminAPIKey)
 		// 529过载冷却配置
 		adminSettings.GET("/overload-cooldown", h.Admin.Setting.GetOverloadCooldownSettings)
 		adminSettings.PUT("/overload-cooldown", h.Admin.Setting.UpdateOverloadCooldownSettings)
@@ -611,8 +603,9 @@ func registerBackupRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAut
 		// 备份下载链接可直接取走整库数据——要求 step-up 2FA
 		backup.GET("/:id/download-url", gin.HandlerFunc(stepUpAuth), h.Admin.Backup.GetDownloadURL)
 
-		// 恢复操作：整库覆盖可回滚安全设置（含 step-up 开关本身）——要求 step-up 2FA
-		backup.POST("/:id/restore", gin.HandlerFunc(stepUpAuth), h.Admin.Backup.RestoreBackup)
+		// Live restore is deliberately absent in private-only mode. Recovery is an
+		// offline operator procedure so it cannot roll the running control plane
+		// back across the private-schema cutover boundary.
 	}
 }
 

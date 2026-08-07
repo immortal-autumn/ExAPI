@@ -22,6 +22,12 @@ func RegisterAuthRoutes(
 	redisClient *redis.Client,
 	settingService *service.SettingService,
 ) {
+	// ExAPI has no browser/customer authentication surface. Keep this function
+	// as a source-compatible no-op for downstream packages that still compile
+	// against Sub2API route helpers.
+	if config.SingleUserPrivateControlPlaneEnabled() {
+		return
+	}
 	// 创建速率限制器
 	rateLimiter := middleware.NewRateLimiter(redisClient)
 

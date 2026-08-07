@@ -279,7 +279,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	complianceHandler := admin.NewComplianceHandler(settingService)
 	auditLogRepository := repository.NewAuditLogRepository(db)
 	auditLogService := service.ProvideAuditLogService(auditLogRepository, settingService)
-	auditLogHandler := admin.NewAuditLogHandler(auditLogService, totpService)
+	auditLogHandler := admin.NewAuditLogHandler(auditLogService)
 	upstreamBillingProbeService := service.ProvideUpstreamBillingProbeService(accountRepository, accountTestService, settingService, leaderLockCache, db)
 	cockpitService := service.NewCockpitService(db)
 	ollamaCloudUsageService := service.ProvideOllamaCloudUsageService(accountRepository, httpUpstream, settingService, secretEncryptor, configConfig, leaderLockCache, db)
