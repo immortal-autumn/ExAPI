@@ -155,7 +155,15 @@ func runMainServer() {
 	if err != nil {
 		log.Fatalf("Failed to initialize application: %v", err)
 	}
-	defer app.Cleanup()
+	shutdownFinished := false
+	defer func() {
+		if shutdownFinished || app.Cleanup == nil {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownTotalGrace)
+		defer cancel()
+		app.Cleanup.Run(ctx)
+	}()
 	if app.PromptAudit != nil {
 		if err := app.PromptAudit.Start(context.Background()); err != nil {
 			// Startup continues so unrelated APIs stay up. Fail-closed (unavailable)
@@ -184,25 +192,62 @@ func runMainServer() {
 			log.Printf("Server stopped unexpectedly: %v", serveErr)
 		}
 		tracker.StopAccepting()
-		tracker.Wait()
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownTotalGrace)
+		defer cancel()
+		producersComplete := app.Cleanup == nil || app.Cleanup.StopProducers(ctx)
+		connectionsComplete := app.Cleanup == nil || app.Cleanup.DrainConnections(ctx)
+		handlersComplete := tracker.WaitContext(ctx)
+		if !handlersComplete {
+			log.Printf("Server handlers did not drain before shutdown deadline")
+		}
+		workersComplete := app.Cleanup == nil || app.Cleanup.DrainWorkers(ctx)
+		flushComplete := app.Cleanup == nil || app.Cleanup.Flush(ctx)
+		if app.Cleanup != nil {
+			app.Cleanup.Close(ctx, producersComplete && connectionsComplete && handlersComplete && workersComplete && flushComplete)
+		}
+		shutdownFinished = true
 		return
 	}
 
 	log.Println("Shutting down server...")
+	// Phase 1: make readiness/admission fail before stopping any producer.
 	tracker.StopAccepting()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTotalGrace)
 	defer cancel()
+	producersComplete := app.Cleanup == nil || app.Cleanup.StopProducers(ctx)
+	connectionsComplete := app.Cleanup == nil || app.Cleanup.DrainConnections(ctx)
 
-	if err := app.Server.Shutdown(ctx); err != nil {
+	// Phase 3: drain HTTP after producers are stopped. Hijacked upstream WS
+	// pools were closed by DrainConnections above.
+	httpCtx, httpCancel := context.WithTimeout(ctx, httpDrainGrace)
+	if err := app.Server.Shutdown(httpCtx); err != nil {
 		log.Printf("Server forced to shutdown: %v", err)
 		if closeErr := app.Server.Close(); closeErr != nil && !errors.Is(closeErr, http.ErrServerClosed) {
 			log.Printf("Server close failed: %v", closeErr)
 		}
 	}
-	if serveErr := <-serverErr; serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-		log.Printf("Server exited with error: %v", serveErr)
+	httpCancel()
+	select {
+	case serveErr := <-serverErr:
+		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			log.Printf("Server exited with error: %v", serveErr)
+		}
+	case <-ctx.Done():
+		log.Printf("Server listener did not exit before shutdown deadline")
 	}
-	tracker.Wait()
+	handlersComplete := tracker.WaitContext(ctx)
+	if !handlersComplete {
+		log.Printf("Server handlers did not drain before shutdown deadline")
+	}
+
+	// Phases 4-6: close queue admission and drain workers, flush buffered
+	// state, then stop services and finally shared infrastructure.
+	workersComplete := app.Cleanup == nil || app.Cleanup.DrainWorkers(ctx)
+	flushComplete := app.Cleanup == nil || app.Cleanup.Flush(ctx)
+	if app.Cleanup != nil {
+		app.Cleanup.Close(ctx, producersComplete && connectionsComplete && handlersComplete && workersComplete && flushComplete)
+	}
+	shutdownFinished = true
 	log.Println("Server exited")
 }
 
@@ -240,4 +285,18 @@ func (t *activeHandlerTracker) StopAccepting() {
 
 func (t *activeHandlerTracker) Wait() {
 	t.active.Wait()
+}
+
+func (t *activeHandlerTracker) WaitContext(ctx context.Context) bool {
+	done := make(chan struct{})
+	go func() {
+		t.active.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }

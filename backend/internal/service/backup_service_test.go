@@ -1157,6 +1157,29 @@ func TestBackupService_TestS3Connection_Incomplete(t *testing.T) {
 	require.Contains(t, err.Error(), "S3 配置不完整")
 }
 
+func TestBackupServicePrivateProductionDisablesLiveRestore(t *testing.T) {
+	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "true")
+	svc := NewBackupService(nil, &config.Config{
+		RunMode: config.RunModeStandard,
+		Log:     config.LogConfig{Environment: " Production "},
+	}, nil, nil, nil, nil)
+	t.Cleanup(svc.bgCancel)
+	require.True(t, svc.liveRestoreDisabled)
+	require.ErrorIs(t, svc.RestoreBackup(context.Background(), "backup-1"), ErrLiveRestoreDisabled)
+	_, err := svc.StartRestore(context.Background(), "backup-1")
+	require.ErrorIs(t, err, ErrLiveRestoreDisabled)
+}
+
+func TestBackupServiceNonPrivateProductionKeepsLiveRestoreAvailable(t *testing.T) {
+	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "false")
+	svc := NewBackupService(nil, &config.Config{
+		RunMode: config.RunModeSimple,
+		Log:     config.LogConfig{Environment: "production"},
+	}, nil, nil, nil, nil)
+	t.Cleanup(svc.bgCancel)
+	require.False(t, svc.liveRestoreDisabled)
+}
+
 func TestBackupServiceRejectsNegativeRetentionValues(t *testing.T) {
 	repo := newMockSettingRepo()
 	svc := newTestBackupService(repo, &mockDumper{}, newMockObjectStore())

@@ -37,6 +37,7 @@ var (
 	ErrBackupScheduleCorrupt         = infraerrors.InternalServer("BACKUP_SCHEDULE_CORRUPT", "backup schedule data is corrupted")
 	ErrBackupEncryptionNotConfigured = infraerrors.ServiceUnavailable("BACKUP_ENCRYPTION_NOT_CONFIGURED", "backup encryption keyring is not configured")
 	ErrLegacyBackupRestoreDisabled   = infraerrors.BadRequest("LEGACY_BACKUP_RESTORE_DISABLED", "legacy plaintext backup restore is disabled; set SUB2API_ALLOW_LEGACY_PLAINTEXT_BACKUP_RESTORE=true for a controlled compatibility restore")
+	ErrLiveRestoreDisabled           = infraerrors.Forbidden("LIVE_RESTORE_DISABLED", "live in-place restore is disabled in private production; restore into a disposable target")
 	ErrBackupFormatUnsupported       = infraerrors.BadRequest("BACKUP_FORMAT_UNSUPPORTED", "backup format is unsupported")
 
 	// ErrSecretEncryptionKeyNotConfigured is returned when an S3 SecretAccessKey
@@ -150,6 +151,7 @@ type BackupService struct {
 	storeFactory            BackupObjectStoreFactory
 	dumper                  DBDumper
 	backupCipher            BackupStreamCipher
+	liveRestoreDisabled     bool
 
 	opMu      sync.Mutex // protects operation flags and admission versus shutdown
 	backingUp bool
@@ -190,6 +192,7 @@ func NewBackupService(
 		storeFactory:            storeFactory,
 		dumper:                  dumper,
 		backupCipher:            backupCipher,
+		liveRestoreDisabled:     config.SingleUserPrivateControlPlaneEnabled() && strings.EqualFold(strings.TrimSpace(cfg.Log.Environment), "production"),
 		bgCtx:                   bgCtx,
 		bgCancel:                bgCancel,
 	}
@@ -885,6 +888,9 @@ func (s *BackupService) executeBackup(record *BackupRecord, objectStore BackupOb
 
 // RestoreBackup 从 S3 下载备份并流式恢复到数据库
 func (s *BackupService) RestoreBackup(ctx context.Context, backupID string) error {
+	if s.liveRestoreDisabled {
+		return ErrLiveRestoreDisabled
+	}
 	if !s.admitBackgroundOperation() {
 		return s.serverShuttingDownError()
 	}
@@ -928,6 +934,9 @@ func (s *BackupService) RestoreBackup(ctx context.Context, backupID string) erro
 
 // StartRestore 异步恢复备份，立即返回
 func (s *BackupService) StartRestore(ctx context.Context, backupID string) (*BackupRecord, error) {
+	if s.liveRestoreDisabled {
+		return nil, ErrLiveRestoreDisabled
+	}
 	if s.shuttingDown.Load() {
 		return nil, infraerrors.ServiceUnavailable("SERVER_SHUTTING_DOWN", "server is shutting down")
 	}

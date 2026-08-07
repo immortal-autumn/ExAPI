@@ -15,7 +15,39 @@ const (
 	defaultBackupStagingMaxBytes = int64(20 << 30) // 20 GiB fail-safe cap
 )
 
-var ErrBackupStagingTooLarge = errors.New("backup staging size limit exceeded")
+var (
+	ErrBackupStagingTooLarge            = errors.New("backup staging size limit exceeded")
+	ErrInsecureBackupStagingPermissions = errors.New("backup staging filesystem cannot enforce mode 0600")
+)
+
+// createSecureBackupStagingFile verifies the filesystem contract before any
+// sensitive bytes are written. Some removable/FUSE filesystems accept chmod
+// while continuing to expose every file as mode 0777; backup staging must fail
+// closed on those filesystems.
+func createSecureBackupStagingFile(pattern string) (*os.File, error) {
+	file, err := os.CreateTemp("", pattern)
+	if err != nil {
+		return nil, err
+	}
+	cleanup := true
+	defer func() {
+		if cleanup {
+			cleanupStagedFile(file)
+		}
+	}()
+	if err := file.Chmod(0o600); err != nil {
+		return nil, fmt.Errorf("set backup staging permissions: %w", err)
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("verify backup staging permissions: %w", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		return nil, fmt.Errorf("%w: got mode %04o", ErrInsecureBackupStagingPermissions, info.Mode().Perm())
+	}
+	cleanup = false
+	return file, nil
+}
 
 type limitedStagingWriter struct {
 	writer    io.Writer
@@ -58,7 +90,7 @@ func stageEncryptedBackup(cipher BackupStreamCipher, dump io.ReadCloser) (_ *os.
 		return nil, 0, fmt.Errorf("database dump reader is nil")
 	}
 
-	staged, err := os.CreateTemp("", "sub2api-backup-*.sql.gz.enc")
+	staged, err := createSecureBackupStagingFile("sub2api-backup-*.sql.gz.enc")
 	if err != nil {
 		_ = dump.Close()
 		return nil, 0, fmt.Errorf("create encrypted backup staging file: %w", err)
@@ -141,7 +173,7 @@ func stageDecryptedBackupWithLimit(cipher BackupStreamCipher, encrypted io.Reade
 		return nil, fmt.Errorf("encrypted backup reader is nil")
 	}
 
-	staged, err := os.CreateTemp("", "sub2api-restore-*.sql.gz")
+	staged, err := createSecureBackupStagingFile("sub2api-restore-*.sql.gz")
 	if err != nil {
 		return nil, fmt.Errorf("create restore staging file: %w", err)
 	}

@@ -131,7 +131,7 @@ func stageLegacySQLBackupWithLimit(compressed io.Reader, maxBytes int64) (_ *os.
 	if compressed == nil {
 		return nil, fmt.Errorf("legacy backup reader is nil")
 	}
-	staged, err := os.CreateTemp("", "sub2api-legacy-restore-*.sql")
+	staged, err := createSecureBackupStagingFile("sub2api-legacy-restore-*.sql")
 	if err != nil {
 		return nil, fmt.Errorf("create legacy restore staging file: %w", err)
 	}

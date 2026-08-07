@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -48,4 +49,24 @@ func TestActiveHandlerTrackerWaitsBeforeCleanupBoundary(t *testing.T) {
 		t.Fatal("Wait did not return after active handler completed")
 	}
 	<-done
+}
+
+func TestActiveHandlerTrackerWaitContextIsBounded(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan struct{})
+	tracker := newActiveHandlerTracker(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		close(started)
+		<-release
+	}))
+	go tracker.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	<-started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	require.False(t, tracker.WaitContext(ctx))
+	close(release)
+
+	drainedCtx, drainedCancel := context.WithTimeout(context.Background(), time.Second)
+	defer drainedCancel()
+	require.True(t, tracker.WaitContext(drainedCtx))
 }

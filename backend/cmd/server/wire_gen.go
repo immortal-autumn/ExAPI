@@ -7,8 +7,6 @@
 package main
 
 import (
-	"context"
-	"github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
@@ -18,10 +16,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/server"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
-	"github.com/redis/go-redis/v9"
-	"log"
-	"net/http"
-	"time"
 )
 
 import (
@@ -281,7 +275,8 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	auditLogService := service.ProvideAuditLogService(auditLogRepository, settingService)
 	auditLogHandler := admin.NewAuditLogHandler(auditLogService, totpService)
 	upstreamBillingProbeService := service.ProvideUpstreamBillingProbeService(accountRepository, accountTestService, settingService, leaderLockCache, db)
-	adminHandlers := handler.ProvideAdminHandlers(dashboardHandler, adminUserHandler, groupHandler, accountHandler, adminAnnouncementHandler, dataManagementHandler, backupHandler, oAuthHandler, openAIOAuthHandler, geminiOAuthHandler, antigravityOAuthHandler, grokOAuthHandler, proxyHandler, adminRedeemHandler, promoHandler, settingHandler, opsHandler, systemHandler, adminSubscriptionHandler, adminUsageHandler, userAttributeHandler, errorPassthroughHandler, tlsFingerprintProfileHandler, adminAPIKeyHandler, scheduledTestHandler, channelHandler, channelMonitorHandler, channelMonitorRequestTemplateHandler, contentModerationHandler, promptAdminHandler, paymentHandler, affiliateHandler, complianceHandler, auditLogHandler, upstreamBillingProbeService)
+	cockpitService := service.NewCockpitService(db)
+	adminHandlers := handler.ProvideAdminHandlers(dashboardHandler, adminUserHandler, groupHandler, accountHandler, adminAnnouncementHandler, dataManagementHandler, backupHandler, oAuthHandler, openAIOAuthHandler, geminiOAuthHandler, antigravityOAuthHandler, grokOAuthHandler, proxyHandler, adminRedeemHandler, promoHandler, settingHandler, opsHandler, systemHandler, adminSubscriptionHandler, adminUsageHandler, userAttributeHandler, errorPassthroughHandler, tlsFingerprintProfileHandler, adminAPIKeyHandler, scheduledTestHandler, channelHandler, channelMonitorHandler, channelMonitorRequestTemplateHandler, contentModerationHandler, promptAdminHandler, paymentHandler, affiliateHandler, complianceHandler, auditLogHandler, upstreamBillingProbeService, cockpitService)
 	usageRecordWorkerPool := service.NewUsageRecordWorkerPool(configConfig)
 	userMsgQueueCache := repository.NewUserMsgQueueCache(redisClient)
 	userMessageQueueService := service.ProvideUserMessageQueueService(userMsgQueueCache, rpmCache, configConfig)
@@ -329,22 +324,16 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	paymentOrderExpiryService := service.ProvidePaymentOrderExpiryService(paymentService, leaderLockCache, db)
 	channelMonitorRunner := service.ProvideChannelMonitorRunner(channelMonitorService, settingService)
 	userPlatformQuotaUsageFlusher := service.ProvideUserPlatformQuotaUsageFlusher(configConfig, billingCache, serviceUserPlatformQuotaRepository, timingWheelService)
-	v := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, opsService, opsIngressRejectAggregator, apiKeyService, authCacheInvalidationWorker, schedulerSnapshotService, tokenRefreshService, accountExpiryService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, batchImageCleanupService, batchImageWorkerRuntime, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, userPlatformQuotaUsageFlusher, upstreamBillingProbeService, auditLogService, promptService)
+	mainShutdownCoordinator := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, opsService, opsIngressRejectAggregator, apiKeyService, authCacheInvalidationWorker, schedulerSnapshotService, tokenRefreshService, accountExpiryService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, batchImageCleanupService, batchImageWorkerRuntime, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, userPlatformQuotaUsageFlusher, upstreamBillingProbeService, auditLogService, promptService)
 	application := &Application{
 		Server:      httpServer,
 		PromptAudit: promptService,
-		Cleanup:     v,
+		Cleanup:     mainShutdownCoordinator,
 	}
 	return application, nil
 }
 
 // wire.go:
-
-type Application struct {
-	Server      *http.Server
-	PromptAudit *securityaudit.PromptService
-	Cleanup     func()
-}
 
 func providePrivacyClientFactory() service.PrivacyClientFactory {
 	return repository.CreatePrivacyReqClient
@@ -354,298 +343,5 @@ func provideServiceBuildInfo(buildInfo handler.BuildInfo) service.BuildInfo {
 	return service.BuildInfo{
 		Version:   buildInfo.Version,
 		BuildType: buildInfo.BuildType,
-	}
-}
-
-func provideCleanup(
-	entClient *ent.Client,
-	rdb *redis.Client,
-	opsMetricsCollector *service.OpsMetricsCollector,
-	opsAggregation *service.OpsAggregationService,
-	opsAlertEvaluator *service.OpsAlertEvaluatorService,
-	opsCleanup *service.OpsCleanupService,
-	opsScheduledReport *service.OpsScheduledReportService,
-	opsSystemLogSink *service.OpsSystemLogSink,
-	opsService *service.OpsService,
-	opsIngressReject *service.OpsIngressRejectAggregator,
-	apiKeyService *service.APIKeyService,
-	authCacheInvalidationWorker *service.AuthCacheInvalidationWorker,
-	schedulerSnapshot *service.SchedulerSnapshotService,
-	tokenRefresh *service.TokenRefreshService,
-	accountExpiry *service.AccountExpiryService,
-	proxyExpiry *service.ProxyExpiryService,
-	subscriptionExpiry *service.SubscriptionExpiryService,
-	usageCleanup *service.UsageCleanupService,
-	idempotencyCleanup *service.IdempotencyCleanupService,
-	batchImageCleanup *service.BatchImageCleanupService,
-	batchImageWorker *service.BatchImageWorkerRuntime,
-	pricing *service.PricingService,
-	emailQueue *service.EmailQueueService,
-	billingCache *service.BillingCacheService,
-	usageRecordWorkerPool *service.UsageRecordWorkerPool,
-	subscriptionService *service.SubscriptionService,
-	oauth *service.OAuthService,
-	openaiOAuth *service.OpenAIOAuthService,
-	geminiOAuth *service.GeminiOAuthService,
-	antigravityOAuth *service.AntigravityOAuthService,
-	grokOAuth *service.GrokOAuthService,
-	openAIGateway *service.OpenAIGatewayService,
-	scheduledTestRunner *service.ScheduledTestRunnerService,
-	backupSvc *service.BackupService,
-	paymentOrderExpiry *service.PaymentOrderExpiryService,
-	channelMonitorRunner *service.ChannelMonitorRunner,
-	quotaFlusher *service.UserPlatformQuotaUsageFlusher,
-	upstreamBillingProbe *service.UpstreamBillingProbeService,
-	auditLog *service.AuditLogService,
-	promptAudit *securityaudit.PromptService,
-) func() {
-	return func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		parallelSteps := []cleanupStep{
-			{"OpsIngressRejectAggregator", func() error {
-				if opsIngressReject != nil {
-					opsIngressReject.Stop()
-				}
-				return nil
-			}},
-			{"AuthCacheInvalidationWorker", func() error {
-				if authCacheInvalidationWorker != nil {
-					authCacheInvalidationWorker.Stop()
-				}
-				return nil
-			}},
-			{"AuthCacheInvalidationSubscriber", func() error {
-				if apiKeyService != nil {
-					apiKeyService.StopAuthCacheInvalidationSubscriber()
-				}
-				return nil
-			}},
-			{"OpsRuntimeSettingsRefresh", func() error {
-				if opsService != nil {
-					opsService.StopRuntimeSettingsRefresh()
-				}
-				return nil
-			}},
-			{"PromptAuditService", func() error {
-				if promptAudit != nil {
-					return promptAudit.Shutdown(ctx)
-				}
-				return nil
-			}},
-			{"OpsScheduledReportService", func() error {
-				if opsScheduledReport != nil {
-					opsScheduledReport.Stop()
-				}
-				return nil
-			}},
-			{"OpsCleanupService", func() error {
-				if opsCleanup != nil {
-					opsCleanup.Stop()
-				}
-				return nil
-			}},
-			{"OpsSystemLogSink", func() error {
-				if opsSystemLogSink != nil {
-					opsSystemLogSink.Stop()
-				}
-				return nil
-			}},
-			{"AuditLogService", func() error {
-				if auditLog != nil {
-					auditLog.Stop()
-				}
-				return nil
-			}},
-			{"OpsAlertEvaluatorService", func() error {
-				if opsAlertEvaluator != nil {
-					opsAlertEvaluator.Stop()
-				}
-				return nil
-			}},
-			{"OpsAggregationService", func() error {
-				if opsAggregation != nil {
-					opsAggregation.Stop()
-				}
-				return nil
-			}},
-			{"OpsMetricsCollector", func() error {
-				if opsMetricsCollector != nil {
-					opsMetricsCollector.Stop()
-				}
-				return nil
-			}},
-			{"SchedulerSnapshotService", func() error {
-				if schedulerSnapshot != nil {
-					schedulerSnapshot.Stop()
-				}
-				return nil
-			}},
-			{"UsageCleanupService", func() error {
-				if usageCleanup != nil {
-					usageCleanup.Stop()
-				}
-				return nil
-			}},
-			{"IdempotencyCleanupService", func() error {
-				if idempotencyCleanup != nil {
-					idempotencyCleanup.Stop()
-				}
-				return nil
-			}},
-			{"BatchImageCleanupService", func() error {
-				if batchImageCleanup != nil {
-					batchImageCleanup.Stop()
-				}
-				return nil
-			}},
-			{"BatchImageWorkerRuntime", func() error {
-				if batchImageWorker != nil {
-					batchImageWorker.Stop()
-				}
-				return nil
-			}},
-			{"TokenRefreshService", func() error {
-				tokenRefresh.Stop()
-				return nil
-			}},
-			{"AccountExpiryService", func() error {
-				accountExpiry.Stop()
-				return nil
-			}},
-			{"ProxyExpiryService", func() error {
-				proxyExpiry.Stop()
-				return nil
-			}},
-			{"SubscriptionExpiryService", func() error {
-				subscriptionExpiry.Stop()
-				return nil
-			}},
-			{"SubscriptionService", func() error {
-				if subscriptionService != nil {
-					subscriptionService.Stop()
-				}
-				return nil
-			}},
-			{"PricingService", func() error {
-				pricing.Stop()
-				return nil
-			}},
-			{"EmailQueueService", func() error {
-				emailQueue.Stop()
-				return nil
-			}},
-			{"BillingCacheService", func() error {
-				billingCache.Stop()
-				return nil
-			}},
-			{"UsageRecordWorkerPool", func() error {
-				if usageRecordWorkerPool != nil {
-					usageRecordWorkerPool.Stop()
-				}
-				return nil
-			}},
-			{"OAuthService", func() error {
-				oauth.Stop()
-				return nil
-			}},
-			{"OpenAIOAuthService", func() error {
-				openaiOAuth.Stop()
-				return nil
-			}},
-			{"GeminiOAuthService", func() error {
-				geminiOAuth.Stop()
-				return nil
-			}},
-			{"AntigravityOAuthService", func() error {
-				antigravityOAuth.Stop()
-				return nil
-			}},
-			{"GrokOAuthService", func() error {
-				if grokOAuth != nil {
-					grokOAuth.Stop()
-				}
-				return nil
-			}},
-			{"OpenAIWSPool", func() error {
-				if openAIGateway != nil {
-					openAIGateway.CloseOpenAIWSPool()
-				}
-				return nil
-			}},
-			{"ScheduledTestRunnerService", func() error {
-				if scheduledTestRunner != nil {
-					scheduledTestRunner.Stop()
-				}
-				return nil
-			}},
-			{"BackupService", func() error {
-				if backupSvc != nil {
-					return backupSvc.StopContext(ctx)
-				}
-				return nil
-			}},
-			{"PaymentOrderExpiryService", func() error {
-				if paymentOrderExpiry != nil {
-					paymentOrderExpiry.Stop()
-				}
-				return nil
-			}},
-			{"ChannelMonitorRunner", func() error {
-				if channelMonitorRunner != nil {
-					channelMonitorRunner.Stop()
-				}
-				return nil
-			}},
-			{"UserPlatformQuotaUsageFlusher", func() error {
-				if quotaFlusher != nil {
-					quotaFlusher.Stop()
-				}
-				return nil
-			}},
-			{"UpstreamBillingProbeService", func() error {
-				if upstreamBillingProbe != nil {
-					upstreamBillingProbe.Stop()
-				}
-				return nil
-			}},
-		}
-
-		infraSteps := []cleanupStep{
-			{"Redis", func() error {
-				if rdb == nil {
-					return nil
-				}
-				return rdb.Close()
-			}},
-			{"Ent", func() error {
-				if entClient == nil {
-					return nil
-				}
-				return entClient.Close()
-			}},
-		}
-
-		completedResults, applicationCleanupComplete := runCleanupParallel(ctx, parallelSteps)
-		for _, result := range completedResults {
-			if result.err != nil {
-				log.Printf("[Cleanup] %s failed: %v", result.name, result.err)
-			} else {
-				log.Printf("[Cleanup] %s succeeded", result.name)
-			}
-		}
-		if !applicationCleanupComplete {
-			log.Printf("[Cleanup] Warning: application cleanup deadline exceeded; skipping Redis/Ent close to avoid racing active cleanup")
-			return
-		}
-		for _, result := range runCleanupSequential(infraSteps) {
-			if result.err != nil {
-				log.Printf("[Cleanup] %s failed: %v", result.name, result.err)
-			} else {
-				log.Printf("[Cleanup] %s succeeded", result.name)
-			}
-		}
-		log.Printf("[Cleanup] All cleanup steps completed")
 	}
 }
