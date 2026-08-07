@@ -33,6 +33,8 @@ digest-pinned Compose project for canary validation before production changes.
 | `config.example.yaml` | Example configuration file |
 | `EDGE_SECURITY.md` | Reverse proxy, CDN/WAF, trusted proxy, and ingress hardening guide |
 | `PRODUCTION_ROLLOUT.md` | Backup, restore, canary, promotion, and rollback gates |
+| `docker-compose.canary-restored.yml` | Egress-denied overlay for restored production-data canaries |
+| `ops/` | Executable recovery, independent restore, observation, and signed-manifest gates |
 
 ---
 

@@ -25,6 +25,7 @@ for required in (
     "pnpm run test:coverage",
     "pnpm run build",
     "pnpm run check:bundle",
+    "pnpm run check:private-bundle",
 ):
     require("Makefile", required)
 
@@ -59,6 +60,24 @@ for path in ("Dockerfile", "deploy/Dockerfile", "Dockerfile.goreleaser"):
     require(path, "http://localhost:${SERVER_PORT:-8080}/ready")
     forbid(path, "http://localhost:${SERVER_PORT:-8080}/health")
     forbid(path, "github.com/Wei-Shaw/sub2api")
+
+docker_build_image_args = {
+    "Dockerfile": {"NODE_IMAGE", "GOLANG_IMAGE", "ALPINE_IMAGE", "POSTGRES_IMAGE"},
+    "deploy/Dockerfile": {"NODE_IMAGE", "GOLANG_IMAGE", "ALPINE_IMAGE"},
+    "Dockerfile.goreleaser": {"ALPINE_IMAGE", "POSTGRES_IMAGE"},
+}
+for path, expected_args in docker_build_image_args.items():
+    seen_args = set()
+    for line_number, line in enumerate((ROOT / path).read_text(encoding="utf-8").splitlines(), 1):
+        match = re.fullmatch(r"ARG ([A-Z_]+)=(.+)", line)
+        if not match or match.group(1) not in expected_args:
+            continue
+        seen_args.add(match.group(1))
+        if not re.search(r"@sha256:[0-9a-f]{64}$", match.group(2)):
+            raise SystemExit(f"{path}:{line_number}: {match.group(1)} is not digest-pinned")
+    if seen_args != expected_args:
+        missing = ", ".join(sorted(expected_args - seen_args))
+        raise SystemExit(f"{path}: missing required build image ARG(s): {missing}")
 
 require(".github/workflows/release.yml", "quality-gate")
 require(".github/workflows/release.yml", "resolve-ref:")
@@ -99,6 +118,15 @@ for path in (
     require(path, "http://localhost:8080/ready")
     forbid(path, "http://localhost:8080/health")
 
+for path in ("deploy/docker-compose.yml", "deploy/docker-compose.local.yml"):
+    require(path, "${POSTGRES_IMAGE:?Set POSTGRES_IMAGE to an immutable postgres@sha256:<digest> reference}")
+    require(path, "${REDIS_IMAGE:?Set REDIS_IMAGE to an immutable redis@sha256:<digest> reference}")
+    if (ROOT / path).read_text(encoding="utf-8").count("no-new-privileges:true") != 3:
+        raise SystemExit(f"{path}: every service must enable no-new-privileges")
+require("deploy/docker-compose.standalone.yml", "no-new-privileges:true")
+for path in ("deploy/docker-compose.yml", "deploy/docker-compose.local.yml", "deploy/docker-compose.standalone.yml"):
+    require(path, "${EXAPI_STOP_GRACE_PERIOD:-50s}")
+
 for path in (
     "deploy/docker-compose.yml",
     "deploy/docker-compose.local.yml",
@@ -112,7 +140,47 @@ for path in (
 require("deploy/install.sh", "validate_runtime_keyring_independence")
 require("deploy/docker-deploy.sh", "validate_independent_keyrings")
 require("deploy/PRODUCTION_ROLLOUT.md", "COMPOSE_PROJECT_NAME=exapi-canary")
-require("deploy/PRODUCTION_ROLLOUT.md", "@sha256:REPLACE_WITH_REVIEWED_DIGEST")
+require("deploy/PRODUCTION_ROLLOUT.md", "docker-compose.canary-restored.yml")
+require("deploy/PRODUCTION_ROLLOUT.md", "publish-rollout-manifest.sh")
+require("deploy/docker-compose.canary-restored.yml", "internal: true")
+require("deploy/docker-compose.canary-restored.yml", "external: true")
+require("deploy/docker-compose.canary-restored.yml", "RESTORED_POSTGRES_DATABASE")
+if (ROOT / "deploy/PRODUCTION_ROLLOUT.md").read_text(encoding="utf-8").count(
+    "docker compose --env-file /protected/exapi-canary-restored.env"
+) != 2:
+    raise SystemExit("deploy/PRODUCTION_ROLLOUT.md: restored canary config/up must use its protected env file")
+require("deploy/ops/create-recovery-set.sh", "EXAPI_WRITER_QUIESCED=true")
+require("deploy/ops/create-recovery-set.sh", "s3api get-bucket-versioning")
+require("deploy/ops/create-recovery-set.sh", "put-object-retention")
+require("deploy/ops/create-recovery-set.sh", "validate-immutable-compose.sh")
+require("deploy/ops/create-recovery-set.sh", "database and secret recovery objects must have disjoint age recipients")
+require("deploy/ops/create-recovery-set.sh", "snapshot retention_until is shorter than RECOVERY_RETENTION_UNTIL")
+require("deploy/ops/validate-immutable-compose.sh", "@sha256:[0-9a-f]{64}")
+require("deploy/ops/verify-logical-restore.sh", "--version-id")
+require("deploy/ops/verify-snapshot-restore.sh", '"egress_denied"')
+require("deploy/ops/observe-rollout.sh", "minimum_seconds=1800")
+require("deploy/ops/observe-rollout.sh", "minimum_seconds=3600")
+require("deploy/ops/publish-rollout-manifest.sh", "cosign")
+require("deploy/ops/publish-rollout-manifest.sh", "cosign verify-attestation")
+require("deploy/ops/publish-rollout-manifest.sh", "oci-provenance-verification.json")
+require("deploy/ops/publish-rollout-manifest.sh", "immortal-autumn/Sub2API2Personal/\\.github/workflows/release\\.yml@")
+require("deploy/ops/rollout-manifest.example.json", '"independent_restore_paths": false')
+require("deploy/ops/rollout-manifest.example.json", '"postgres_volume": "REPLACE_VERIFIED_EXTERNAL_POSTGRES_VOLUME"')
+
+for required in (
+    "id-token: write",
+    "attestations: write",
+    "format: spdx-json",
+    "subject-digest: ${{ steps.published-image.outputs.digest }}",
+    "push-to-registry: true",
+    "Verify OCI labels and embedded version",
+    "docker.io/tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0",
+    "image=moby/buildkit@sha256:2f5adac4ecd194d9f8c10b7b5d7bceb5186853db1b26e5abd3a657af0b7e26ec",
+    "version: v0.36.1",
+    "version: v2.17.1",
+    "syft-version: v1.42.3",
+):
+    require(".github/workflows/release.yml", required)
 
 require("deploy/apple-container.sh", "validate_immutable_app_image")
 require("deploy/apple-container.sh", "SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON")

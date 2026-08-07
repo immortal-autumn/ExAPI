@@ -32,6 +32,7 @@ test-frontend:
 	cd frontend && NODE_ENV=test CI=true pnpm run test:coverage
 	cd frontend && pnpm run build
 	cd frontend && pnpm run check:bundle
+	cd frontend && pnpm run check:private-bundle
 
 test-frontend-critical:
 	@pnpm --dir frontend exec vitest run $(FRONTEND_CRITICAL_VITEST)

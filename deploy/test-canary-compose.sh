@@ -13,9 +13,13 @@ command -v docker >/dev/null 2>&1 || fail 'docker CLI is required'
 docker compose version >/dev/null 2>&1 || fail 'Docker Compose v2 is required'
 
 immutable_image='ghcr.io/example/exapi@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+postgres_image='postgres@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+redis_image='redis@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
 rendered=$(
     COMPOSE_PROJECT_NAME=exapi-canary \
     EXAPI_IMAGE="$immutable_image" \
+    POSTGRES_IMAGE="$postgres_image" \
+    REDIS_IMAGE="$redis_image" \
     EXAPI_CONTAINER_NAME=exapi-canary \
     EXAPI_POSTGRES_CONTAINER_NAME=exapi-canary-postgres \
     EXAPI_REDIS_CONTAINER_NAME=exapi-canary-redis \

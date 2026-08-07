@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "rollout_id": "REPLACE",
+  "generated_at": "REPLACE_RFC3339_UTC",
+  "source": {
+    "commit": "REPLACE_40_HEX_COMMIT",
+    "repository": "immortal-autumn/Sub2API2Personal",
+    "workflow": ".github/workflows/release.yml"
+  },
+  "artifact": {
+    "image": "ghcr.io/immortal-autumn/sub2api2personal@sha256:REPLACE",
+    "manifest_digest": "sha256:REPLACE",
+    "platform_digests": [
+      {"platform": "linux/amd64", "digest": "sha256:REPLACE"}
+    ],
+    "oci_labels": {
+      "revision": "REPLACE_40_HEX_COMMIT",
+      "source": "https://github.com/immortal-autumn/Sub2API2Personal",
+      "version": "REPLACE"
+    },
+    "sbom": {"format": "SPDX-JSON", "sha256": "sha256:REPLACE"},
+    "provenance": {
+      "verified": false,
+      "issuer": "https://token.actions.githubusercontent.com",
+      "repository": "immortal-autumn/Sub2API2Personal",
+      "workflow": ".github/workflows/release.yml",
+      "subject_digest": "sha256:REPLACE"
+    }
+  },
+  "recovery": {
+    "logical": {
+      "backup": {
+        "object_uri": "s3://REPLACE",
+        "version_id": "REPLACE",
+        "sha256": "sha256:REPLACE",
+        "encrypted": true,
+        "retention_until": "REPLACE_RFC3339_UTC"
+      },
+      "disposable_target": "REPLACE",
+      "volume": "REPLACE_VERIFIED_EXTERNAL_POSTGRES_VOLUME",
+      "database": "exapi_restore",
+      "restored_at": "REPLACE_RFC3339_UTC",
+      "network_mode": "none",
+      "backup_sha256": "sha256:REPLACE",
+      "verified": false
+    },
+    "snapshot": {
+      "provider": "REPLACE",
+      "snapshot_id": "REPLACE",
+      "retention_until": "REPLACE_RFC3339_UTC",
+      "writer_quiesced": true,
+      "checkpoint_completed": true,
+      "disposable_target": "REPLACE",
+      "restored_at": "REPLACE_RFC3339_UTC",
+      "egress_denied": false,
+      "integrity_verified": false,
+      "decryption_verified": false,
+      "verified": false
+    },
+    "secrets": {
+      "object_uri": "s3://REPLACE",
+      "version_id": "REPLACE",
+      "sha256": "sha256:REPLACE",
+      "encrypted": true,
+      "retention_until": "REPLACE_RFC3339_UTC",
+      "key_ids": ["REPLACE_DATA", "REPLACE_DIGEST", "REPLACE_BACKUP"]
+    },
+    "independent_restore_paths": false
+  },
+  "security": {
+    "private_live_restore_disabled": false,
+    "no_new_privileges": false,
+    "immutable_runtime_images": false
+  },
+  "monitoring": {
+    "external_readiness_configured": false,
+    "provider": "REPLACE",
+    "alert_probe": {
+      "delivered": false,
+      "delivered_at": "REPLACE_RFC3339_UTC",
+      "delivery_id": "REPLACE"
+    }
+  },
+  "canaries": {
+    "restored_data": {
+      "duration_minutes": 0,
+      "readiness_interval_seconds": 30,
+      "readiness_checks": 0,
+      "readiness_failures": 0,
+      "restarts": 0,
+      "new_p0_p1": 0,
+      "request_count": 0,
+      "unexpected_5xx": 0,
+      "error_rate": 0,
+      "latency_sample_count": 0,
+      "p95_ms": 0,
+      "baseline_p95_ms": 0,
+      "image_digest": "sha256:REPLACE",
+      "production_data": true,
+      "egress_denied": false,
+      "integrity_verified": false,
+      "decryption_verified": false,
+      "source": {
+        "logical_restore_target": "REPLACE",
+        "postgres_volume": "REPLACE_VERIFIED_EXTERNAL_POSTGRES_VOLUME",
+        "database": "exapi_restore",
+        "backup_sha256": "sha256:REPLACE"
+      }
+    },
+    "synthetic_provider": {
+      "duration_minutes": 0,
+      "readiness_interval_seconds": 30,
+      "readiness_checks": 0,
+      "readiness_failures": 0,
+      "restarts": 0,
+      "new_p0_p1": 0,
+      "request_count": 0,
+      "unexpected_5xx": 0,
+      "error_rate": 0,
+      "latency_sample_count": 0,
+      "p95_ms": 0,
+      "baseline_p95_ms": 0,
+      "image_digest": "sha256:REPLACE",
+      "production_data": false,
+      "canary_only_credentials": false,
+      "egress_allowlist_verified": false,
+      "provider_smoke_verified": false
+    }
+  },
+  "production": {
+    "duration_minutes": 0,
+    "readiness_interval_seconds": 30,
+    "readiness_checks": 0,
+    "readiness_failures": 0,
+    "restarts": 0,
+    "new_p0_p1": 0,
+    "request_count": 0,
+    "unexpected_5xx": 0,
+    "error_rate": 0,
+    "latency_sample_count": 0,
+    "p95_ms": 0,
+    "baseline_p95_ms": 0,
+    "image_digest": "sha256:REPLACE"
+  },
+  "migration": {"version": "REPLACE", "ciphertext_only_cutover": false},
+  "rollback": {"mode": "compatible-image-or-snapshot"}
+}

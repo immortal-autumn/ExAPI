@@ -33,6 +33,7 @@ jobs:
           /bin/bash deploy/test-docker-deploy-keyrings.sh
           /bin/bash deploy/test-install-purge.sh
           /bin/bash deploy/test-keyring-contract.sh
+          /bin/bash deploy/test-production-rollout-contract.sh
           /bin/bash deploy/tests/apple-container-test.sh
 
   test:

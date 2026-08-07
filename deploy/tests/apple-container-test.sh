@@ -72,6 +72,14 @@ text = text.replace(
     "APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/immortal-autumn/sub2api2personal@sha256:REPLACE_WITH_RELEASE_DIGEST",
     "APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/immortal-autumn/sub2api2personal@sha256:" + "a" * 64,
 )
+text = text.replace(
+    "APPLE_CONTAINER_POSTGRES_IMAGE=postgres@sha256:REPLACE_WITH_POSTGRES_18_ALPINE_DIGEST",
+    "APPLE_CONTAINER_POSTGRES_IMAGE=postgres@sha256:" + "b" * 64,
+)
+text = text.replace(
+    "APPLE_CONTAINER_REDIS_IMAGE=redis@sha256:REPLACE_WITH_REDIS_8_ALPINE_DIGEST",
+    "APPLE_CONTAINER_REDIS_IMAGE=redis@sha256:" + "c" * 64,
+)
 path.write_text(text, encoding="utf-8")
 path.chmod(0o600)
 PY

@@ -27,6 +27,9 @@ services:
     image: ${EXAPI_IMAGE:?Set EXAPI_IMAGE to an immutable ghcr.io/immortal-autumn/sub2api2personal@sha256:<digest> reference}
     container_name: ${EXAPI_CONTAINER_NAME:-sub2api}
     restart: unless-stopped
+    stop_grace_period: ${EXAPI_STOP_GRACE_PERIOD:-50s}
+    security_opt:
+      - no-new-privileges:true
     ulimits:
       nofile:
         soft: 100000
@@ -206,9 +209,11 @@ services:
   # PostgreSQL Database
   # ===========================================================================
   postgres:
-    image: postgres:18-alpine
+    image: ${POSTGRES_IMAGE:?Set POSTGRES_IMAGE to an immutable postgres@sha256:<digest> reference}
     container_name: ${EXAPI_POSTGRES_CONTAINER_NAME:-sub2api-postgres}
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ulimits:
       nofile:
         soft: 100000
@@ -237,9 +242,11 @@ services:
   # Redis Cache
   # ===========================================================================
   redis:
-    image: redis:8-alpine
+    image: ${REDIS_IMAGE:?Set REDIS_IMAGE to an immutable redis@sha256:<digest> reference}
     container_name: ${EXAPI_REDIS_CONTAINER_NAME:-sub2api-redis}
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ulimits:
       nofile:
         soft: 100000

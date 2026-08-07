@@ -101,8 +101,8 @@ Apple-specific image overrides are available:
 
 ```dotenv
 APPLE_CONTAINER_SUB2API_IMAGE=ghcr.io/immortal-autumn/sub2api2personal@sha256:REPLACE_WITH_RELEASE_DIGEST
-APPLE_CONTAINER_POSTGRES_IMAGE=postgres:18-alpine
-APPLE_CONTAINER_REDIS_IMAGE=redis:8-alpine
+APPLE_CONTAINER_POSTGRES_IMAGE=postgres@sha256:REPLACE_WITH_POSTGRES_18_ALPINE_DIGEST
+APPLE_CONTAINER_REDIS_IMAGE=redis@sha256:REPLACE_WITH_REDIS_8_ALPINE_DIGEST
 ```
 
 The normal `up` command recreates the application container, so application environment changes are applied immediately. Use `up --recreate` when changing PostgreSQL or Redis container images or Redis runtime configuration. Persistent data remains in named volumes.
@@ -140,11 +140,16 @@ All three services attach only to the private `sub2api-apple` network. Only the 
 
 The application container is intentionally recreated by every `up` and `restart` operation because dependency VM addresses can change after they stop. Application data remains in `sub2api-apple-data`.
 
-The script checks the published `/health` endpoint from macOS before reporting success. Approve the Local Network prompt on first startup. If the internal probe succeeds but the host-port probe fails with a connection reset, enable Local Network access for `container-runtime-linux`, run `container system stop` followed by `container system start`, and then run `up` again. Runtime upgrades may prompt for permission again.
+The script checks the published `/ready` endpoint from macOS before reporting success. Approve the Local Network prompt on first startup. If the internal probe succeeds but the host-port probe fails with a connection reset, enable Local Network access for `container-runtime-linux`, run `container system stop` followed by `container system start`, and then run `up` again. Runtime upgrades may prompt for permission again.
 
 ## Backup and Upgrade
 
-Pin image release tags or digests in `.env` before using this workflow for persistent data. Before an application or database image upgrade, create backups while the stack is healthy:
+All three images must be pinned by digest. The commands below are suitable only
+for disposable local development. Production recovery and promotion must use
+the encrypted, off-host, independently restored workflow in
+[`PRODUCTION_ROLLOUT.md`](PRODUCTION_ROLLOUT.md).
+
+Before a local application or database image upgrade, create backups while the stack is healthy:
 
 ```bash
 umask 077

@@ -406,6 +406,12 @@ validate_immutable_app_image() {
         die "APPLE_CONTAINER_SUB2API_IMAGE must be an immutable ExAPI GHCR sha256 digest reference."
 }
 
+validate_immutable_dependency_image() {
+    local image="$1" variable_name="$2"
+    [[ "${image}" =~ ^[a-zA-Z0-9._/-]+@sha256:[0-9a-fA-F]{64}$ ]] || \
+        die "${variable_name} must be an immutable sha256 digest reference."
+}
+
 file_owner() {
     if [[ "$(uname -s)" == "Darwin" ]]; then
         stat -f '%u' "$1"
@@ -439,8 +445,8 @@ prepare_environment() {
     validate_env_file_security
 
     APP_IMAGE="$(read_env_value APPLE_CONTAINER_SUB2API_IMAGE)"
-    POSTGRES_IMAGE="$(read_env_value APPLE_CONTAINER_POSTGRES_IMAGE postgres:18-alpine)"
-    REDIS_IMAGE="$(read_env_value APPLE_CONTAINER_REDIS_IMAGE redis:8-alpine)"
+    POSTGRES_IMAGE="$(read_env_value APPLE_CONTAINER_POSTGRES_IMAGE)"
+    REDIS_IMAGE="$(read_env_value APPLE_CONTAINER_REDIS_IMAGE)"
     BIND_HOST="$(read_env_value BIND_HOST 0.0.0.0)"
     HOST_PORT="$(read_env_value SERVER_PORT 8080)"
     POSTGRES_USER="$(read_env_value POSTGRES_USER sub2api)"
@@ -451,6 +457,8 @@ prepare_environment() {
 
     [[ -n "${BIND_HOST}" ]] || die "BIND_HOST must not be empty."
     validate_immutable_app_image "${APP_IMAGE}"
+    validate_immutable_dependency_image "${POSTGRES_IMAGE}" "APPLE_CONTAINER_POSTGRES_IMAGE"
+    validate_immutable_dependency_image "${REDIS_IMAGE}" "APPLE_CONTAINER_REDIS_IMAGE"
     validate_ipv4_address "${BIND_HOST}"
     validate_port "${HOST_PORT}"
     if [[ "${BIND_HOST}" == "0.0.0.0" ]]; then

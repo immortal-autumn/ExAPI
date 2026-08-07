@@ -1,0 +1,28 @@
+# Overlay for a canary restored from production data. The internal network has
+# no default external route. Do not attach any service to a second network.
+services:
+  sub2api:
+    environment:
+      - SUB2API_CANARY_CLASS=restored-production-data
+      - DATABASE_DBNAME=${RESTORED_POSTGRES_DATABASE:?Set RESTORED_POSTGRES_DATABASE from verified logical-restore evidence}
+
+  postgres:
+    environment:
+      - POSTGRES_DB=${RESTORED_POSTGRES_DATABASE:?Set RESTORED_POSTGRES_DATABASE from verified logical-restore evidence}
+    volumes:
+      - restored_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-sub2api} -d ${RESTORED_POSTGRES_DATABASE:?Set RESTORED_POSTGRES_DATABASE from verified logical-restore evidence}",
+        ]
+
+networks:
+  sub2api-network:
+    internal: true
+
+volumes:
+  restored_postgres_data:
+    external: true
+    name: ${RESTORED_POSTGRES_VOLUME:?Set RESTORED_POSTGRES_VOLUME from verified logical-restore evidence}
