@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -21,12 +22,16 @@ func (h *ProxyHandler) ExportData(c *gin.Context) {
 		response.BadRequest(c, err.Error())
 		return
 	}
+	if err := validateDataExportObjectLimit(0, len(selectedIDs)); err != nil {
+		writeDataExportError(c, err)
+		return
+	}
 
 	var proxies []service.Proxy
 	if len(selectedIDs) > 0 {
 		proxies, err = h.getProxiesByIDs(ctx, selectedIDs)
 		if err != nil {
-			response.ErrorFrom(c, err)
+			writeDataExportError(c, err)
 			return
 		}
 	} else {
@@ -41,9 +46,13 @@ func (h *ProxyHandler) ExportData(c *gin.Context) {
 
 		proxies, err = h.listProxiesFiltered(ctx, protocol, status, search, sortBy, sortOrder)
 		if err != nil {
-			response.ErrorFrom(c, err)
+			writeDataExportError(c, err)
 			return
 		}
+	}
+	if err := validateDataExportObjectLimit(0, len(proxies)); err != nil {
+		writeDataExportError(c, err)
+		return
 	}
 
 	// 构建 id→name 映射，用于导出备用代理 name
@@ -98,13 +107,16 @@ func (h *ProxyHandler) ImportData(c *gin.Context) {
 	}
 
 	var req ProxyImportRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
+	if !bindDataImportJSON(c, &req) {
 		return
 	}
 
 	if err := validateDataHeader(req.Data); err != nil {
-		response.BadRequest(c, err.Error())
+		response.Error(c, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	if err := validateDataImportObjectLimit(req.Data); err != nil {
+		response.Error(c, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 
@@ -336,6 +348,9 @@ func (h *ProxyHandler) listProxiesFiltered(ctx context.Context, protocol, status
 			if err != nil {
 				return nil, err
 			}
+			if total > maxExportObjects || len(items) > maxExportObjects-len(out) {
+				return nil, errDataExportObjectLimit
+			}
 			for i := range items {
 				out = append(out, items[i].Proxy)
 			}
@@ -346,6 +361,9 @@ func (h *ProxyHandler) listProxiesFiltered(ctx context.Context, protocol, status
 			items, total, err := h.adminService.ListProxies(ctx, page, pageSize, protocol, status, search, sortBy, sortOrder)
 			if err != nil {
 				return nil, err
+			}
+			if total > maxExportObjects || len(items) > maxExportObjects-len(out) {
+				return nil, errDataExportObjectLimit
 			}
 			out = append(out, items...)
 			if len(out) >= int(total) || len(items) == 0 {

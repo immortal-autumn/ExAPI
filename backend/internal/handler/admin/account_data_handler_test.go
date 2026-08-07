@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -70,9 +71,80 @@ func setupAccountDataRouter() (*gin.Engine, *stubAdminService) {
 	)
 
 	router.GET("/api/v1/admin/accounts/data", h.ExportData)
+	router.GET("/api/v1/admin/accounts/diagnostic-export", h.ExportDiagnosticData)
 	router.POST("/api/v1/admin/accounts/data", h.ImportData)
 	return router, adminSvc
 }
+
+func TestDiagnosticExportIsAllowlistedAndRedacted(t *testing.T) {
+	router, adminSvc := setupAccountDataRouter()
+	proxyID := int64(11)
+	adminSvc.proxies = []service.Proxy{{
+		ID: proxyID, Name: "proxy-name", Protocol: "https", Host: "10.0.0.9", Port: 443,
+		Username: "proxy-user", Password: "proxy-password", Status: service.StatusActive,
+	}}
+	adminSvc.accounts = []service.Account{{
+		ID: 21, Name: "account", Notes: ptrString("operator-note"), Platform: service.PlatformOpenAI,
+		Type: service.AccountTypeOAuth, Credentials: map[string]any{"access_token": "account-token"},
+		Extra: map[string]any{"custom_base_url": "https://secret.example"}, ProxyID: &proxyID,
+		Status: service.StatusActive, Schedulable: true, Concurrency: 3, Priority: 50,
+	}}
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/admin/accounts/diagnostic-export", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	require.Contains(t, body, "sub2api-diagnostic")
+	require.Contains(t, body, "proxy-name")
+	for _, forbidden := range []string{"10.0.0.9", "proxy-user", "proxy-password", "account-token", "operator-note", "secret.example", "credentials", "extra", "proxy_key"} {
+		require.NotContains(t, body, forbidden)
+	}
+}
+
+func TestAccountExportsRejectMoreThanCombinedObjectLimit(t *testing.T) {
+	router, adminSvc := setupAccountDataRouter()
+	adminSvc.accounts = make([]service.Account, maxExportObjects+1)
+
+	for _, path := range []string{
+		"/api/v1/admin/accounts/data?include_proxies=false",
+		"/api/v1/admin/accounts/diagnostic-export",
+	} {
+		t.Run(path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+			require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+			require.Contains(t, rec.Body.String(), "combined accounts and proxies")
+		})
+	}
+}
+
+func TestDataExportCombinedObjectLimitBoundary(t *testing.T) {
+	require.NoError(t, validateDataExportObjectLimit(2500, 2500))
+	require.ErrorIs(t, validateDataExportObjectLimit(2501, 2500), errDataExportObjectLimit)
+	require.ErrorIs(t, validateDataExportObjectLimit(maxExportObjects+1, 0), errDataExportObjectLimit)
+}
+
+func TestImportDataEnforcesByteAndObjectLimits(t *testing.T) {
+	router, _ := setupAccountDataRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/data", strings.NewReader(`{}`))
+	req.ContentLength = maxImportBytes + 1
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+
+	objects := make([]DataProxy, maxImportObjects+1)
+	payload, err := json.Marshal(DataImportRequest{Data: DataPayload{Type: dataType, Version: dataVersion, Proxies: objects}})
+	require.NoError(t, err)
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/data", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+}
+
+func ptrString(value string) *string { return &value }
 
 func TestExportDataIncludesSecrets(t *testing.T) {
 	router, adminSvc := setupAccountDataRouter()

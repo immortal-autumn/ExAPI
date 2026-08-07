@@ -63,11 +63,31 @@ type AccountHandler struct {
 	tokenCacheInvalidator   service.TokenCacheInvalidator
 	grokImportProber        grokImportProber
 	upstreamBillingProbe    *service.UpstreamBillingProbeService
+	cockpitService          *service.CockpitService
 }
 
 // SetUpstreamBillingProbeService attaches the optional remote billing probe service.
 func (h *AccountHandler) SetUpstreamBillingProbeService(probe *service.UpstreamBillingProbeService) {
 	h.upstreamBillingProbe = probe
+}
+
+func (h *AccountHandler) SetCockpitService(cockpit *service.CockpitService) {
+	h.cockpitService = cockpit
+}
+
+// GetCockpitSummary returns one bounded control-plane aggregate. It never
+// lists fleet credentials or asks the scheduler for volatile concurrency.
+func (h *AccountHandler) GetCockpitSummary(c *gin.Context) {
+	if h == nil || h.cockpitService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Cockpit summary is unavailable")
+		return
+	}
+	summary, err := h.cockpitService.GetSummary(c.Request.Context())
+	if err != nil {
+		response.Error(c, http.StatusServiceUnavailable, "Failed to load cockpit summary")
+		return
+	}
+	response.Success(c, summary)
 }
 
 // NewAccountHandler creates a new admin account handler

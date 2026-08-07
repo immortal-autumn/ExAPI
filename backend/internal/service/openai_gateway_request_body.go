@@ -251,32 +251,75 @@ func resolveOpenAICompactSessionID(c *gin.Context) string {
 	return uuid.NewString()
 }
 
+// openAIResponsesRequestPathSuffix 返回可拼接到上游 /responses URL 后面的子路径。
+// 不可转发的子路径返回空串（退化为裸 /responses）；真正的拒绝由入口守卫
+// IsForwardableOpenAIResponsesRequestPath 负责。这样即便将来新增路由漏挂守卫，
+// 拼进上游 URL 的也只会是合规片段。
 func openAIResponsesRequestPathSuffix(c *gin.Context) string {
-	if c == nil || c.Request == nil || c.Request.URL == nil {
+	rawSuffix, matched := rawOpenAIResponsesRequestPathSuffix(c)
+	if !matched {
 		return ""
 	}
-	normalizedPath := strings.TrimRight(strings.TrimSpace(c.Request.URL.Path), "/")
-	if normalizedPath == "" {
-		return ""
-	}
-	idx := strings.LastIndex(normalizedPath, "/responses")
-	if idx < 0 {
-		return ""
-	}
-	suffix := normalizedPath[idx+len("/responses"):]
-	if suffix == "" || suffix == "/" {
-		return ""
-	}
-	if !strings.HasPrefix(suffix, "/") {
+	suffix, ok := sanitizedUpstreamPathSuffix(rawSuffix)
+	if !ok {
 		return ""
 	}
 	return suffix
 }
 
+// IsForwardableOpenAIResponsesRequestPath 判断入站请求携带的 /responses 子路径
+// 是否可以安全转发。路由层用它在鉴权后、调度前直接拒绝畸形子路径。
+func IsForwardableOpenAIResponsesRequestPath(c *gin.Context) bool {
+	rawSuffix, matched := rawOpenAIResponsesRequestPathSuffix(c)
+	if !matched {
+		return false
+	}
+	_, ok := sanitizedUpstreamPathSuffix(rawSuffix)
+	return ok
+}
+
+// rawOpenAIResponsesRequestPathSuffix extracts only from the gateway's exact
+// Responses route roots. The boolean distinguishes a valid root request with
+// no suffix from a malformed or unrelated path; callers must not silently
+// rewrite the latter to the bare /responses endpoint.
+func rawOpenAIResponsesRequestPathSuffix(c *gin.Context) (string, bool) {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return "", false
+	}
+	normalizedPath := strings.TrimRight(strings.TrimSpace(c.Request.URL.Path), "/")
+	if normalizedPath == "" {
+		return "", false
+	}
+
+	// A second /responses-like prefix is never part of a supported
+	// subresource. Reject it before root matching so a crafted later prefix
+	// (including malformed forms such as /responses-bad) cannot win
+	// extraction and change the upstream request target.
+	if strings.Count(normalizedPath, "/responses") != 1 {
+		return "", false
+	}
+
+	for _, root := range []string{
+		"/v1/responses",
+		"/openai/v1/responses",
+		"/responses",
+		"/backend-api/codex/responses",
+	} {
+		if normalizedPath == root {
+			return "", true
+		}
+		if strings.HasPrefix(normalizedPath, root+"/") {
+			return normalizedPath[len(root):], true
+		}
+	}
+	return "", false
+}
+
 func appendOpenAIResponsesRequestPathSuffix(baseURL, suffix string) string {
 	trimmedBase := strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	trimmedSuffix := strings.TrimSpace(suffix)
-	if trimmedBase == "" || trimmedSuffix == "" {
+	// 兜底：调用方漏了校验时，这里也不会把不合规的片段拼进上游 URL。
+	trimmedSuffix, ok := sanitizedUpstreamPathSuffix(suffix)
+	if !ok || trimmedBase == "" || trimmedSuffix == "" {
 		return trimmedBase
 	}
 	return trimmedBase + trimmedSuffix

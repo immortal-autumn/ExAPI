@@ -120,6 +120,16 @@ func TestProxyExportDataWithSelectedIDs(t *testing.T) {
 	require.Equal(t, 0, adminSvc.lastListProxies.calls)
 }
 
+func TestProxyExportRejectsMoreThanObjectLimit(t *testing.T) {
+	router, adminSvc := setupProxyDataRouter()
+	adminSvc.proxies = make([]service.Proxy, maxExportObjects+1)
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/admin/proxies/data", nil))
+	require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+	require.Contains(t, rec.Body.String(), "combined accounts and proxies")
+}
+
 func TestProxyExportDataPassesSortParams(t *testing.T) {
 	router, adminSvc := setupProxyDataRouter()
 

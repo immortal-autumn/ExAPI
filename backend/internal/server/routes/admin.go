@@ -30,6 +30,7 @@ func RegisterAdminRoutes(
 
 		// 仪表盘
 		registerDashboardRoutes(admin, h)
+		admin.GET("/cockpit-summary", h.Admin.Account.GetCockpitSummary)
 
 		// Multi-user commercial administration is omitted from private gateway mode.
 		if config.SaaSFeaturesEnabled() {
@@ -329,6 +330,7 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 	accounts := admin.Group("/accounts")
 	{
 		accounts.GET("", h.Admin.Account.List)
+		accounts.GET("/diagnostic-export", h.Admin.Account.ExportDiagnosticData)
 		accounts.GET("/upstream-billing-probe/settings", h.Admin.Account.GetUpstreamBillingProbeSettings)
 		accounts.PUT("/upstream-billing-probe/settings", h.Admin.Account.UpdateUpstreamBillingProbeSettings)
 		accounts.POST("/upstream-billing-probe/batch", h.Admin.Account.ProbeUpstreamBillingBatch)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -18,11 +19,16 @@ import (
 )
 
 const (
-	dataType       = "sub2api-data"
-	legacyDataType = "sub2api-bundle"
-	dataVersion    = 1
-	dataPageCap    = 1000
+	dataType         = "sub2api-data"
+	legacyDataType   = "sub2api-bundle"
+	dataVersion      = 1
+	dataPageCap      = 1000
+	maxImportBytes   = 25 << 20
+	maxImportObjects = 5000
+	maxExportObjects = 5000
 )
+
+var errDataExportObjectLimit = fmt.Errorf("export exceeds %d combined accounts and proxies", maxExportObjects)
 
 type DataPayload struct {
 	Type       string        `json:"type,omitempty"`
@@ -93,6 +99,36 @@ type DataImportError struct {
 	Message  string `json:"message"`
 }
 
+type DiagnosticDataPayload struct {
+	Type       string              `json:"type"`
+	Version    int                 `json:"version"`
+	ExportedAt string              `json:"exported_at"`
+	Accounts   []DiagnosticAccount `json:"accounts"`
+	Proxies    []DiagnosticProxy   `json:"proxies"`
+}
+
+type DiagnosticAccount struct {
+	ID          int64  `json:"account_id"`
+	Name        string `json:"name"`
+	Platform    string `json:"platform"`
+	Type        string `json:"account_type"`
+	Status      string `json:"status"`
+	Schedulable bool   `json:"schedulable"`
+	Concurrency int    `json:"concurrency"`
+	Priority    int    `json:"priority"`
+	ExpiresAt   *int64 `json:"expires_at,omitempty"`
+}
+
+type DiagnosticProxy struct {
+	ID             int64  `json:"proxy_id"`
+	Name           string `json:"name"`
+	Protocol       string `json:"protocol"`
+	Status         string `json:"status"`
+	ExpiresAt      *int64 `json:"expires_at,omitempty"`
+	FallbackMode   string `json:"fallback_mode,omitempty"`
+	ExpiryWarnDays int    `json:"expiry_warn_days,omitempty"`
+}
+
 func buildProxyKey(protocol, host string, port int, username, password string) string {
 	return fmt.Sprintf("%s|%s|%d|%s|%s", strings.TrimSpace(protocol), strings.TrimSpace(host), port, strings.TrimSpace(username), strings.TrimSpace(password))
 }
@@ -105,10 +141,18 @@ func (h *AccountHandler) ExportData(c *gin.Context) {
 		response.BadRequest(c, err.Error())
 		return
 	}
+	if err := validateDataExportObjectLimit(len(selectedIDs), 0); err != nil {
+		writeDataExportError(c, err)
+		return
+	}
 
 	accounts, err := h.resolveExportAccounts(ctx, selectedIDs, c)
 	if err != nil {
-		response.ErrorFrom(c, err)
+		writeDataExportError(c, err)
+		return
+	}
+	if err := validateDataExportObjectLimit(len(accounts), 0); err != nil {
+		writeDataExportError(c, err)
 		return
 	}
 
@@ -140,11 +184,15 @@ func (h *AccountHandler) ExportData(c *gin.Context) {
 	if includeProxies {
 		proxies, err = h.resolveExportProxies(ctx, accounts)
 		if err != nil {
-			response.ErrorFrom(c, err)
+			writeDataExportError(c, err)
 			return
 		}
 	} else {
 		proxies = []service.Proxy{}
+	}
+	if err := validateDataExportObjectLimit(len(accounts), len(proxies)); err != nil {
+		writeDataExportError(c, err)
+		return
 	}
 
 	// 构建 id→name 映射，用于导出备用代理 name
@@ -225,21 +273,129 @@ func (h *AccountHandler) ExportData(c *gin.Context) {
 	response.Success(c, payload)
 }
 
+// ExportDiagnosticData is an allowlisted troubleshooting export, not a
+// portable backup. It intentionally has no credentials, extra, notes, network
+// addresses, proxy authentication, generated keys, custom URLs, or provider
+// payloads.
+func (h *AccountHandler) ExportDiagnosticData(c *gin.Context) {
+	selectedIDs, err := parseAccountIDs(c)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	if err := validateDataExportObjectLimit(len(selectedIDs), 0); err != nil {
+		writeDataExportError(c, err)
+		return
+	}
+	accounts, err := h.resolveExportAccounts(c.Request.Context(), selectedIDs, c)
+	if err != nil {
+		writeDataExportError(c, err)
+		return
+	}
+	if err := validateDataExportObjectLimit(len(accounts), 0); err != nil {
+		writeDataExportError(c, err)
+		return
+	}
+	diagnosticAccounts := make([]DiagnosticAccount, 0, len(accounts))
+	for i := range accounts {
+		account := accounts[i]
+		var expiresAt *int64
+		if account.ExpiresAt != nil {
+			value := account.ExpiresAt.Unix()
+			expiresAt = &value
+		}
+		diagnosticAccounts = append(diagnosticAccounts, DiagnosticAccount{
+			ID: account.ID, Name: account.Name, Platform: account.Platform, Type: account.Type,
+			Status: account.Status, Schedulable: account.Schedulable, Concurrency: account.Concurrency,
+			Priority: account.Priority, ExpiresAt: expiresAt,
+		})
+	}
+	proxies, err := h.resolveExportProxies(c.Request.Context(), accounts)
+	if err != nil {
+		writeDataExportError(c, err)
+		return
+	}
+	if err := validateDataExportObjectLimit(len(accounts), len(proxies)); err != nil {
+		writeDataExportError(c, err)
+		return
+	}
+	diagnosticProxies := make([]DiagnosticProxy, 0, len(proxies))
+	for i := range proxies {
+		proxy := proxies[i]
+		var expiresAt *int64
+		if proxy.ExpiresAt != nil {
+			value := proxy.ExpiresAt.Unix()
+			expiresAt = &value
+		}
+		diagnosticProxies = append(diagnosticProxies, DiagnosticProxy{
+			ID: proxy.ID, Name: proxy.Name, Protocol: proxy.Protocol, Status: proxy.Status,
+			ExpiresAt: expiresAt, FallbackMode: proxy.FallbackMode, ExpiryWarnDays: proxy.ExpiryWarnDays,
+		})
+	}
+	response.Success(c, DiagnosticDataPayload{
+		Type: "sub2api-diagnostic", Version: 1, ExportedAt: time.Now().UTC().Format(time.RFC3339),
+		Accounts: diagnosticAccounts, Proxies: diagnosticProxies,
+	})
+}
+
 func (h *AccountHandler) ImportData(c *gin.Context) {
 	var req DataImportRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
+	if !bindDataImportJSON(c, &req) {
 		return
 	}
 
 	if err := validateDataHeader(req.Data); err != nil {
-		response.BadRequest(c, err.Error())
+		response.Error(c, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	if err := validateDataImportObjectLimit(req.Data); err != nil {
+		response.Error(c, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 
 	executeAdminIdempotentJSON(c, "admin.accounts.import_data", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
 		return h.importData(ctx, req)
 	})
+}
+
+func bindDataImportJSON(c *gin.Context, destination any) bool {
+	if c.Request.ContentLength > maxImportBytes {
+		response.Error(c, http.StatusRequestEntityTooLarge, "Import exceeds 25 MiB request limit")
+		return false
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxImportBytes)
+	if err := c.ShouldBindJSON(destination); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			response.Error(c, http.StatusRequestEntityTooLarge, "Import exceeds 25 MiB request limit")
+		} else {
+			response.Error(c, http.StatusUnprocessableEntity, "Invalid import schema: "+err.Error())
+		}
+		return false
+	}
+	return true
+}
+
+func validateDataImportObjectLimit(data DataPayload) error {
+	if len(data.Proxies)+len(data.Accounts) > maxImportObjects {
+		return fmt.Errorf("import exceeds %d combined accounts and proxies", maxImportObjects)
+	}
+	return nil
+}
+
+func validateDataExportObjectLimit(accountCount, proxyCount int) error {
+	if accountCount > maxExportObjects || proxyCount > maxExportObjects-accountCount {
+		return errDataExportObjectLimit
+	}
+	return nil
+}
+
+func writeDataExportError(c *gin.Context, err error) {
+	if errors.Is(err, errDataExportObjectLimit) {
+		response.Error(c, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	response.ErrorFrom(c, err)
 }
 
 func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) (DataImportResult, error) {
@@ -510,6 +666,9 @@ func (h *AccountHandler) listAccountsFiltered(ctx context.Context, platform, acc
 		items, total, err := h.adminService.ListAccounts(ctx, page, pageSize, platform, accountType, status, search, groupID, privacyMode, sortBy, sortOrder)
 		if err != nil {
 			return nil, err
+		}
+		if total > maxExportObjects || len(items) > maxExportObjects-len(out) {
+			return nil, errDataExportObjectLimit
 		}
 		out = append(out, items...)
 		if len(out) >= int(total) || len(items) == 0 {
