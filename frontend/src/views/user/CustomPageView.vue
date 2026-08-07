@@ -178,7 +178,7 @@ const embeddedUrl = computed(() => {
   return buildEmbeddedUrl(
     menuItem.value.url,
     authStore.user?.id,
-    authStore.token,
+    null,
     pageTheme.value,
     locale.value,
   )
@@ -227,7 +227,7 @@ async function fetchAndRenderMarkdown(slug: string) {
   activeHeadingId.value = ''
   try {
     const resp = await fetch(buildApiUrl(`/pages/${encodeURIComponent(slug)}`), {
-      headers: authStore.token ? { Authorization: `Bearer ${authStore.token}` } : {},
+      headers: { 'X-ExAPI-Control-Request': '1' },
     })
     if (!resp.ok) {
       renderedHtml.value = `<p class="text-red-500">${t('common.pageNotFound')}</p>`

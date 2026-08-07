@@ -169,19 +169,9 @@ interface DuplicateOperationScope {
 }
 
 function getCurrentAdminID(): string | null {
-  try {
-    const rawUser = globalThis.localStorage?.getItem('auth_user')
-    if (!rawUser) return null
-
-    const user: unknown = JSON.parse(rawUser)
-    if (typeof user !== 'object' || user === null) return null
-
-    const id = (user as { id?: unknown }).id
-    if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0) return null
-    return String(id)
-  } catch {
-    return null
-  }
+  // The private listener has exactly one database operator. Identity is
+  // peer-bound server state, never browser storage.
+  return 'operator'
 }
 
 function duplicateOperationScope(id: number): DuplicateOperationScope | null {

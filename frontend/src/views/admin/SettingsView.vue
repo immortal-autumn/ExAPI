@@ -45,40 +45,7 @@
         </div>
 
         <!-- Tab: Security -->
-        <SecuritySettingsTab
-          v-if="activeTab === 'security'"
-          v-model:registration-email-suffix-whitelist-draft="registrationEmailSuffixWhitelistDraft"
-          :form="form"
-          :admin-api-key-loading="adminApiKeyLoading"
-          :admin-api-key-exists="adminApiKeyExists"
-          :admin-api-key-operating="adminApiKeyOperating"
-          :admin-api-key-masked="adminApiKeyMasked"
-          :new-admin-api-key="newAdminApiKey"
-          :create-admin-api-key="createAdminApiKey"
-          :regenerate-admin-api-key="regenerateAdminApiKey"
-          :delete-admin-api-key="deleteAdminApiKey"
-          :copy-new-key="copyNewKey"
-          :registration-email-suffix-whitelist-tags="registrationEmailSuffixWhitelistTags"
-          :remove-registration-email-suffix-whitelist-tag="removeRegistrationEmailSuffixWhitelistTag"
-          :handle-registration-email-suffix-whitelist-draft-input="handleRegistrationEmailSuffixWhitelistDraftInput"
-          :handle-registration-email-suffix-whitelist-draft-keydown="handleRegistrationEmailSuffixWhitelistDraftKeydown"
-          :commit-registration-email-suffix-whitelist-draft="commitRegistrationEmailSuffixWhitelistDraft"
-          :handle-registration-email-suffix-whitelist-paste="handleRegistrationEmailSuffixWhitelistPaste"
-          :linuxdo-redirect-url-suggestion="linuxdoRedirectUrlSuggestion"
-          :set-and-copy-linuxdo-redirect-url="setAndCopyLinuxdoRedirectUrl"
-          :is-zh-locale="isZhLocale"
-          :github-o-auth-redirect-url-suggestion="githubOAuthRedirectUrlSuggestion"
-          :google-o-auth-redirect-url-suggestion="googleOAuthRedirectUrlSuggestion"
-          :set-and-copy-email-o-auth-redirect-url="setAndCopyEmailOAuthRedirectUrl"
-          :wechat-redirect-url-suggestion="wechatRedirectUrlSuggestion"
-          :set-and-copy-we-chat-redirect-url="setAndCopyWeChatRedirectUrl"
-          :handle-we-chat-open-enabled-change="handleWeChatOpenEnabledChange"
-          :handle-we-chat-m-p-enabled-change="handleWeChatMPEnabledChange"
-          :handle-we-chat-mobile-enabled-change="handleWeChatMobileEnabledChange"
-          :oidc-redirect-url-suggestion="oidcRedirectUrlSuggestion"
-          :set-and-copy-o-i-d-c-redirect-url="setAndCopyOIDCRedirectUrl"
-          :local-text="localText"
-        />
+        <SecuritySettingsTab v-if="activeTab === 'security'" />
         <!-- /Tab: Security -->
 
         <!-- Tab: Gateway -->
@@ -158,25 +125,7 @@
           :open-test-dialog="openTestDialog"
         />
         <!-- /Tab: Gateway -->
-
-
-
-        <!-- Tab: Users -->
-        <UserSettingsTab
-          v-if="activeTab === 'users'"
-          :form="form"
-          :subscription-groups="subscriptionGroups"
-          :default-subscription-group-options="defaultSubscriptionGroupOptions"
-          :add-default-subscription="addDefaultSubscription"
-          :remove-default-subscription="removeDefaultSubscription"
-          :auth-source-defaults="authSourceDefaults"
-          :auth-source-defaults-meta="authSourceDefaultsMeta"
-          :add-auth-source-default-subscription="addAuthSourceDefaultSubscription"
-          :remove-auth-source-default-subscription="removeAuthSourceDefaultSubscription"
-        />
-        <!-- /Tab: Users -->
-
-        <!-- Gateway Web Search Test Dialog -->
+		<!-- Gateway Web Search Test Dialog -->
         <!-- Web Search Test Dialog -->
         <div
           v-if="wsTestDialogOpen"
@@ -464,70 +413,8 @@
 	        </div>
 	        <!-- /Tab: General -->
 
-        <!-- Tab: Login Agreement -->
-        <div v-if="activeTab === 'agreement'" class="space-y-6">
-          <AgreementSettingsTab
-            :form="form"
-            :local-text="localText"
-            :login-agreement-route-path="loginAgreementRoutePath"
-            :add-login-agreement-document="addLoginAgreementDocument"
-            :remove-login-agreement-document="removeLoginAgreementDocument"
-          />
-        </div>
-        <!-- /Tab: Login Agreement -->
-
-
-        <!-- Tab: Features (功能开关) -->
-        <div v-if="activeTab === 'features'" class="space-y-6">
-          <FeaturesSettingsTab
-            :form="form"
-            :affiliate-state="affiliateState"
-            :affiliate-modal="affiliateModal"
-            :affiliate-batch-modal="affiliateBatchModal"
-            :affiliate-modal-can-submit="affiliateModalCanSubmit"
-            :open-affiliate-modal="openAffiliateModal"
-            :on-affiliate-search-input="onAffiliateSearchInput"
-            :open-affiliate-batch-modal="openAffiliateBatchModal"
-            :toggle-affiliate-select-all="toggleAffiliateSelectAll"
-            :toggle-affiliate-select="toggleAffiliateSelect"
-            :ask-reset-affiliate-user="askResetAffiliateUser"
-            :change-affiliate-page="changeAffiliatePage"
-            :close-affiliate-modal="closeAffiliateModal"
-            :clear-selected-affiliate-user="clearSelectedAffiliateUser"
-            :on-affiliate-user-search-input="onAffiliateUserSearchInput"
-            :select-affiliate-user="selectAffiliateUser"
-            :submit-affiliate-modal="submitAffiliateModal"
-            :submit-affiliate-batch-modal="submitAffiliateBatchModal"
-          />
-        </div>
-        <!-- /Tab: Features -->
-
-        <!-- Tab: Email -->
-        <!-- Tab: Payment -->
-        <PaymentSettingsTab
-          v-if="activeTab === 'payment'"
-          :form="form"
-          :load-balance-options="loadBalanceOptions"
-          :cancel-rate-limit-mode-options="cancelRateLimitModeOptions"
-          :cancel-rate-limit-unit-options="cancelRateLimitUnitOptions"
-          :all-payment-types="allPaymentTypes"
-          :payment-guide-href="paymentGuideHref"
-          :payment-methods-href="paymentMethodsHref"
-          :toggle-payment-type="togglePaymentType"
-          :is-payment-type-enabled="isPaymentTypeEnabled"
-          :providers="providers"
-          :providers-loading="providersLoading"
-          :has-any-payment-type-enabled="hasAnyPaymentTypeEnabled"
-          :load-providers="loadProviders"
-          :open-create-provider="openCreateProvider"
-          :open-edit-provider="openEditProvider"
-          :confirm-delete-provider="confirmDeleteProvider"
-          :handle-toggle-field="handleToggleField"
-          :handle-toggle-type="handleToggleType"
-          :handle-reorder-providers="handleReorderProviders"
-        />
-
-        <EmailSettingsTab
+		<!-- Tab: Email -->
+		<EmailSettingsTab
           v-if="activeTab === 'email'"
           :form="form"
           :testing-smtp="testingSmtp"
@@ -582,45 +469,12 @@
           </button>
         </div>
       </form>
-
-      <!-- Provider dialogs placed outside the settings form to prevent form submission bubbling -->
-      <PaymentProviderDialog
-        v-if="!privateProduct && showProviderDialog"
-        ref="providerDialogRef"
-        :show="showProviderDialog"
-        :saving="providerSaving"
-        :editing="editingProvider"
-        :all-key-options="providerKeyOptions"
-        :enabled-key-options="enabledProviderKeyOptions"
-        :all-payment-types="allPaymentTypes"
-        :redirect-label="t('admin.settings.payment.easypayRedirect')"
-        @close="showProviderDialog = false"
-        @save="handleSaveProvider"
-      />
-      <ConfirmDialog
-        :show="showDeleteProviderDialog"
-        :title="t('admin.settings.payment.deleteProvider')"
-        :message="t('admin.settings.payment.deleteProviderConfirm')"
-        :confirm-text="t('common.delete')"
-        danger
-        @confirm="handleDeleteProvider"
-        @cancel="showDeleteProviderDialog = false"
-      />
-      <ConfirmDialog
-        :show="affiliateConfirmDialog.show"
-        :title="affiliateConfirmDialog.title"
-        :message="affiliateConfirmDialog.message"
-        :confirm-text="affiliateConfirmDialog.confirmText"
-        danger
-        @confirm="handleAffiliateConfirm"
-        @cancel="cancelAffiliateConfirm"
-      />
-    </div>
+	</div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, watch, defineAsyncComponent } from "vue";
+import { ref, reactive, computed, onMounted, onUnmounted, defineAsyncComponent } from "vue";
 import { useI18n } from "vue-i18n";
 import { adminAPI } from "@/api";
 import {
@@ -647,36 +501,22 @@ import type {
   WebSearchTestResult,
 } from "@/api/admin/settings";
 import type {
-  AdminGroup,
   LoginAgreementDocument,
   NotifyEmailEntry,
   Proxy,
 } from "@/types";
-import type { ProviderInstance } from "@/types/payment";
 import AppLayout from "@/components/layout/AppLayout.vue";
 import Icon from "@/components/icons/Icon.vue";
-import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 const GeneralSettingsTab = defineAsyncComponent(() => import("@/views/admin/settings/tabs/GeneralSettingsTab.vue"));
-import AgreementSettingsTab from "@/views/admin/settings/tabs/AgreementSettingsTab.vue";
-import FeaturesSettingsTab from "@/views/admin/settings/tabs/FeaturesSettingsTab.vue";
 const SecuritySettingsTab = defineAsyncComponent(() => import("@/views/admin/settings/tabs/SecuritySettingsTab.vue"));
 const GatewaySettingsTab = defineAsyncComponent(() => import("@/views/admin/settings/tabs/GatewaySettingsTab.vue"));
-import UserSettingsTab from "@/views/admin/settings/tabs/UserSettingsTab.vue";
-const PaymentSettingsTab = defineAsyncComponent(() => import("@/views/admin/settings/tabs/PaymentSettingsTab.vue"));
 const EmailSettingsTab = defineAsyncComponent(() => import("@/views/admin/settings/tabs/EmailSettingsTab.vue"));
 const BackupSettingsTab = defineAsyncComponent(() => import("@/views/admin/settings/tabs/BackupSettingsTab.vue"));
-import { useClipboard } from "@/composables/useClipboard";
-import { affiliatesAPI, type AffiliateAdminEntry, type SimpleUser as AffiliateSimpleUser } from "@/api/admin/affiliates";
-import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiError";
+import { extractApiErrorMessage } from "@/utils/apiError";
 import { useAppStore } from "@/stores";
 import { useAdminSettingsStore } from "@/stores/adminSettings";
 import { sanitizeUrl } from '@/utils/url'
-import {
-  isRegistrationEmailSuffixDomainValid,
-  normalizeRegistrationEmailSuffixDomain,
-  normalizeRegistrationEmailSuffixDomains,
-  parseRegistrationEmailSuffixWhitelistInput,
-} from "@/utils/registrationEmailPolicy";
+import { normalizeRegistrationEmailSuffixDomains } from "@/utils/registrationEmailPolicy";
 import { getDefaultSiteName } from '@/config/brand'
 import { isSingleUserPrivateControlPlaneBrowser } from '@/router/singleUserGatewayMode'
 import { stripPrivateProductSettings } from '@/views/admin/settings/privateSettingsPayload'
@@ -703,32 +543,6 @@ function safeWebSearchResultURL(value: string): string {
   return sanitizeUrl(value)
 }
 
-function normalizeVisibleMethod(method: string): 'alipay' | 'wxpay' | 'stripe' | 'airwallex' | '' {
-  const aliases: Record<string, 'alipay' | 'wxpay' | 'stripe' | 'airwallex'> = {
-    alipay: 'alipay',
-    alipay_direct: 'alipay',
-    wxpay: 'wxpay',
-    wxpay_direct: 'wxpay',
-    stripe: 'stripe',
-    airwallex: 'airwallex',
-  }
-  return aliases[method.trim()] ?? ''
-}
-
-const PaymentProviderDialog = defineAsyncComponent(() => import('@/components/payment/PaymentProviderDialog.vue'))
-
-const paymentGuideHref = computed(() =>
-  locale.value.startsWith("zh")
-    ? "https://github.com/Wei-Shaw/sub2api/blob/main/docs/PAYMENT_CN.md"
-    : "https://github.com/Wei-Shaw/sub2api/blob/main/docs/PAYMENT.md",
-);
-
-const paymentMethodsHref = computed(() =>
-  locale.value.startsWith("zh")
-    ? "https://github.com/Wei-Shaw/sub2api/blob/main/docs/PAYMENT_CN.md#支持的支付方式"
-    : "https://github.com/Wei-Shaw/sub2api/blob/main/docs/PAYMENT.md#supported-payment-methods",
-);
-
 const activeTab = ref<SettingsTab>("general");
 const settingsTabs = SETTINGS_TABS;
 
@@ -753,8 +567,6 @@ function handleSettingsTabKeydown(event: KeyboardEvent, tab: SettingsTab): void 
   focusSettingsTab(nextTab);
 }
 
-const { copyToClipboard } = useClipboard();
-
 const loading = ref(true);
 const loadFailed = ref(false);
 const saving = ref(false);
@@ -774,14 +586,6 @@ function updateTestEmailAddress(value: string): void {
 const registrationEmailSuffixWhitelistTags = ref<string[]>([]);
 const registrationEmailSuffixWhitelistDraft = ref("");
 const tablePageSizeOptionsInput = ref("10, 20, 50, 100");
-
-// Admin API Key 状态
-const adminApiKeyLoading = ref(true);
-const adminApiKeyExists = ref(false);
-const adminApiKeyMasked = ref("");
-const adminApiKeyOperating = ref(false);
-const newAdminApiKey = ref("");
-const subscriptionGroups = ref<AdminGroup[]>([]);
 
 // Overload Cooldown (529) 状态
 const overloadCooldownLoading = ref(true);
@@ -880,15 +684,6 @@ function normalizeLoginAgreementDocumentId(raw: string): string {
     .replace(/[^a-z0-9_-]+/g, "-")
     .replace(/[-_]{2,}/g, "-")
     .replace(/^[-_]+|[-_]+$/g, "");
-}
-
-function loginAgreementRoutePath(
-  doc: LoginAgreementDocument,
-  index: number,
-): string {
-  const id =
-    normalizeLoginAgreementDocumentId(doc.id || doc.title) || `doc-${index + 1}`;
-  return `/legal/${id}`;
 }
 
 type ClaudeOAuthSystemPromptPreset =
@@ -1263,16 +1058,6 @@ function resetClaudeOAuthSystemPromptBlocks(): void {
 }
 
 
-interface DefaultSubscriptionGroupOption {
-  value: number;
-  label: string;
-  description: string | null;
-  platform: AdminGroup["platform"];
-  subscriptionType: AdminGroup["subscription_type"];
-  rate: number;
-  [key: string]: unknown;
-}
-
 type SettingsForm = Omit<
   SystemSettings,
   | "wechat_connect_open_enabled"
@@ -1311,7 +1096,7 @@ type SettingsForm = Omit<
   default_platform_quotas: DefaultPlatformQuotasMap;
 };
 
-const form = reactive<SettingsForm>({
+const form = reactive({
   registration_enabled: true,
   email_verify_enabled: false,
   registration_email_suffix_whitelist: [],
@@ -1551,7 +1336,7 @@ const form = reactive<SettingsForm>({
   affiliate_enabled: false,
   // Allow user view error requests
   allow_user_view_error_requests: false,
-});
+} as unknown as SettingsForm);
 
 type OpenAIAdvancedSchedulerOverrideKey =
   | "openai_advanced_scheduler_lb_top_k"
@@ -1891,99 +1676,6 @@ async function saveWebSearchConfig(): Promise<boolean> {
   }
 }
 
-const defaultSubscriptionGroupOptions = computed<
-  DefaultSubscriptionGroupOption[]
->(() =>
-  subscriptionGroups.value.map((group) => ({
-    value: group.id,
-    label: group.name,
-    description: group.description,
-    platform: group.platform,
-    subscriptionType: group.subscription_type,
-    rate: group.rate_multiplier,
-  })),
-);
-
-const registrationEmailSuffixWhitelistSeparatorKeys = new Set([
-  " ",
-  ",",
-  "，",
-  "Enter",
-  "Tab",
-]);
-
-function removeRegistrationEmailSuffixWhitelistTag(suffix: string) {
-  registrationEmailSuffixWhitelistTags.value =
-    registrationEmailSuffixWhitelistTags.value.filter(
-      (item) => item !== suffix,
-    );
-}
-
-function addRegistrationEmailSuffixWhitelistTag(raw: string) {
-  const suffix = normalizeRegistrationEmailSuffixDomain(raw);
-  if (
-    !isRegistrationEmailSuffixDomainValid(suffix) ||
-    registrationEmailSuffixWhitelistTags.value.includes(suffix)
-  ) {
-    return;
-  }
-  registrationEmailSuffixWhitelistTags.value = [
-    ...registrationEmailSuffixWhitelistTags.value,
-    suffix,
-  ];
-}
-
-function commitRegistrationEmailSuffixWhitelistDraft() {
-  if (!registrationEmailSuffixWhitelistDraft.value) {
-    return;
-  }
-  addRegistrationEmailSuffixWhitelistTag(
-    registrationEmailSuffixWhitelistDraft.value,
-  );
-  registrationEmailSuffixWhitelistDraft.value = "";
-}
-
-function handleRegistrationEmailSuffixWhitelistDraftInput() {
-  registrationEmailSuffixWhitelistDraft.value =
-    normalizeRegistrationEmailSuffixDomain(
-      registrationEmailSuffixWhitelistDraft.value,
-    );
-}
-
-function handleRegistrationEmailSuffixWhitelistDraftKeydown(
-  event: KeyboardEvent,
-) {
-  if (event.isComposing) {
-    return;
-  }
-
-  if (registrationEmailSuffixWhitelistSeparatorKeys.has(event.key)) {
-    event.preventDefault();
-    commitRegistrationEmailSuffixWhitelistDraft();
-    return;
-  }
-
-  if (
-    event.key === "Backspace" &&
-    !registrationEmailSuffixWhitelistDraft.value &&
-    registrationEmailSuffixWhitelistTags.value.length > 0
-  ) {
-    registrationEmailSuffixWhitelistTags.value.pop();
-  }
-}
-
-function handleRegistrationEmailSuffixWhitelistPaste(event: ClipboardEvent) {
-  const text = event.clipboardData?.getData("text") || "";
-  if (!text.trim()) {
-    return;
-  }
-  event.preventDefault();
-  const tokens = parseRegistrationEmailSuffixWhitelistInput(text);
-  for (const token of tokens) {
-    addRegistrationEmailSuffixWhitelistTag(token);
-  }
-}
-
 // Quota notify email helpers
 const addQuotaNotifyEmail = () => {
   if (!form.account_quota_notify_emails) {
@@ -2002,60 +1694,6 @@ function removeQuotaNotifyEmail(index: number): void {
 
 const currentOrigin =
   typeof window !== "undefined" ? window.location.origin : "";
-
-function buildApiCallbackUrl(path: string): string {
-  const base = (form.api_base_url || currentOrigin).replace(/\/+$/, "");
-  const apiRoot = base.endsWith("/api/v1") ? base : `${base}/api/v1`;
-  return `${apiRoot}${path.startsWith("/") ? path : `/${path}`}`;
-}
-
-// LinuxDo OAuth redirect URL suggestion
-const linuxdoRedirectUrlSuggestion = computed(() => {
-  return buildApiCallbackUrl("/auth/oauth/linuxdo/callback");
-});
-
-async function setAndCopyLinuxdoRedirectUrl() {
-  const url = linuxdoRedirectUrlSuggestion.value;
-  if (!url) return;
-
-  form.linuxdo_connect_redirect_url = url;
-  await copyToClipboard(
-    url,
-    t("admin.settings.linuxdo.redirectUrlSetAndCopied"),
-  );
-}
-
-type EmailOAuthProvider = "github" | "google";
-
-const githubOAuthRedirectUrlSuggestion = computed(() => {
-  return buildApiCallbackUrl("/auth/oauth/github/callback");
-});
-
-const googleOAuthRedirectUrlSuggestion = computed(() => {
-  return buildApiCallbackUrl("/auth/oauth/google/callback");
-});
-
-async function setAndCopyEmailOAuthRedirectUrl(provider: EmailOAuthProvider) {
-  const url =
-    provider === "github"
-      ? githubOAuthRedirectUrlSuggestion.value
-      : googleOAuthRedirectUrlSuggestion.value;
-  if (!url) return;
-
-  if (provider === "github") {
-    form.github_oauth_redirect_url = url;
-  } else {
-    form.google_oauth_redirect_url = url;
-  }
-  await copyToClipboard(
-    url,
-    localText("回调地址已写入并复制。", "Callback URL set and copied."),
-  );
-}
-
-const wechatRedirectUrlSuggestion = computed(() => {
-  return buildApiCallbackUrl("/auth/oauth/wechat/callback");
-});
 
 function syncWeChatConnectMode(preferredMode?: WeChatConnectMode) {
   if (form.wechat_connect_mp_enabled && form.wechat_connect_mobile_enabled) {
@@ -2084,50 +1722,6 @@ function syncWeChatConnectMode(preferredMode?: WeChatConnectMode) {
   form.wechat_connect_scopes = defaultWeChatConnectScopesForMode(
     form.wechat_connect_mode,
   );
-}
-
-function handleWeChatOpenEnabledChange(value: boolean) {
-  form.wechat_connect_open_enabled = value;
-  syncWeChatConnectMode(value ? "open" : undefined);
-}
-
-function handleWeChatMPEnabledChange(value: boolean) {
-  form.wechat_connect_mp_enabled = value;
-  if (value) {
-    form.wechat_connect_mobile_enabled = false;
-  }
-  syncWeChatConnectMode(value ? "mp" : undefined);
-}
-
-function handleWeChatMobileEnabledChange(value: boolean) {
-  form.wechat_connect_mobile_enabled = value;
-  if (value) {
-    form.wechat_connect_mp_enabled = false;
-  }
-  syncWeChatConnectMode(value ? "mobile" : undefined);
-}
-
-async function setAndCopyWeChatRedirectUrl() {
-  const url = wechatRedirectUrlSuggestion.value;
-  if (!url) return;
-
-  form.wechat_connect_redirect_url = url;
-  await copyToClipboard(
-    url,
-    t("admin.settings.wechatConnect.redirectUrlSetAndCopied"),
-  );
-}
-
-const oidcRedirectUrlSuggestion = computed(() => {
-  return buildApiCallbackUrl("/auth/oauth/oidc/callback");
-});
-
-async function setAndCopyOIDCRedirectUrl() {
-  const url = oidcRedirectUrlSuggestion.value;
-  if (!url) return;
-
-  form.oidc_connect_redirect_url = url;
-  await copyToClipboard(url, t("admin.settings.oidc.redirectUrlSetAndCopied"));
 }
 
 // Custom menu item management
@@ -2170,18 +1764,6 @@ function addEndpoint() {
 
 function removeEndpoint(index: number) {
   form.custom_endpoints.splice(index, 1);
-}
-
-function addLoginAgreementDocument() {
-  form.login_agreement_documents.push({
-    id: `custom-${Date.now().toString(36)}`,
-    title: "",
-    content_md: "",
-  });
-}
-
-function removeLoginAgreementDocument(index: number) {
-  form.login_agreement_documents.splice(index, 1);
 }
 
 function normalizeLoginAgreementDocumentsForSave(): LoginAgreementDocument[] {
@@ -2467,60 +2049,6 @@ async function loadSettings() {
   } finally {
     loading.value = false;
   }
-}
-
-async function loadSubscriptionGroups() {
-  try {
-    const groups = await adminAPI.groups.getAll();
-    subscriptionGroups.value = groups.filter(
-      (group) =>
-        group.subscription_type === "subscription" && group.status === "active",
-    );
-  } catch (_error: unknown) {
-    subscriptionGroups.value = [];
-  }
-}
-
-function findNextAvailableSubscriptionGroup(
-  existingGroupIDs: number[],
-): AdminGroup | undefined {
-  const existing = new Set(existingGroupIDs);
-  return subscriptionGroups.value.find((group) => !existing.has(group.id));
-}
-
-function addDefaultSubscription() {
-  if (subscriptionGroups.value.length === 0) return;
-  const candidate = findNextAvailableSubscriptionGroup(
-    form.default_subscriptions.map((item) => item.group_id),
-  );
-  if (!candidate) return;
-  form.default_subscriptions.push({
-    group_id: candidate.id,
-    validity_days: 30,
-  });
-}
-
-function removeDefaultSubscription(index: number) {
-  form.default_subscriptions.splice(index, 1);
-}
-
-function addAuthSourceDefaultSubscription(source: AuthSourceType) {
-  if (subscriptionGroups.value.length === 0) return;
-  const candidate = findNextAvailableSubscriptionGroup(
-    authSourceDefaults[source].subscriptions.map((item) => item.group_id),
-  );
-  if (!candidate) return;
-  authSourceDefaults[source].subscriptions.push({
-    group_id: candidate.id,
-    validity_days: 30,
-  });
-}
-
-function removeAuthSourceDefaultSubscription(
-  source: AuthSourceType,
-  index: number,
-) {
-  authSourceDefaults[source].subscriptions.splice(index, 1);
 }
 
 function findDuplicateDefaultSubscription(
@@ -3129,68 +2657,6 @@ async function sendTestEmail() {
   }
 }
 
-// Admin API Key 方法
-async function loadAdminApiKey() {
-  adminApiKeyLoading.value = true;
-  try {
-    const status = await adminAPI.settings.getAdminApiKey();
-    adminApiKeyExists.value = status.exists;
-    adminApiKeyMasked.value = status.masked_key;
-  } catch (_error: unknown) {
-    // Silent fail - admin API key status is non-critical
-  } finally {
-    adminApiKeyLoading.value = false;
-  }
-}
-
-async function createAdminApiKey() {
-  adminApiKeyOperating.value = true;
-  try {
-    const result = await adminAPI.settings.regenerateAdminApiKey();
-    newAdminApiKey.value = result.key;
-    adminApiKeyExists.value = true;
-    adminApiKeyMasked.value =
-      result.key.substring(0, 10) + "..." + result.key.slice(-4);
-    appStore.showSuccess(t("admin.settings.adminApiKey.keyGenerated"));
-  } catch (error: unknown) {
-    appStore.showError(extractApiErrorMessage(error, t("common.error")));
-  } finally {
-    adminApiKeyOperating.value = false;
-  }
-}
-
-async function regenerateAdminApiKey() {
-  if (!confirm(t("admin.settings.adminApiKey.regenerateConfirm"))) return;
-  await createAdminApiKey();
-}
-
-async function deleteAdminApiKey() {
-  if (!confirm(t("admin.settings.adminApiKey.deleteConfirm"))) return;
-  adminApiKeyOperating.value = true;
-  try {
-    await adminAPI.settings.deleteAdminApiKey();
-    adminApiKeyExists.value = false;
-    adminApiKeyMasked.value = "";
-    newAdminApiKey.value = "";
-    appStore.showSuccess(t("admin.settings.adminApiKey.keyDeleted"));
-  } catch (error: unknown) {
-    appStore.showError(extractApiErrorMessage(error, t("common.error")));
-  } finally {
-    adminApiKeyOperating.value = false;
-  }
-}
-
-function copyNewKey() {
-  navigator.clipboard
-    .writeText(newAdminApiKey.value)
-    .then(() => {
-      appStore.showSuccess(t("admin.settings.adminApiKey.keyCopied"));
-    })
-    .catch(() => {
-      appStore.showError(t("common.copyFailed"));
-    });
-}
-
 // Overload Cooldown 方法
 async function loadOverloadCooldownSettings() {
   overloadCooldownLoading.value = true;
@@ -3522,751 +2988,19 @@ async function saveBetaPolicySettings() {
   }
 }
 
-// ==================== Provider Management ====================
-
-const allPaymentTypes = computed(() => [
-  { value: "easypay", label: t("payment.methods.easypay") },
-  { value: "alipay", label: t("payment.methods.alipay") },
-  { value: "wxpay", label: t("payment.methods.wxpay") },
-  { value: "stripe", label: t("payment.methods.stripe") },
-  { value: "airwallex", label: t("payment.methods.airwallex") },
-]);
-
-function isPaymentTypeEnabled(type: string): boolean {
-  return form.payment_enabled_types.includes(type);
-}
-
-const hasAnyPaymentTypeEnabled = computed(
-  () => form.payment_enabled_types.length > 0,
-);
-
-function togglePaymentType(type: string) {
-  if (form.payment_enabled_types.includes(type)) {
-    form.payment_enabled_types = form.payment_enabled_types.filter(
-      (t) => t !== type,
-    );
-    // Disable all provider instances matching this type
-    disableProvidersByType(type);
-  } else {
-    form.payment_enabled_types = [...form.payment_enabled_types, type];
-  }
-}
-
-async function disableProvidersByType(type: string) {
-  const matching = providers.value.filter(
-    (p) => p.provider_key === type && p.enabled,
-  );
-  for (const p of matching) {
-    try {
-      await adminAPI.payment.updateProvider(p.id, { enabled: false });
-      p.enabled = false;
-    } catch (err: unknown) {
-      slog("disable provider failed", p.id, err);
-    }
-  }
-}
-
-function slog(...args: unknown[]) {
-  console.warn("[payment]", ...args);
-}
-
-const providersLoading = ref(false);
-const providerSaving = ref(false);
-const providers = ref<ProviderInstance[]>([]);
-const showProviderDialog = ref(false);
-const showDeleteProviderDialog = ref(false);
-const editingProvider = ref<ProviderInstance | null>(null);
-const deletingProviderId = ref<number | null>(null);
-const providerDialogRef = ref<InstanceType<
-  typeof PaymentProviderDialog
-> | null>(null);
-
-const providerKeyOptions = computed(() => [
-  { value: "easypay", label: t("admin.settings.payment.providerEasypay") },
-  { value: "alipay", label: t("admin.settings.payment.providerAlipay") },
-  { value: "wxpay", label: t("admin.settings.payment.providerWxpay") },
-  { value: "stripe", label: t("admin.settings.payment.providerStripe") },
-  { value: "airwallex", label: t("admin.settings.payment.providerAirwallex") },
-]);
-
-const enabledProviderKeyOptions = computed(() => {
-  const enabled = form.payment_enabled_types;
-  return providerKeyOptions.value.filter((opt) => enabled.includes(opt.value));
-});
-
-const loadBalanceOptions = computed(() => [
-  {
-    value: "round-robin",
-    label: t("admin.settings.payment.strategyRoundRobin"),
-  },
-  {
-    value: "least-amount",
-    label: t("admin.settings.payment.strategyLeastAmount"),
-  },
-]);
-
-const cancelRateLimitUnitOptions = computed(() => [
-  {
-    value: "minute",
-    label: t("admin.settings.payment.cancelRateLimitUnitMinute"),
-  },
-  { value: "hour", label: t("admin.settings.payment.cancelRateLimitUnitHour") },
-  { value: "day", label: t("admin.settings.payment.cancelRateLimitUnitDay") },
-]);
-
-const cancelRateLimitModeOptions = computed(() => [
-  {
-    value: "rolling",
-    label: t("admin.settings.payment.cancelRateLimitWindowModeRolling"),
-  },
-  {
-    value: "fixed",
-    label: t("admin.settings.payment.cancelRateLimitWindowModeFixed"),
-  },
-]);
-
-type ProviderEnablementCandidate = Pick<
-  ProviderInstance,
-  "id" | "provider_key" | "supported_types" | "enabled" | "name"
->;
-
-function getProviderVisibleMethods(
-  provider: ProviderEnablementCandidate,
-): Array<"alipay" | "wxpay"> {
-  if (!provider.enabled) {
-    return [];
-  }
-
-  const supportedTypes = Array.isArray(provider.supported_types)
-    ? provider.supported_types
-    : [];
-  const methods = new Set<"alipay" | "wxpay">();
-  const addMethod = (type: string) => {
-    const method = normalizeVisibleMethod(type);
-    if (method === "alipay" || method === "wxpay") {
-      methods.add(method);
-    }
-  };
-
-  if (provider.provider_key === "alipay") {
-    if (supportedTypes.length === 0) {
-      methods.add("alipay");
-    } else {
-      supportedTypes.forEach((type) => {
-        if (normalizeVisibleMethod(type) === "alipay") {
-          methods.add("alipay");
-        }
-      });
-    }
-  } else if (provider.provider_key === "wxpay") {
-    if (supportedTypes.length === 0) {
-      methods.add("wxpay");
-    } else {
-      supportedTypes.forEach((type) => {
-        if (normalizeVisibleMethod(type) === "wxpay") {
-          methods.add("wxpay");
-        }
-      });
-    }
-  } else if (provider.provider_key === "easypay") {
-    supportedTypes.forEach(addMethod);
-  }
-
-  return Array.from(methods);
-}
-
-function findProviderEnablementConflict(
-  candidate: ProviderEnablementCandidate,
-): { method: "alipay" | "wxpay"; conflicting: ProviderInstance } | null {
-  const claimedMethods = getProviderVisibleMethods(candidate);
-  if (claimedMethods.length === 0) {
-    return null;
-  }
-
-  for (const other of providers.value) {
-    if (other.id === candidate.id || !other.enabled) {
-      continue;
-    }
-
-    const otherMethods = getProviderVisibleMethods(other);
-    const matchedMethod = claimedMethods.find((method) =>
-      otherMethods.includes(method),
-    );
-    if (matchedMethod) {
-      return {
-        method: matchedMethod,
-        conflicting: other,
-      };
-    }
-  }
-
-  return null;
-}
-
-function showProviderEnablementConflict(
-  conflict: { method: "alipay" | "wxpay"; conflicting: ProviderInstance },
-) {
-  appStore.showError(
-    t("admin.settings.payment.enableConflict", {
-      method: t(`payment.methods.${conflict.method}`),
-      provider: conflict.conflicting.name,
-    }),
-  );
-}
-
-async function loadProviders() {
-  providersLoading.value = true;
-  try {
-    const res = await adminAPI.payment.getProviders();
-    // Normalize supported_types: backend returns null when the list is empty
-    // (Go nil slice → JSON null). Without this, ProviderCard's isSelected()
-    // throws TypeError on null.includes(), causing the card to vanish.
-    providers.value = (res.data || []).map((p) => ({
-      ...p,
-      supported_types: Array.isArray(p.supported_types)
-        ? p.supported_types
-        : [],
-    }));
-  } catch (err: unknown) {
-    appStore.showError(extractI18nErrorMessage(err, t, "payment.errors", t("common.error")));
-  } finally {
-    providersLoading.value = false;
-  }
-}
-
-function openCreateProvider() {
-  editingProvider.value = null;
-  providerDialogRef.value?.reset(
-    enabledProviderKeyOptions.value[0]?.value || "easypay",
-  );
-  showProviderDialog.value = true;
-}
-
-function openEditProvider(provider: ProviderInstance) {
-  editingProvider.value = provider;
-  providerDialogRef.value?.loadProvider(provider);
-  showProviderDialog.value = true;
-}
-
-async function handleSaveProvider(payload: Partial<ProviderInstance>) {
-  providerSaving.value = true;
-  try {
-    const candidate: ProviderEnablementCandidate = {
-      id: editingProvider.value?.id ?? 0,
-      provider_key:
-        payload.provider_key ?? editingProvider.value?.provider_key ?? "",
-      supported_types:
-        payload.supported_types ?? editingProvider.value?.supported_types ?? [],
-      enabled: payload.enabled ?? editingProvider.value?.enabled ?? false,
-      name: payload.name ?? editingProvider.value?.name ?? "",
-    };
-    const conflict = findProviderEnablementConflict(candidate);
-    if (conflict) {
-      showProviderEnablementConflict(conflict);
-      return;
-    }
-
-    if (editingProvider.value) {
-      await adminAPI.payment.updateProvider(editingProvider.value.id, payload);
-    } else {
-      await adminAPI.payment.createProvider(payload);
-    }
-    showProviderDialog.value = false;
-    // Reload full list (API returns decrypted/formatted data with correct sort order)
-    await loadProviders();
-    // Auto-save settings so provider changes take effect immediately
-    await saveSettings();
-  } catch (err: unknown) {
-    appStore.showError(extractI18nErrorMessage(err, t, "payment.errors", t("common.error")));
-  } finally {
-    providerSaving.value = false;
-  }
-}
-
-async function handleToggleField(
-  provider: ProviderInstance,
-  field: "enabled" | "refund_enabled" | "allow_user_refund",
-) {
-  let newValue: boolean;
-  if (field === "enabled") newValue = !provider.enabled;
-  else if (field === "refund_enabled") newValue = !provider.refund_enabled;
-  else newValue = !provider.allow_user_refund;
-
-  if (field === "enabled" && newValue) {
-    const conflict = findProviderEnablementConflict({
-      id: provider.id,
-      provider_key: provider.provider_key,
-      supported_types: provider.supported_types,
-      enabled: true,
-      name: provider.name,
-    });
-    if (conflict) {
-      showProviderEnablementConflict(conflict);
-      return;
-    }
-  }
-
-  const payload: Record<string, boolean> = { [field]: newValue };
-  // Cascade: turning off refund_enabled also turns off allow_user_refund
-  if (field === "refund_enabled" && !newValue) {
-    payload.allow_user_refund = false;
-  }
-  try {
-    await adminAPI.payment.updateProvider(provider.id, payload);
-    await loadProviders();
-  } catch (err: unknown) {
-    appStore.showError(extractI18nErrorMessage(err, t, "payment.errors", t("common.error")));
-  }
-}
-
-async function handleToggleType(provider: ProviderInstance, type: string) {
-  const currentTypes = Array.isArray(provider.supported_types)
-    ? provider.supported_types
-    : [];
-  const updated = currentTypes.includes(type)
-    ? currentTypes.filter((t) => t !== type)
-    : [...currentTypes, type];
-  const conflict = findProviderEnablementConflict({
-    id: provider.id,
-    provider_key: provider.provider_key,
-    supported_types: updated,
-    enabled: provider.enabled,
-    name: provider.name,
-  });
-  if (conflict) {
-    showProviderEnablementConflict(conflict);
-    return;
-  }
-  try {
-    await adminAPI.payment.updateProvider(provider.id, {
-      supported_types: updated,
-    } as any);
-    await loadProviders();
-  } catch (err: unknown) {
-    appStore.showError(extractI18nErrorMessage(err, t, "payment.errors", t("common.error")));
-  }
-}
-
-function confirmDeleteProvider(provider: ProviderInstance) {
-  deletingProviderId.value = provider.id;
-  showDeleteProviderDialog.value = true;
-}
-
-async function handleReorderProviders(
-  updates: { id: number; sort_order: number }[],
-) {
-  try {
-    await Promise.all(
-      updates.map((u) =>
-        adminAPI.payment.updateProvider(u.id, {
-          sort_order: u.sort_order,
-        } as Partial<ProviderInstance>),
-      ),
-    );
-    await loadProviders();
-  } catch (err: unknown) {
-    appStore.showError(extractI18nErrorMessage(err, t, "payment.errors", t("common.error")));
-    loadProviders();
-  }
-}
-
-async function handleDeleteProvider() {
-  if (!deletingProviderId.value) return;
-  try {
-    await adminAPI.payment.deleteProvider(deletingProviderId.value);
-    appStore.showSuccess(t("common.deleted"));
-    showDeleteProviderDialog.value = false;
-    loadProviders();
-  } catch (err: unknown) {
-    appStore.showError(extractI18nErrorMessage(err, t, "payment.errors", t("common.error")));
-  }
-}
-
 onMounted(() => {
   loadSettings();
-  loadAdminApiKey();
   loadOverloadCooldownSettings();
   loadRateLimit429CooldownSettings();
   loadStreamTimeoutSettings();
   loadRectifierSettings();
   loadBetaPolicySettings();
-  if (!isSingleUserPrivateControlPlaneBrowser()) {
-    loadSubscriptionGroups();
-    loadProviders();
-  }
 });
 
 onUnmounted(() => {
   wsTestGeneration++;
 });
 
-// =========================
-// Affiliate (邀请返利) 专属用户管理
-// =========================
-
-interface AffiliateState {
-  loading: boolean;
-  entries: AffiliateAdminEntry[];
-  total: number;
-  page: number;
-  pageSize: number;
-  search: string;
-  selected: number[];
-  searchTimer: number | null;
-}
-
-const affiliateState = reactive<AffiliateState>({
-  loading: false,
-  entries: [],
-  total: 0,
-  page: 1,
-  pageSize: 20,
-  search: "",
-  selected: [],
-  searchTimer: null,
-});
-
-// `rate` is typed as string|number because <input type="number"> makes Vue's
-// v-model auto-cast the bound value to a Number on every keystroke. We keep
-// both shapes and normalize at read time.
-interface AffiliateModalState {
-  open: boolean;
-  mode: "add" | "edit";
-  saving: boolean;
-  userQuery: string;
-  userResults: AffiliateSimpleUser[];
-  selectedUser: AffiliateSimpleUser | null;
-  editingEntry: AffiliateAdminEntry | null;
-  code: string;
-  rate: string | number;
-  searchTimer: number | null;
-}
-
-const affiliateModal = reactive<AffiliateModalState>({
-  open: false,
-  mode: "add",
-  saving: false,
-  userQuery: "",
-  userResults: [],
-  selectedUser: null,
-  editingEntry: null,
-  code: "",
-  rate: "",
-  searchTimer: null,
-});
-
-const affiliateBatchModal = reactive<{
-  open: boolean;
-  saving: boolean;
-  rate: string | number;
-}>({
-  open: false,
-  saving: false,
-  rate: "",
-});
-
-// affiliateConfirmDialog drives the project-standard <ConfirmDialog>. We can't
-// `await` the user's response from the dialog component, so the confirm action
-// runs from the @confirm callback once the user clicks the dialog's confirm
-// button.
-const affiliateConfirmDialog = reactive<{
-  show: boolean;
-  title: string;
-  message: string;
-  confirmText: string;
-  pending: (() => Promise<unknown>) | null;
-}>({
-  show: false,
-  title: "",
-  message: "",
-  confirmText: "",
-  pending: null,
-});
-
-function openAffiliateConfirm(
-  title: string,
-  message: string,
-  confirmText: string,
-  fn: () => Promise<unknown>,
-) {
-  affiliateConfirmDialog.title = title;
-  affiliateConfirmDialog.message = message;
-  affiliateConfirmDialog.confirmText = confirmText;
-  affiliateConfirmDialog.pending = fn;
-  affiliateConfirmDialog.show = true;
-}
-
-async function handleAffiliateConfirm() {
-  const fn = affiliateConfirmDialog.pending;
-  affiliateConfirmDialog.show = false;
-  affiliateConfirmDialog.pending = null;
-  if (!fn) return;
-  try {
-    await fn();
-    appStore.showSuccess(t("common.saved"));
-    await loadAffiliateUsers();
-  } catch (err) {
-    appStore.showError(extractApiErrorMessage(err, t("common.error")));
-  }
-}
-
-function cancelAffiliateConfirm() {
-  affiliateConfirmDialog.show = false;
-  affiliateConfirmDialog.pending = null;
-}
-
-// debounceTimer wires a single timer slot to a callback with a delay,
-// canceling any pending invocation. Used for type-as-you-go search inputs.
-function debounceTimer(slot: { searchTimer: number | null }, delayMs: number, run: () => void) {
-  if (slot.searchTimer != null) window.clearTimeout(slot.searchTimer);
-  slot.searchTimer = window.setTimeout(run, delayMs);
-}
-
-// parseRebateRate validates 0-100 numeric input. Returns the parsed number on
-// success, null when the field is empty (caller decides empty semantics), or
-// undefined on invalid input (after surfacing a toast).
-//
-// Accepts unknown because <input type="number"> makes Vue's v-model coerce
-// the value to Number on each keystroke (e.g. typing "30" lands a `30: number`
-// in state, not a `"30": string`). String("") and (30).trim() would crash, so
-// we normalize here instead of forcing every caller to remember.
-function parseRebateRate(raw: unknown): number | null | undefined {
-  const s = String(raw ?? "").trim();
-  if (s === "") return null;
-  const parsed = Number(s);
-  if (Number.isNaN(parsed) || parsed < 0 || parsed > 100) {
-    appStore.showError(t("admin.settings.features.affiliate.modal.errorBadRate"));
-    return undefined;
-  }
-  return parsed;
-}
-
-async function loadAffiliateUsers() {
-  affiliateState.loading = true;
-  try {
-    const res = await affiliatesAPI.listUsers({
-      page: affiliateState.page,
-      page_size: affiliateState.pageSize,
-      search: affiliateState.search,
-    });
-    affiliateState.entries = res.items ?? [];
-    affiliateState.total = res.total ?? 0;
-    // Drop selections that are no longer visible.
-    const visibleIds = new Set(affiliateState.entries.map((e) => e.user_id));
-    affiliateState.selected = affiliateState.selected.filter((id) => visibleIds.has(id));
-  } catch (err) {
-    appStore.showError(extractApiErrorMessage(err, t("common.error")));
-  } finally {
-    affiliateState.loading = false;
-  }
-}
-
-function onAffiliateSearchInput() {
-  debounceTimer(affiliateState, 300, () => {
-    affiliateState.page = 1;
-    loadAffiliateUsers();
-  });
-}
-
-function changeAffiliatePage(page: number) {
-  if (page < 1) return;
-  affiliateState.page = page;
-  loadAffiliateUsers();
-}
-
-function toggleAffiliateSelectAll(e: Event) {
-  const checked = (e.target as HTMLInputElement).checked;
-  affiliateState.selected = checked ? affiliateState.entries.map((entry) => entry.user_id) : [];
-}
-
-function toggleAffiliateSelect(userId: number) {
-  const idx = affiliateState.selected.indexOf(userId);
-  if (idx >= 0) affiliateState.selected.splice(idx, 1);
-  else affiliateState.selected.push(userId);
-}
-
-// openAffiliateModal opens the add/edit modal, prefilling fields from the
-// edited entry when present and resetting them otherwise.
-function openAffiliateModal(entry: AffiliateAdminEntry | null) {
-  affiliateModal.open = true;
-  affiliateModal.mode = entry ? "edit" : "add";
-  affiliateModal.userQuery = "";
-  affiliateModal.userResults = [];
-  affiliateModal.selectedUser = null;
-  affiliateModal.editingEntry = entry;
-  affiliateModal.code = entry?.aff_code_custom ? entry.aff_code : "";
-  affiliateModal.rate =
-    entry?.aff_rebate_rate_percent != null ? String(entry.aff_rebate_rate_percent) : "";
-}
-
-function closeAffiliateModal() {
-  affiliateModal.open = false;
-  if (affiliateModal.searchTimer != null) {
-    window.clearTimeout(affiliateModal.searchTimer);
-    affiliateModal.searchTimer = null;
-  }
-}
-
-function onAffiliateUserSearchInput() {
-  const q = affiliateModal.userQuery.trim();
-  if (!q) {
-    affiliateModal.userResults = [];
-    return;
-  }
-  debounceTimer(affiliateModal, 300, async () => {
-    try {
-      affiliateModal.userResults = await affiliatesAPI.lookupUsers(q);
-    } catch (err) {
-      appStore.showError(extractApiErrorMessage(err, t("common.error")));
-    }
-  });
-}
-
-// selectAffiliateUser picks a user from the dropdown and collapses the search
-// UI. Clearing the result list also clears the visual dropdown.
-function selectAffiliateUser(user: AffiliateSimpleUser) {
-  affiliateModal.selectedUser = user;
-  affiliateModal.userQuery = "";
-  affiliateModal.userResults = [];
-}
-
-function clearSelectedAffiliateUser() {
-  affiliateModal.selectedUser = null;
-}
-
-// affiliateModalCanSubmit guards the Save button: must have a user picked AND
-// produce at least one field change. Without this the admin could "save" an
-// empty payload that silently does nothing — the user reported exactly that
-// confusion.
-const affiliateModalCanSubmit = computed(() => {
-  if (affiliateModal.mode === "add") {
-    if (!affiliateModal.selectedUser) return false;
-  } else if (!affiliateModal.editingEntry) {
-    return false;
-  }
-  const codeFilled = affiliateModal.code.trim() !== "";
-  const rateFilled = String(affiliateModal.rate ?? "").trim() !== "";
-  if (codeFilled || rateFilled) return true;
-  // Edit mode + empty rate input is a meaningful "clear" only if the user
-  // currently has an exclusive rate to clear.
-  return (
-    affiliateModal.mode === "edit" &&
-    affiliateModal.editingEntry?.aff_rebate_rate_percent != null
-  );
-});
-
-async function submitAffiliateModal() {
-  if (!affiliateModalCanSubmit.value) {
-    // Should be unreachable because the button is disabled, but keep a guard.
-    appStore.showError(t("admin.settings.features.affiliate.modal.errorEmpty"));
-    return;
-  }
-
-  let userId: number;
-  if (affiliateModal.mode === "add") {
-    userId = affiliateModal.selectedUser!.id;
-  } else {
-    userId = affiliateModal.editingEntry!.user_id;
-  }
-
-  const payload: Parameters<typeof affiliatesAPI.updateUserSettings>[1] = {};
-  const codeRaw = affiliateModal.code.trim();
-  if (codeRaw) payload.aff_code = codeRaw.toUpperCase();
-
-  const rateInput = parseRebateRate(affiliateModal.rate);
-  if (rateInput === undefined) return; // toast already shown
-  if (rateInput === null) {
-    if (affiliateModal.mode === "edit" && affiliateModal.editingEntry?.aff_rebate_rate_percent != null) {
-      payload.clear_rebate_rate = true;
-    }
-  } else {
-    payload.aff_rebate_rate_percent = rateInput;
-  }
-
-  affiliateModal.saving = true;
-  try {
-    await affiliatesAPI.updateUserSettings(userId, payload);
-    appStore.showSuccess(t("common.saved"));
-    closeAffiliateModal();
-    affiliateState.page = 1;
-    await loadAffiliateUsers();
-  } catch (err) {
-    appStore.showError(extractApiErrorMessage(err, t("common.error")));
-  } finally {
-    affiliateModal.saving = false;
-  }
-}
-
-// askResetAffiliateUser prompts via the project ConfirmDialog, then on confirm
-// calls the backend "reset all" endpoint that clears both the exclusive rate
-// AND regenerates the invite code as a system random one.
-function askResetAffiliateUser(entry: AffiliateAdminEntry) {
-  openAffiliateConfirm(
-    t("admin.settings.features.affiliate.customUsers.resetTitle"),
-    t("admin.settings.features.affiliate.customUsers.resetMessage", {
-      email: entry.email || `#${entry.user_id}`,
-    }),
-    t("common.delete"),
-    () => affiliatesAPI.clearUserSettings(entry.user_id),
-  );
-}
-
-function openAffiliateBatchModal() {
-  if (affiliateState.selected.length === 0) return;
-  affiliateBatchModal.open = true;
-  affiliateBatchModal.rate = "";
-}
-
-async function submitAffiliateBatchModal() {
-  const rateInput = parseRebateRate(affiliateBatchModal.rate);
-  if (rateInput === undefined) return;
-  const userIDs = [...affiliateState.selected];
-  const payload: Parameters<typeof affiliatesAPI.batchSetRate>[0] =
-    rateInput === null
-      ? { user_ids: userIDs, clear: true }
-      : { user_ids: userIDs, aff_rebate_rate_percent: rateInput };
-
-  affiliateBatchModal.saving = true;
-  try {
-    await affiliatesAPI.batchSetRate(payload);
-    appStore.showSuccess(t("common.saved"));
-    affiliateBatchModal.open = false;
-    affiliateState.selected = [];
-    await loadAffiliateUsers();
-  } catch (err) {
-    appStore.showError(extractApiErrorMessage(err, t("common.error")));
-  } finally {
-    affiliateBatchModal.saving = false;
-  }
-}
-
-// Load the per-user table the first time the affiliate switch is observed
-// as enabled. The form starts disabled and is updated to the server's value
-// after the settings load — so this fires either when the saved value is
-// truthy on first paint, or when the admin manually toggles it on.
-watch(
-  () => form.affiliate_enabled,
-  (enabled, prev) => {
-    if (enabled && !prev && !isSingleUserPrivateControlPlaneBrowser()) {
-      loadAffiliateUsers();
-    }
-  },
-);
-
-// bypass_registration 与身份同步三开关仅在 internal_only 模式下生效。切换 policy 到其它值时，
-// 立即把相关字段重置为 false，避免保存请求里残留旧值。后端 admin handler 与
-// 配置加载层都有 coerce 兜底，这里是 UX 层的同步而非安全防线。
-watch(
-  () => form.dingtalk_connect_corp_restriction_policy,
-  (policy) => {
-    if (policy !== "internal_only") {
-      if (form.dingtalk_connect_bypass_registration) form.dingtalk_connect_bypass_registration = false;
-      if (form.dingtalk_connect_sync_corp_email) form.dingtalk_connect_sync_corp_email = false;
-      if (form.dingtalk_connect_sync_display_name) form.dingtalk_connect_sync_display_name = false;
-      if (form.dingtalk_connect_sync_dept) form.dingtalk_connect_sync_dept = false;
-    }
-  },
-);
 </script>
 
 <style scoped>

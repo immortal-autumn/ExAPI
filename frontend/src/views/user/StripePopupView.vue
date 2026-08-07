@@ -175,11 +175,8 @@ function startPolling() {
     if (inFlight) return
     inFlight = true
     try {
-      // access token 存储在 localStorage 的 'auth_token' 键下（见 api/client.ts），
-      // 之前误读 'token' 导致轮询请求不带认证、永远 401，支付成功无法被检测到。
-      const token = localStorage.getItem('auth_token') || ''
       const res = await fetch(buildApiUrl(`/payment/orders/${orderId}`), {
-        headers: token ? { Authorization: 'Bearer ' + token } : {},
+        headers: { 'X-ExAPI-Control-Request': '1' },
         credentials: 'include',
       })
       if (!res.ok) return

@@ -130,6 +130,7 @@ async function parseBatchImageError(response: Response): Promise<Error> {
 function authHeaders(apiKey: string, extra?: HeadersInit): HeadersInit {
   return {
     Authorization: `Bearer ${apiKey}`,
+    'X-ExAPI-Control-Request': '1',
     ...extra,
   }
 }

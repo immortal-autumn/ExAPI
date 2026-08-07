@@ -838,7 +838,6 @@
       @close="showImportData = false"
       @imported="handleDataImported"
     />
-    <TotpStepUpDialog :controller="proxyExportStepUp" />
 
     <BaseDialog
       :show="showQualityReportDialog"
@@ -984,7 +983,6 @@ import Icon from '@/components/icons/Icon.vue'
 import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
 import { useClipboard } from '@/composables/useClipboard'
 import { useStepUp, isStepUpBlocked, isStepUpCancelled, stepUpBlockReason } from '@/composables/useStepUp'
-import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
 import { useSwipeSelect } from '@/composables/useSwipeSelect'
 import { useTableSelection } from '@/composables/useTableSelection'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'

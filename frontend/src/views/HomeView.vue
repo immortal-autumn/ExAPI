@@ -49,7 +49,7 @@
             <Icon v-else name="moon" size="md" />
           </button>
           <router-link
-            :to="isAuthenticated ? dashboardPath : '/login'"
+            :to="dashboardPath"
             class="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
           >
             {{ isAuthenticated ? t('home.dashboard') : t('home.login') }}
@@ -68,7 +68,7 @@
         <h1 class="[overflow-wrap:anywhere] text-3xl font-bold md:text-4xl">{{ siteName }}</h1>
         <p class="mt-4 whitespace-pre-wrap [overflow-wrap:anywhere] text-base text-gray-600 dark:text-dark-300">{{ siteSubtitle }}</p>
         <router-link
-          :to="isAuthenticated ? dashboardPath : '/login'"
+          :to="dashboardPath"
           class="mt-8 inline-flex min-h-10 items-center justify-center rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
         >
           {{ isAuthenticated ? t('home.goToDashboard') : t('home.login') }}
@@ -167,7 +167,7 @@
           </router-link>
           <router-link
             v-else
-            to="/login"
+            to="/admin/dashboard"
             class="inline-flex items-center rounded-full bg-gray-900 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-800 dark:hover:bg-gray-700"
           >
             {{ t('home.login') }}
@@ -195,7 +195,7 @@
             <!-- CTA Button -->
             <div>
               <router-link
-                :to="isAuthenticated ? dashboardPath : '/login'"
+                :to="dashboardPath"
                 class="btn btn-primary px-8 py-3 text-base shadow-lg shadow-primary-500/30"
               >
                 {{ isAuthenticated ? t('home.goToDashboard') : t('home.getStarted') }}

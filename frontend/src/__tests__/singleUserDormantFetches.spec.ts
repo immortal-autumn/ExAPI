@@ -14,11 +14,10 @@ const proxiesViewSource = readFileSync(resolve(root, 'views/admin/ProxiesView.vu
 const privateModeHelper = 'isSingleUserPrivateControlPlaneBrowser'
 
 describe('single-user dormant SaaS fetches', () => {
-  it('guards global subscription and announcement lifecycle work in private mode', () => {
-    expect(appSource).toContain(privateModeHelper)
-    expect(appSource).toContain('const saasFeaturesEnabled = !isSingleUserPrivateControlPlaneBrowser()')
-    expect(appSource).toContain('if (saasFeaturesEnabled && document.visibilityState')
-    expect(appSource).toContain('if (saasFeaturesEnabled) {')
+  it('removes global subscription and announcement lifecycle work', () => {
+    expect(appSource).not.toContain('fetchSubscriptions')
+    expect(appSource).not.toContain('fetchAnnouncements')
+    expect(appSource).not.toContain('markAnnouncement')
   })
 
   it('does not couple operator settings fetches to payment config in private mode', () => {
@@ -27,13 +26,12 @@ describe('single-user dormant SaaS fetches', () => {
     expect(adminSettingsSource).toContain('Promise.resolve(null)')
   })
 
-  it('keeps payment UI lazy and external proxy assets out of private operator surfaces', () => {
-    expect(settingsViewSource).toContain(
-      "const PaymentSettingsTab = defineAsyncComponent(() => import(\"@/views/admin/settings/tabs/PaymentSettingsTab.vue\"))",
-    )
-    expect(settingsViewSource).toContain('v-if="!privateProduct && showProviderDialog"')
-    expect(settingsViewSource).not.toContain('import PaymentProviderDialog from')
-    expect(settingsViewSource).not.toContain('import PaymentSettingsTab from')
+  it('excludes commercial settings UI and external proxy assets from private operator surfaces', () => {
+    expect(settingsViewSource).not.toContain('PaymentSettingsTab')
+    expect(settingsViewSource).not.toContain('PaymentProviderDialog')
+    expect(settingsViewSource).not.toContain('FeaturesSettingsTab')
+    expect(settingsViewSource).not.toContain('affiliatesAPI')
+    expect(settingsViewSource).not.toContain('adminAPI.payment')
     expect(proxiesViewSource).not.toContain('unpkg.com')
     expect(proxiesViewSource).not.toContain('sub2api.io')
   })

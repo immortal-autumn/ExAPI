@@ -2,6 +2,7 @@ export const SINGLE_USER_ADMIN_ROUTES = [
   '/admin/dashboard',
   '/admin/ops',
   '/admin/accounts',
+  '/admin/groups',
   '/admin/api-keys',
   '/admin/channels/pricing',
   '/admin/channels/monitor',
@@ -9,13 +10,11 @@ export const SINGLE_USER_ADMIN_ROUTES = [
   '/admin/risk-control',
   '/admin/usage',
   '/admin/settings',
+  '/admin/audit-logs',
+  '/admin/prompt-audit',
 ] as const
 
-export const SINGLE_USER_PUBLIC_ROUTES = [
-  '/setup',
-  '/login',
-  '/key-usage',
-] as const
+export const SINGLE_USER_PUBLIC_ROUTES = [] as const
 
 export const SINGLE_USER_COMPATIBILITY_REDIRECTS = [
   '/',
@@ -35,7 +34,6 @@ export const SINGLE_USER_SETTINGS_TABS = [
 
 export const SINGLE_USER_LEGACY_PREFIXES = [
   '/admin/users',
-  '/admin/groups',
   '/admin/subscriptions',
   '/admin/redeem',
   '/admin/promo-codes',
@@ -67,7 +65,6 @@ export function isSingleUserProductRouteAllowed(path: string): boolean {
 
 const SINGLE_USER_POST_LOGIN_ROUTES = [
   ...SINGLE_USER_ADMIN_ROUTES,
-  '/key-usage',
 ] as readonly string[]
 
 export function singleUserPostLoginRedirect(requested?: unknown): string {

@@ -22,11 +22,9 @@ export function isSingleUserPrivateControlPlaneHost(hostname: string): boolean {
 }
 
 export function isSingleUserPrivateControlPlaneBrowser(): boolean {
-  if (typeof window === 'undefined') return true
-  // The backend-injected/runtime public contract is authoritative. Fail closed
-  // while settings are absent or from an older deployment so dormant SaaS work
-  // never activates merely because ExAPI moved to a different private hostname.
-  return window.__APP_CONFIG__?.single_user_private_control_plane !== false
+  // ExAPI has one product mode. There is no browser flag that can re-enable
+  // customer/SaaS routes after the private cutover.
+  return true
 }
 
 export function singleUserGatewayRedirectPath(isAdmin: boolean): string {

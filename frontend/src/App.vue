@@ -1,25 +1,28 @@
 <script setup lang="ts">
-import { RouterView, useRouter, useRoute } from 'vue-router'
-import { onMounted, onBeforeUnmount, watch } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
+import { computed, onMounted, watch } from 'vue'
 import Toast from '@/components/common/Toast.vue'
 import NavigationProgress from '@/components/common/NavigationProgress.vue'
-import AdminComplianceDialog from '@/components/admin/AdminComplianceDialog.vue'
 import { resolveRouteDocumentTitle } from '@/router/title'
-import AnnouncementPopup from '@/components/common/AnnouncementPopup.vue'
-import { useAppStore, useAuthStore, useSubscriptionStore, useAnnouncementStore, useAdminComplianceStore, useAdminSettingsStore } from '@/stores'
-import { getSetupStatus } from '@/api/setup'
-import { isSingleUserPrivateControlPlaneBrowser } from '@/router/singleUserGatewayMode'
+import { useAppStore, useAuthStore, useAdminSettingsStore } from '@/stores'
 import { updateFavicon } from '@/utils/branding'
 
-const router = useRouter()
 const route = useRoute()
 const appStore = useAppStore()
 const authStore = useAuthStore()
-const subscriptionStore = useSubscriptionStore()
-const announcementStore = useAnnouncementStore()
-const adminComplianceStore = useAdminComplianceStore()
 const adminSettingsStore = useAdminSettingsStore()
-const saasFeaturesEnabled = !isSingleUserPrivateControlPlaneBrowser()
+const operatorAccessMessage = computed(() => {
+  switch (authStore.accessState) {
+    case 'denied':
+      return 'This control-plane request was denied. Connect from an allowed WireGuard operator peer.'
+    case 'unavailable':
+      return 'The ExAPI control plane is unavailable. Verify the control listener and WireGuard connection.'
+    case 'loading':
+      return 'Connecting to the ExAPI control plane…'
+    default:
+      return ''
+  }
+})
 
 function updateDocumentTitle() {
   const customMenuItems = [
@@ -54,83 +57,7 @@ watch(
   { deep: true }
 )
 
-// Watch for authentication state and manage subscription data + announcements
-function onVisibilityChange() {
-  if (saasFeaturesEnabled && document.visibilityState === 'visible' && authStore.isAuthenticated) {
-    announcementStore.fetchAnnouncements()
-  }
-}
-
-function onAdminComplianceRequired(event: Event) {
-  const detail = (event as CustomEvent<Record<string, string>>).detail || {}
-  adminComplianceStore.requireAcknowledgement(detail)
-}
-
-watch(
-  () => authStore.isAuthenticated,
-  (isAuthenticated, oldValue) => {
-    if (isAuthenticated) {
-      if (authStore.isAdmin) {
-        adminComplianceStore.fetchStatus().catch((error) => {
-          console.error('Failed to fetch admin compliance status:', error)
-        })
-      }
-
-      if (saasFeaturesEnabled) {
-        // User logged in: preload subscriptions and start polling
-        subscriptionStore.fetchActiveSubscriptions().catch((error) => {
-          console.error('Failed to preload subscriptions:', error)
-        })
-        subscriptionStore.startPolling()
-
-        // Announcements: new login vs page refresh restore
-        if (oldValue === false) {
-          // New login: delay 3s then force fetch
-          setTimeout(() => announcementStore.fetchAnnouncements(true), 3000)
-        } else {
-          // Page refresh restore (oldValue was undefined)
-          announcementStore.fetchAnnouncements()
-        }
-
-        document.addEventListener('visibilitychange', onVisibilityChange)
-      }
-    } else {
-      // User logged out: clear data and stop polling
-      subscriptionStore.clear()
-      announcementStore.reset()
-      adminComplianceStore.reset()
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-    }
-  },
-  { immediate: true }
-)
-
-// Route change trigger (throttled by store)
-router.afterEach(() => {
-  if (saasFeaturesEnabled && authStore.isAuthenticated) {
-    announcementStore.fetchAnnouncements()
-  }
-})
-
-onBeforeUnmount(() => {
-  document.removeEventListener('visibilitychange', onVisibilityChange)
-  window.removeEventListener('admin-compliance-required', onAdminComplianceRequired)
-})
-
 onMounted(async () => {
-  window.addEventListener('admin-compliance-required', onAdminComplianceRequired)
-
-  // Check if setup is needed
-  try {
-    const status = await getSetupStatus()
-    if (status.needs_setup && route.path !== '/setup') {
-      router.replace('/setup')
-      return
-    }
-  } catch {
-    // If setup endpoint fails, assume normal mode and continue
-  }
-
   // Load public settings into appStore (will be cached for other components)
   await appStore.fetchPublicSettings()
 
@@ -141,8 +68,16 @@ onMounted(async () => {
 
 <template>
   <NavigationProgress />
-  <RouterView />
+  <RouterView v-if="authStore.accessState === 'ready'" />
   <Toast />
-  <AnnouncementPopup v-if="saasFeaturesEnabled" />
-  <AdminComplianceDialog />
+  <section
+    v-if="route.meta.requiresAuth !== false && authStore.accessState !== 'ready'"
+    class="private-access-state"
+    role="status"
+    aria-live="polite"
+  >
+    <h1>ExAPI private control plane</h1>
+    <p>{{ operatorAccessMessage }}</p>
+    <button type="button" @click="authStore.checkAuth()">Retry connection</button>
+  </section>
 </template>

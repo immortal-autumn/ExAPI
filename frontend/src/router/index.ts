@@ -7,19 +7,15 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { useAdminSettingsStore } from '@/stores/adminSettings'
-import { useAdminComplianceStore } from '@/stores/adminCompliance'
 import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
-import { getSetupStatus } from '@/api/setup'
-import { resolveCompletedSetupRedirectPath } from './setupRedirect'
-import { filterSingleUserProductRoutes } from '@/config/singleUserProduct'
-import { isSingleUserGatewayRestrictedPath, isSingleUserPrivateControlPlaneBrowser, singleUserGatewayRedirectPath } from './singleUserGatewayMode'
 import { resolveRouteDocumentTitle } from './title'
+import { privateRoutes } from './privateRoutes'
 
 /**
  * Route definitions with lazy loading
  */
-const routes: RouteRecordRaw[] = [
+export const legacyRoutes: RouteRecordRaw[] = [
   // ==================== Setup Routes ====================
   {
     path: '/setup',
@@ -36,16 +32,6 @@ const routes: RouteRecordRaw[] = [
     path: '/home',
     name: 'Home',
     redirect: '/admin/dashboard'
-  },
-  {
-    path: '/login',
-    name: 'Login',
-    component: () => import('@/views/auth/LoginView.vue'),
-    meta: {
-      requiresAuth: false,
-      title: 'Login',
-      titleKey: 'home.login'
-    }
   },
   {
     path: '/key-usage',
@@ -265,7 +251,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/groups',
     name: 'AdminGroups',
-    component: () => import('@/views/SingleUserGatewayRedirectView.vue'),
+    component: () => import('@/views/admin/GroupsView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -526,9 +512,7 @@ const routes: RouteRecordRaw[] = [
   }
 ]
 
-const productRoutes = isSingleUserPrivateControlPlaneBrowser()
-  ? filterSingleUserProductRoutes(routes)
-  : routes
+const productRoutes = privateRoutes
 
 /**
  * Create router instance
@@ -555,38 +539,6 @@ let authInitialized = false
 const navigationLoading = useNavigationLoadingState()
 // 延迟初始化预加载，传入 router 实例
 let routePrefetch: ReturnType<typeof useRoutePrefetch> | null = null
-const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/payment/result', '/payment/airwallex', '/legal']
-const BACKEND_MODE_CALLBACK_PATHS = [
-  '/auth/callback',
-  '/auth/linuxdo/callback',
-  '/auth/dingtalk/callback',
-  '/auth/dingtalk/email-completion',
-  '/auth/oidc/callback',
-  '/auth/wechat/callback',
-  '/auth/wechat/payment/callback',
-]
-const BACKEND_MODE_PENDING_AUTH_PATHS = ['/register', '/email-verify']
-
-function isLocalAdminBypassBrowserHost(): boolean {
-  return isSingleUserPrivateControlPlaneBrowser()
-}
-
-function isBackendModePublicRouteAllowed(path: string, hasPendingAuthSession: boolean): boolean {
-  if (BACKEND_MODE_ALLOWED_PATHS.some((allowedPath) => path === allowedPath || path.startsWith(allowedPath))) {
-    return true
-  }
-
-  if (BACKEND_MODE_CALLBACK_PATHS.some((callbackPath) => path === callbackPath)) {
-    return true
-  }
-
-  if (hasPendingAuthSession && BACKEND_MODE_PENDING_AUTH_PATHS.some((allowedPath) => path === allowedPath)) {
-    return true
-  }
-
-  return false
-}
-
 router.beforeEach(async (to, _from, next) => {
   // 开始导航加载状态
   navigationLoading.startNavigation()
@@ -595,7 +547,10 @@ router.beforeEach(async (to, _from, next) => {
 
   // Restore auth state from localStorage on first navigation (page refresh)
   if (!authInitialized) {
-    authStore.checkAuth()
+    // Peer authentication is established by the control listener. Bootstrap
+    // identity before entering a private route, but leave the route mounted so
+    // the app can render a useful denied/unavailable state (never `/login`).
+    await authStore.checkAuth()
     authInitialized = true
   }
 
@@ -609,88 +564,10 @@ router.beforeEach(async (to, _from, next) => {
   document.title = resolveRouteDocumentTitle(to, appStore.siteName, customMenuItems)
 
   // Check if route requires authentication
-  const requiresAuth = to.meta.requiresAuth !== false // Default to true
-  const requiresAdmin = to.meta.requiresAdmin === true
 
-  if (to.path === '/setup') {
-    try {
-      const status = await getSetupStatus()
-      if (!status.needs_setup) {
-        next(resolveCompletedSetupRedirectPath(authStore.isAuthenticated, authStore.isAdmin))
-        return
-      }
-    } catch {
-      // If setup status cannot be determined, keep the setup page reachable.
-    }
-  }
-
-  // If route doesn't require auth, allow access
-  if (!requiresAuth) {
-    // If already authenticated and trying to access login/register, redirect to appropriate dashboard
-    if (authStore.isAuthenticated && (to.path === '/login' || to.path === '/register')) {
-      // In backend mode, non-admin users should NOT be redirected away from login
-      // (they are blocked from all protected routes, so redirecting would cause a loop)
-      if (appStore.backendModeEnabled && !authStore.isAdmin) {
-        next()
-        return
-      }
-      // Admin users go to admin dashboard, regular users go to user dashboard
-      next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
-      return
-    }
-    // Backend mode: block public pages for unauthenticated users (except login, key-usage, setup)
-    if (appStore.backendModeEnabled && !authStore.isAuthenticated) {
-      const isAllowed = isBackendModePublicRouteAllowed(to.path, authStore.hasPendingAuthSession)
-      if (!isAllowed) {
-        next('/login')
-        return
-      }
-    }
-    next()
-    return
-  }
-
-  // Route requires authentication
-  if (!authStore.isAuthenticated) {
-    if (requiresAdmin && isLocalAdminBypassBrowserHost()) {
-      try {
-        await authStore.localAdminLogin()
-      } catch {
-        // Fall through to normal login redirect when backend bypass is disabled
-        // or the request is not accepted as local.
-      }
-    }
-
-    if (!authStore.isAuthenticated) {
-      // Not authenticated, redirect to login
-      next({
-        path: '/login',
-        query: { redirect: to.fullPath } // Save intended destination
-      })
-      return
-    }
-  }
-
-  // Check admin requirement
-  if (requiresAdmin && !authStore.isAdmin) {
-    // User is authenticated but not admin, redirect to user dashboard
-    next('/dashboard')
-    return
-  }
-
-  if (requiresAdmin && authStore.isAdmin) {
-    const adminComplianceStore = useAdminComplianceStore()
-    if (!adminComplianceStore.initialized) {
-      try {
-        await adminComplianceStore.fetchStatus()
-      } catch (error) {
-        const err = error as { status?: number; code?: string; metadata?: Record<string, string> }
-        if (err.status === 423 && err.code === 'ADMIN_COMPLIANCE_ACK_REQUIRED') {
-          adminComplianceStore.requireAcknowledgement(err.metadata)
-        }
-      }
-    }
-  }
+  // Private mode has no customer login or role redirect.  The peer boundary
+  // determines access; failed bootstrap is surfaced by App.vue while routes
+  // remain stable for deep links and recovery tooling.
 
 
   // 公共设置可能尚未加载（App.vue 的 onMounted 异步拉取晚于首次导航，且纯静态部署
@@ -711,7 +588,7 @@ router.beforeEach(async (to, _from, next) => {
     appStore.publicSettingsLoaded &&
     appStore.cachedPublicSettings?.payment_enabled === false
   ) {
-    next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
+    next('/admin/dashboard')
     return
   }
 
@@ -720,31 +597,13 @@ router.beforeEach(async (to, _from, next) => {
     appStore.publicSettingsLoaded &&
     appStore.cachedPublicSettings?.risk_control_enabled === false
   ) {
-    next(authStore.isAdmin ? '/admin/settings' : '/dashboard')
+    next('/admin/settings')
     return
   }
 
   // Single-user gateway mode: keep only gateway/account/key/control-plane surfaces.
   // Multi-user, payment/order, affiliate, subscription, and redeem management stay
   // out of the private gateway UI even if legacy routes still exist for compatibility.
-  if (isSingleUserGatewayRestrictedPath(to.path)) {
-    next(singleUserGatewayRedirectPath(authStore.isAdmin))
-    return
-  }
-
-  // Backend mode: admin gets full access, non-admin blocked
-  if (appStore.backendModeEnabled) {
-    if (authStore.isAuthenticated && authStore.isAdmin) {
-      next()
-      return
-    }
-    const isAllowed = isBackendModePublicRouteAllowed(to.path, authStore.hasPendingAuthSession)
-    if (!isAllowed) {
-      next('/login')
-      return
-    }
-  }
-
   // All checks passed, allow navigation
   next()
 })

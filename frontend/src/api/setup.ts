@@ -9,7 +9,8 @@ const setupClient = axios.create({
   baseURL: buildGatewayUrl('/').replace(/\/+$/, ''),
   timeout: 30000,
   headers: {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'X-ExAPI-Control-Request': '1'
   }
 })
 

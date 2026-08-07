@@ -26,6 +26,11 @@ const entryMatch = html.match(/<script[^>]+src=["'](?:\.\/|\/)?assets\/([^"']+\.
 if (!entryMatch) throw new Error('Unable to identify the module entry in index.html')
 
 const jsFiles = readdirSync(assetsRoot).filter((name) => name.endsWith('.js'))
+const forbiddenArtifactPattern = /(payment|stripe|airwallex|affiliate|subscription|redeem|captcha|passkey|totp|loginview|registerview)/i
+const forbiddenArtifacts = jsFiles.filter((name) => forbiddenArtifactPattern.test(name))
+if (forbiddenArtifacts.length > 0) {
+  throw new Error(`Private build emitted forbidden commercial/auth chunks: ${forbiddenArtifacts.join(', ')}`)
+}
 const settingsFiles = jsFiles.filter((name) => /^SettingsView-.*\.js$/.test(name))
 if (settingsFiles.length !== 1) {
   throw new Error(`Expected one SettingsView chunk, found ${settingsFiles.length}`)

@@ -657,6 +657,7 @@ async function waitForServiceRestart() {
       // Service might return 404 or connection refused while restarting
       const response = await fetch(buildGatewayUrl('/setup/status'), {
         method: 'GET',
+        headers: { 'X-ExAPI-Control-Request': '1' },
         cache: 'no-store'
       })
 
@@ -665,9 +666,9 @@ async function waitForServiceRestart() {
         // If needs_setup is false, service has restarted in normal mode
         if (data.data && !data.data.needs_setup) {
           serviceReady.value = true
-          // Redirect to login page after a short delay
+          // Return to the private operator dashboard after restart.
           setTimeout(() => {
-            window.location.href = '/login'
+            window.location.href = '/admin/dashboard'
           }, 1500)
           return
         }

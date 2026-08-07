@@ -859,7 +859,10 @@ async function fetchUsage(key: string) {
   const dateParams = getDateParams()
   const url = buildGatewayUrl('/v1/usage') + (dateParams ? '?' + dateParams : '')
   const res = await fetch(url, {
-    headers: { 'Authorization': 'Bearer ' + key },
+    headers: {
+      'Authorization': 'Bearer ' + key,
+      'X-ExAPI-Control-Request': '1',
+    },
   })
   if (!res.ok) {
     const body = await res.json().catch(() => null)

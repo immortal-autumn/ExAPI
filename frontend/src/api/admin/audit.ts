@@ -64,12 +64,11 @@ export async function get(id: number): Promise<AuditLog> {
 }
 
 /**
- * Clear all audit logs. Requires a fresh TOTP code (verified server-side);
- * unavailable when 2FA is not enabled for the operator.
- * @param totpCode - current 6-digit TOTP code
+ * Clear all audit logs. The private listener authenticates the operator by
+ * WireGuard peer; no browser step-up credential is accepted.
  */
-export async function clear(totpCode: string): Promise<{ deleted: number }> {
-  const { data } = await apiClient.post('/admin/audit-logs/clear', { totp_code: totpCode })
+export async function clear(): Promise<{ deleted: number }> {
+  const { data } = await apiClient.post('/admin/audit-logs/clear', { confirm: 'CLEAR-AUDIT-LOGS' })
   return data
 }
 

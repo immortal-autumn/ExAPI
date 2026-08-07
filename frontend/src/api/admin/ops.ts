@@ -598,12 +598,10 @@ export function subscribeQPS(onMessage: (data: any) => void, options: SubscribeQ
       ? new URL(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${wsBaseUrl}/api/v1/admin/ops/ws/qps`)
       : new URL(buildGatewayUrl('/api/v1/admin/ops/ws/qps').replace(/^http/, 'ws'))
 
-    // Do NOT put admin JWT in the URL query string (it can leak via access logs, proxies, etc).
-    // Browsers cannot set Authorization headers for WebSockets, so we pass the token via
-    // Sec-WebSocket-Protocol (subprotocol list): ["sub2api-admin", "jwt.<token>"].
-    const rawToken = String(options.token ?? localStorage.getItem('auth_token') ?? '').trim()
-    const protocols: string[] = [OPS_WS_BASE_PROTOCOL]
-    if (rawToken) protocols.push(`jwt.${rawToken}`)
+    // Control WebSockets are authenticated by the direct peer boundary.  Keep
+    // the explicit protocol marker so reverse proxies cannot mistake this for
+    // a public gateway socket; no browser token is ever sent.
+    const protocols: string[] = [OPS_WS_BASE_PROTOCOL, 'exapi-control']
 
     ws = new WebSocket(wsURL.toString(), protocols)
 

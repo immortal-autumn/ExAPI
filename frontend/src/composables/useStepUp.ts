@@ -1,9 +1,9 @@
 /**
- * Step-up (sudo) 2FA composable.
+ * Peer-authenticated sensitive-operation composable.
  *
  * Wraps a sensitive admin action so that when the backend responds with a
- * STEP_UP_REQUIRED error, the caller can prompt for a TOTP code, obtain a
- * short-lived grant, and transparently retry the original action.
+ * The private control listener authenticates the operator from its WireGuard
+ * peer. No browser step-up credential is collected or persisted.
  *
  * Usage in a view:
  *   const stepUp = useStepUp()
@@ -67,53 +67,13 @@ export type StepUpController = ReturnType<typeof useStepUp>
 export function useStepUp() {
   const visible = ref(false)
   const blockedReason = ref<string>('')
-  let resolver: ((ok: boolean) => void) | null = null
 
-  /** Open the TOTP dialog and resolve true once a grant is obtained. */
-  function prompt(): Promise<boolean> {
-    visible.value = true
-    return new Promise<boolean>((resolve) => {
-      resolver = resolve
-    })
-  }
+  function prompt(): Promise<boolean> { return Promise.resolve(true) }
+  function onVerified() { visible.value = false }
+  function onCancel() { visible.value = false }
 
-  function onVerified() {
-    visible.value = false
-    resolver?.(true)
-    resolver = null
-  }
-
-  function onCancel() {
-    visible.value = false
-    resolver?.(false)
-    resolver = null
-  }
-
-  /**
-   * Run a sensitive action. On STEP_UP_REQUIRED, prompt for a TOTP code and
-   * retry once. STEP_UP_TOTP_NOT_ENABLED / admin-api-key errors are surfaced
-   * to the caller (they cannot be resolved by entering a code). If the user
-   * cancels the prompt, a StepUpCancelledError is thrown so callers can
-   * distinguish "user changed their mind" from real failures.
-   */
   async function run<T>(action: () => Promise<T>): Promise<T> {
-    try {
-      return await action()
-    } catch (err) {
-      if (isStepUpBlocked(err)) {
-        blockedReason.value = markerOf(err)
-        throw err
-      }
-      if (!isStepUpRequired(err)) {
-        throw err
-      }
-      const ok = await prompt()
-      if (!ok) {
-        throw new StepUpCancelledError()
-      }
-      // Retry once now that the session holds a step-up grant.
-      return await action()
-    }
+    return action()
   }
 
   return {

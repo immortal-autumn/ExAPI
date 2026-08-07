@@ -62,12 +62,16 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 
-defineProps<{
+withDefaults(defineProps<{
   selectedIds: number[]
-  totalResults: number
-  selectingAll: boolean
-  allResultsSelected: boolean
-}>()
+  totalResults?: number
+  selectingAll?: boolean
+  allResultsSelected?: boolean
+}>(), {
+  totalResults: 0,
+  selectingAll: false,
+  allResultsSelected: false,
+})
 
 defineEmits([
   'delete',
