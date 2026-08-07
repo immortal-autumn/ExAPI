@@ -35,6 +35,9 @@ jobs:
           /bin/bash deploy/test-keyring-contract.sh
           /bin/bash deploy/test-production-rollout-contract.sh
           /bin/bash deploy/tests/apple-container-test.sh
+          /bin/sh deploy/tests/docker-compose-security-test.sh
+          /bin/sh deploy/tests/docker-runtime-resources-test.sh
+          /bin/sh deploy/test-caddyfile-cache.sh
 
   test:
     runs-on: ubuntu-latest

@@ -53,6 +53,7 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		PasswordResetEnabled:             settings.PasswordResetEnabled,
 		InvitationCodeEnabled:            settings.InvitationCodeEnabled,
 		TotpEnabled:                      settings.TotpEnabled,
+		PasskeyEnabled:                   settings.PasskeyEnabled,
 		LoginAgreementEnabled:            settings.LoginAgreementEnabled,
 		LoginAgreementMode:               settings.LoginAgreementMode,
 		LoginAgreementUpdatedAt:          settings.LoginAgreementUpdatedAt,
@@ -60,6 +61,12 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		LoginAgreementDocuments:          publicLoginAgreementDocumentsToDTO(settings.LoginAgreementDocuments),
 		TurnstileEnabled:                 settings.TurnstileEnabled,
 		TurnstileSiteKey:                 settings.TurnstileSiteKey,
+		TencentCaptchaEnabled:            settings.TencentCaptchaEnabled,
+		TencentCaptchaAppID:              settings.TencentCaptchaAppID,
+		AliyunCaptchaEnabled:             settings.AliyunCaptchaEnabled,
+		AliyunCaptchaSceneID:             settings.AliyunCaptchaSceneID,
+		AliyunCaptchaPrefix:              settings.AliyunCaptchaPrefix,
+		AliyunCaptchaRegion:              settings.AliyunCaptchaRegion,
 		SiteName:                         settings.SiteName,
 		SiteLogo:                         settings.SiteLogo,
 		SiteSubtitle:                     settings.SiteSubtitle,
@@ -67,6 +74,7 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		ContactInfo:                      settings.ContactInfo,
 		DocURL:                           settings.DocURL,
 		HomeContent:                      settings.HomeContent,
+		CompactHomeEnabled:               settings.CompactHomeEnabled,
 		HideCcsImportButton:              settings.HideCcsImportButton,
 		PurchaseSubscriptionEnabled:      settings.PurchaseSubscriptionEnabled,
 		PurchaseSubscriptionURL:          settings.PurchaseSubscriptionURL,
@@ -99,6 +107,9 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		ChannelMonitorDefaultIntervalSeconds: settings.ChannelMonitorDefaultIntervalSeconds,
 
 		AvailableChannelsEnabled: settings.AvailableChannelsEnabled,
+
+		ModelPlazaEnabled:     settings.ModelPlazaEnabled,
+		ModelPlazaRequireAuth: settings.ModelPlazaRequireAuth,
 
 		AffiliateEnabled: settings.AffiliateEnabled,
 

@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	apiKeyAuthSnapshotVersion = 15 // v15: include group web search per-call pricing
+	apiKeyAuthSnapshotVersion = 18 // v18: include group profit control fields
 	authCacheInvalidateAll    = "__all__"
 )
 
@@ -459,14 +459,20 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			MCPXMLInject:                    apiKey.Group.MCPXMLInject,
 			SupportedModelScopes:            apiKey.Group.SupportedModelScopes,
 			AllowMessagesDispatch:           apiKey.Group.AllowMessagesDispatch,
+			AllowLive:                       apiKey.Group.AllowLive,
 			DefaultMappedModel:              apiKey.Group.DefaultMappedModel,
 			MessagesDispatchModelConfig:     apiKey.Group.MessagesDispatchModelConfig,
 			ModelsListConfig:                apiKey.Group.ModelsListConfig,
 			RPMLimit:                        apiKey.Group.RPMLimit,
+			MaxReasoningEffort:              apiKey.Group.MaxReasoningEffort,
+			ReasoningEffortMappings:         apiKey.Group.ReasoningEffortMappings,
 			PeakRateEnabled:                 apiKey.Group.PeakRateEnabled,
 			PeakStart:                       apiKey.Group.PeakStart,
 			PeakEnd:                         apiKey.Group.PeakEnd,
 			PeakRateMultiplier:              apiKey.Group.PeakRateMultiplier,
+			ProfitControlEnabled:            apiKey.Group.ProfitControlEnabled,
+			ProfitMinMargin:                 apiKey.Group.ProfitMinMargin,
+			ProfitSafetyBuffer:              apiKey.Group.ProfitSafetyBuffer,
 		}
 	}
 	return snapshot
@@ -543,14 +549,20 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			MCPXMLInject:                    snapshot.Group.MCPXMLInject,
 			SupportedModelScopes:            snapshot.Group.SupportedModelScopes,
 			AllowMessagesDispatch:           snapshot.Group.AllowMessagesDispatch,
+			AllowLive:                       snapshot.Group.AllowLive,
 			DefaultMappedModel:              snapshot.Group.DefaultMappedModel,
 			MessagesDispatchModelConfig:     snapshot.Group.MessagesDispatchModelConfig,
 			ModelsListConfig:                snapshot.Group.ModelsListConfig,
 			RPMLimit:                        snapshot.Group.RPMLimit,
+			MaxReasoningEffort:              snapshot.Group.MaxReasoningEffort,
+			ReasoningEffortMappings:         snapshot.Group.ReasoningEffortMappings,
 			PeakRateEnabled:                 snapshot.Group.PeakRateEnabled,
 			PeakStart:                       snapshot.Group.PeakStart,
 			PeakEnd:                         snapshot.Group.PeakEnd,
 			PeakRateMultiplier:              snapshot.Group.PeakRateMultiplier,
+			ProfitControlEnabled:            snapshot.Group.ProfitControlEnabled,
+			ProfitMinMargin:                 snapshot.Group.ProfitMinMargin,
+			ProfitSafetyBuffer:              snapshot.Group.ProfitSafetyBuffer,
 		}
 	}
 	s.compileAPIKeyIPRules(apiKey)

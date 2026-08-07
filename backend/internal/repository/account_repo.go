@@ -448,16 +448,29 @@ func (r *accountRepository) ListCRSAccountIDs(ctx context.Context) (map[string]i
 }
 
 func (r *accountRepository) Update(ctx context.Context, account *service.Account) error {
-	return r.updateAccount(ctx, account, nil)
+	return r.updateAccount(ctx, account, nil, nil, account.RateMultiplier)
+}
+
+// UpdateWithAccountBillingSettings applies an admin edit while preserving a
+// concurrently probe-synchronized multiplier unless the request explicitly
+// supplied a replacement value.
+func (r *accountRepository) UpdateWithAccountBillingSettings(
+	ctx context.Context,
+	account *service.Account,
+	probeEnabled *bool,
+	rateSyncEnabled *bool,
+	rateMultiplier *float64,
+) error {
+	return r.updateAccount(ctx, account, probeEnabled, rateSyncEnabled, rateMultiplier)
 }
 
 // UpdateWithUpstreamBillingProbeEnabled applies an explicit probe switch in the
 // same row-lock transaction as the rest of an admin account edit.
 func (r *accountRepository) UpdateWithUpstreamBillingProbeEnabled(ctx context.Context, account *service.Account, enabled bool) error {
-	return r.updateAccount(ctx, account, &enabled)
+	return r.updateAccount(ctx, account, &enabled, nil, account.RateMultiplier)
 }
 
-func (r *accountRepository) updateAccount(ctx context.Context, account *service.Account, explicitProbeEnabled *bool) error {
+func (r *accountRepository) updateAccount(ctx context.Context, account *service.Account, explicitProbeEnabled, explicitRateSyncEnabled *bool, explicitRateMultiplier *float64) error {
 	if account == nil {
 		return nil
 	}
@@ -480,7 +493,7 @@ func (r *accountRepository) updateAccount(ctx context.Context, account *service.
 		}
 	}
 
-	updated, err := r.updateLockedAccount(ctx, client, account, explicitProbeEnabled)
+	updated, err := r.updateLockedAccount(ctx, client, account, explicitProbeEnabled, explicitRateSyncEnabled, explicitRateMultiplier)
 	if err != nil {
 		return translatePersistenceError(err, service.ErrAccountNotFound, nil)
 	}
@@ -502,7 +515,7 @@ func (r *accountRepository) updateAccount(ctx context.Context, account *service.
 	return nil
 }
 
-func (r *accountRepository) updateLockedAccount(ctx context.Context, client *dbent.Client, account *service.Account, explicitProbeEnabled *bool) (*dbent.Account, error) {
+func (r *accountRepository) updateLockedAccount(ctx context.Context, client *dbent.Client, account *service.Account, explicitProbeEnabled, explicitRateSyncEnabled *bool, explicitRateMultiplier *float64) (*dbent.Account, error) {
 	extra, err := r.lockAndMergeAccountProbeExtra(ctx, client, account, explicitProbeEnabled)
 	if err != nil {
 		return nil, err
@@ -532,8 +545,8 @@ func (r *accountRepository) updateLockedAccount(ctx context.Context, client *dbe
 		SetSchedulable(schedulable).
 		SetAutoPauseOnExpired(account.AutoPauseOnExpired)
 
-	if account.RateMultiplier != nil {
-		builder.SetRateMultiplier(*account.RateMultiplier)
+	if explicitRateMultiplier != nil {
+		builder.SetRateMultiplier(*explicitRateMultiplier)
 	}
 	if account.LoadFactor != nil {
 		builder.SetLoadFactor(*account.LoadFactor)

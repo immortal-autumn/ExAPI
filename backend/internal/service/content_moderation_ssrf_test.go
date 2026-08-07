@@ -13,7 +13,7 @@ import (
 )
 
 func TestContentModerationConfigRejectsPrivateBaseURL(t *testing.T) {
-	svc := NewContentModerationService(nil, nil, nil, nil, nil, nil, nil)
+	svc := NewContentModerationService(nil, nil, nil, nil, nil, nil, nil, nil)
 	cfg := defaultContentModerationConfig()
 	cfg.BaseURL = "https://127.0.0.1:8443"
 

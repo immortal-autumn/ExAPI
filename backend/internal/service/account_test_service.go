@@ -186,6 +186,20 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 		return s.sendErrorAndEnd(c, "Account not found")
 	}
 
+	// Synthetic UI load-test accounts exercise the real SSE parsing and modal
+	// interactions, but intentionally do not send their placeholder credentials
+	// to an upstream provider.
+	if account.IsSyntheticUITest() {
+		testModelID := modelID
+		if testModelID == "" {
+			testModelID = claude.DefaultTestModel
+		}
+		s.sendEvent(c, TestEvent{Type: "test_start", Model: testModelID})
+		s.sendEvent(c, TestEvent{Type: "content", Text: "Synthetic Anthropic OAuth account is healthy and interactive."})
+		s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
+		return nil
+	}
+
 	// Route to platform-specific test method
 	if account.IsOpenAI() {
 		return s.testOpenAIAccountConnection(c, account, modelID, prompt, normalizeAccountTestMode(mode))
@@ -610,6 +624,9 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 
 	// Set common headers
 	req.Header.Set("Content-Type", "application/json")
+	if !isOAuth {
+		applyOpenAICodexProbeHeaders(req.Header)
+	}
 	if credentialAccount.IsOpenAIAgentIdentity() {
 		authHeaders, authErr := buildAgentIdentityAuthenticationHeaders(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, credentialAccount)
 		if authErr != nil {
@@ -636,8 +653,9 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 			req.Header.Set("User-Agent", codexCLIUserAgent)
 		}
 		setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)
-		// 与真实转发一致：originator 与最终 User-Agent 首段配套，否则上游 404（issue #3901）。
-		enforceCodexIdentityHeaders(req.Header)
+		// 与真实转发一致：账号级自定义 UA 同样作为管理员显式配置传入，否则测试用的身份
+		// 与该账号真实出站的身份不是同一个（issue #3901 的配对不变式由收口保证）。
+		enforceCodexIdentityHeadersWithUA(req.Header, credentialAccount.GetOpenAIUserAgent())
 	}
 
 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
@@ -791,6 +809,16 @@ func (s *AccountTestService) testGrokAccountConnection(c *gin.Context, account *
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusPaymentRequired && s.accountRepo != nil {
+			stateCtx, cancel := openAIAccountStateContext(ctx)
+			defer cancel()
+			_ = s.accountRepo.SetTempUnschedulable(
+				stateCtx,
+				account.ID,
+				time.Now().Add(30*time.Minute),
+				"grok payment required",
+			)
+		}
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Grok Responses API returned %d: %s", resp.StatusCode, string(body)))
 	}
 
@@ -937,10 +965,7 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	} else {
 		req.Header.Set("Authorization", "Bearer "+authToken)
 	}
-	req.Header.Set("OpenAI-Beta", "responses=experimental")
-	req.Header.Set("Originator", "codex_cli_rs")
-	req.Header.Set("User-Agent", codexCLIUserAgent)
-	req.Header.Set("Version", codexCLIVersion)
+	applyOpenAICodexProbeHeaders(req.Header)
 	probeSessionID := compactProbeSessionID(account.ID)
 	req.Header.Set("Session_ID", probeSessionID)
 	req.Header.Set("Conversation_ID", probeSessionID)
@@ -1842,8 +1867,9 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 		req.Header.Set("User-Agent", codexCLIUserAgent)
 	}
 	setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)
-	// 与真实转发一致：originator 与最终 User-Agent 首段配套（原 opencode 与 Codex UA 错配会 404，issue #3901）。
-	enforceCodexIdentityHeaders(req.Header)
+	// 与真实转发一致：账号级自定义 UA 同样作为管理员显式配置传入，否则测试用的身份
+	// 与该账号真实出站的身份不是同一个（issue #3901 的配对不变式由收口保证）。
+	enforceCodexIdentityHeadersWithUA(req.Header, credentialAccount.GetOpenAIUserAgent())
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

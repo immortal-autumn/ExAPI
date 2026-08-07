@@ -90,7 +90,7 @@ func TestPrivateAdminRouteMatrix(t *testing.T) {
 		ContentModeration:      &adminhandler.ContentModerationHandler{},
 	}}
 	auth := servermiddleware.AdminAuthMiddleware(func(c *gin.Context) { c.Next() })
-	RegisterAdminRoutes(v1, h, auth, nil, nil, nil)
+	RegisterAdminRoutes(v1, h, auth, nil, nil, nil, nil)
 
 	paths := make(map[string]struct{})
 	for _, route := range router.Routes() {

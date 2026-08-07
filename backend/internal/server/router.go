@@ -128,10 +128,10 @@ func registerRoutes(
 	// 注册各模块路由
 	routes.RegisterAuthRoutes(v1, h, jwtAuth, auditLog, redisClient, settingService)
 	routes.RegisterUserRoutes(v1, h, jwtAuth, auditLog, settingService)
-	routes.RegisterAdminRoutes(v1, h, adminAuth, auditLog, stepUpAuth, settingService)
-	routes.RegisterGatewayRoutes(r, h, apiKeyAuth, apiKeyService, subscriptionService, opsService, settingService, cfg)
+	routes.RegisterAdminRoutes(v1, h, adminAuth, auditLog, stepUpAuth, settingService, nil)
+	routes.RegisterGatewayRoutes(r, h, apiKeyAuth, apiKeyService, subscriptionService, opsService, settingService, nil, cfg)
 	if config.SaaSFeaturesEnabled() {
-		routes.RegisterPaymentRoutes(v1, h.Payment, h.PaymentWebhook, h.Admin.Payment, jwtAuth, adminAuth, auditLog, settingService)
+		routes.RegisterPaymentRoutes(v1, h.Payment, h.PaymentWebhook, h.Admin.Payment, jwtAuth, adminAuth, auditLog, settingService, nil)
 	}
 
 	handler.RegisterPageRoutes(v1, cfg.Pricing.DataDir, gin.HandlerFunc(jwtAuth), gin.HandlerFunc(adminAuth), settingService)
