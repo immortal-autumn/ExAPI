@@ -67,6 +67,62 @@ func TestBatchImageSettlementService_ZeroSuccessCanComplete(t *testing.T) {
 	require.Equal(t, 0.0, billing.captures[0].ActualAmount)
 }
 
+func TestBatchImageSettlementService_PrivateOperationalAppliesCountersWithoutCapture(t *testing.T) {
+	repo := newFakeBatchImageRepository()
+	job := testSettlingBatchImageJob("imgbatch_private")
+	zero := 0.0
+	job.HoldAmount = &zero
+	repo.jobs[job.BatchID] = job
+	usageLogs := &openAIRecordUsageLogRepoStub{}
+	billing := &fakeBatchImageBillingRepo{}
+	svc := &BatchImageSettlementService{
+		Repo:        repo,
+		BillingRepo: billing,
+		APIKeys: batchImageSettlementAPIKeyLookupStub{key: &APIKey{
+			ID: *job.APIKeyID, UserID: job.UserID, Quota: 100, RateLimit1d: 100,
+		}},
+		Accounts: batchImageSettlementAccountLookupStub{account: &Account{
+			ID: *job.AccountID, Type: AccountTypeAPIKey, Extra: map[string]any{"quota_limit": 100.0},
+		}},
+		Pricing:            &fakeBatchImagePricingResolver{unitPrice: 0.25},
+		UsageLogRepo:       usageLogs,
+		PrivateOperational: true,
+	}
+
+	result, err := svc.Settle(context.Background(), job.BatchID)
+	require.NoError(t, err)
+	require.Equal(t, 0.5, result.ActualCost)
+	require.Equal(t, BatchImageJobStatusCompleted, repo.jobs[job.BatchID].Status)
+	require.Empty(t, billing.captures)
+	require.Len(t, billing.commands, 1)
+	require.Equal(t, BillingTypeOperational, billing.commands[0].BillingType)
+	require.Zero(t, billing.commands[0].BalanceCost)
+	require.Zero(t, billing.commands[0].SubscriptionCost)
+	require.Equal(t, 0.5, billing.commands[0].APIKeyQuotaCost)
+	require.Equal(t, 0.5, billing.commands[0].APIKeyRateLimitCost)
+	require.Equal(t, 0.5, billing.commands[0].AccountQuotaCost)
+	require.NotNil(t, usageLogs.lastLog, "cost telemetry remains available")
+	require.Equal(t, BillingTypeOperational, usageLogs.lastLog.BillingType)
+}
+
+type batchImageSettlementAPIKeyLookupStub struct {
+	key *APIKey
+	err error
+}
+
+func (s batchImageSettlementAPIKeyLookupStub) GetByID(context.Context, int64) (*APIKey, error) {
+	return s.key, s.err
+}
+
+type batchImageSettlementAccountLookupStub struct {
+	account *Account
+	err     error
+}
+
+func (s batchImageSettlementAccountLookupStub) GetByID(context.Context, int64) (*Account, error) {
+	return s.account, s.err
+}
+
 func TestBatchImageSettlementService_CompletedJobReturnsAlreadySettledWithoutBilling(t *testing.T) {
 	repo := newFakeBatchImageRepository()
 	job := testSettlingBatchImageJob("imgbatch_done")

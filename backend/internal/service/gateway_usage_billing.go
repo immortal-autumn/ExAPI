@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -321,6 +322,53 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 	}
 
 	finalizePostUsageBilling(billingCtx, p, deps, result)
+	return true, nil
+}
+
+// applyPrivateOperationalUsage applies the idempotent operational counters
+// retained by ExAPI. It deliberately clears balance and subscription effects
+// before handing the command to the transaction repository.
+func applyPrivateOperationalUsage(ctx context.Context, requestID string, usageLog *UsageLog, p *postUsageBillingParams, deps *billingDeps, repo UsageBillingRepository) (bool, error) {
+	if p == nil || deps == nil {
+		return false, nil
+	}
+	cmd := buildUsageBillingCommand(requestID, usageLog, p)
+	if cmd == nil || cmd.RequestID == "" {
+		return false, errors.New("private operational usage command is incomplete")
+	}
+	if repo == nil {
+		return false, errors.New("private operational usage repository is unavailable")
+	}
+	cmd.SubscriptionID = nil
+	cmd.SubscriptionCost = 0
+	cmd.BalanceCost = 0
+	cmd.BillingType = BillingTypeOperational
+	cmd.RequestFingerprint = ""
+	cmd.Normalize()
+
+	billingCtx, cancel := detachedBillingContext(ctx)
+	defer cancel()
+	result, err := repo.Apply(billingCtx, cmd)
+	if err != nil {
+		return false, err
+	}
+	if result == nil || !result.Applied {
+		if deps.deferredService != nil && p.Account != nil {
+			deps.deferredService.ScheduleLastUsedUpdate(p.Account.ID)
+		}
+		return false, nil
+	}
+	if result.APIKeyQuotaExhausted {
+		if invalidator, ok := p.APIKeyService.(apiKeyAuthCacheInvalidator); ok && p.APIKey != nil && p.APIKey.Key != "" {
+			invalidator.InvalidateAuthCacheByKey(billingCtx, p.APIKey.Key)
+		}
+	}
+	if deps.billingCacheService != nil && p.APIKey != nil && p.APIKey.HasRateLimits() && p.Cost != nil && p.Cost.ActualCost > 0 {
+		deps.billingCacheService.QueueUpdateAPIKeyRateLimitUsage(p.APIKey.ID, p.Cost.ActualCost)
+	}
+	if deps.deferredService != nil && p.Account != nil {
+		deps.deferredService.ScheduleLastUsedUpdate(p.Account.ID)
+	}
 	return true, nil
 }
 
@@ -731,6 +779,10 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	if isSubscriptionBilling {
 		billingType = BillingTypeSubscription
 	}
+	if s.privateOperational {
+		isSubscriptionBilling = false
+		billingType = BillingTypeOperational
+	}
 
 	// 创建使用日志
 	accountRateMultiplier := account.BillingRateMultiplier()
@@ -772,7 +824,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		}
 	}
 	requestID := usageLog.RequestID
-	_, billingErr := applyUsageBilling(ctx, requestID, usageLog, &postUsageBillingParams{
+	usageParams := &postUsageBillingParams{
 		Cost:                  cost,
 		User:                  user,
 		APIKey:                apiKey,
@@ -783,7 +835,13 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		AccountRateMultiplier: accountRateMultiplier,
 		APIKeyService:         input.APIKeyService,
 		Platform:              quotaPlatform,
-	}, s.billingDeps(), s.usageBillingRepo)
+	}
+	var billingErr error
+	if s.privateOperational {
+		_, billingErr = applyPrivateOperationalUsage(ctx, requestID, usageLog, usageParams, s.billingDeps(), s.usageBillingRepo)
+	} else {
+		_, billingErr = applyUsageBilling(ctx, requestID, usageLog, usageParams, s.billingDeps(), s.usageBillingRepo)
+	}
 
 	if billingErr != nil {
 		usageLog.ActualCost = 0

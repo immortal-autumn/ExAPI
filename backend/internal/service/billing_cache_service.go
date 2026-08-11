@@ -113,6 +113,7 @@ type BillingCacheService struct {
 	cfg                   *config.Config
 	circuitBreaker        *billingCircuitBreaker
 	userPlatformQuotaRepo UserPlatformQuotaRepository
+	privateOperational    bool
 
 	cacheWriteChan     chan cacheWriteTask
 	cacheWriteWg       sync.WaitGroup
@@ -151,6 +152,21 @@ func NewBillingCacheService(
 	}
 	svc.circuitBreaker = newBillingCircuitBreaker(cfg.Billing.CircuitBreaker)
 	svc.startCacheWriteWorkers()
+	return svc
+}
+
+// NewPrivateBillingCacheService constructs the private gateway's operational
+// limiter. Customer balance, subscription, and user-platform quota repositories
+// are intentionally absent; only API-key cost windows and RPM policy remain.
+func NewPrivateBillingCacheService(
+	cache BillingCache,
+	apiKeyRepo APIKeyRepository,
+	userRPMCache UserRPMCache,
+	userGroupRateRepo UserGroupRateRepository,
+	cfg *config.Config,
+) *BillingCacheService {
+	svc := NewBillingCacheService(cache, nil, nil, apiKeyRepo, userRPMCache, userGroupRateRepo, cfg, nil)
+	svc.privateOperational = true
 	return svc
 }
 
@@ -733,8 +749,19 @@ func (s *BillingCacheService) IncrementUserPlatformQuotaUsage(userID int64, plat
 // 订阅模式：检查缓存用量未超过限额（Group限额从参数传入）
 // platform 为请求的目标平台（如 "anthropic"），传空串 "" 时跳过 user × platform quota 检查。
 func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user *User, apiKey *APIKey, group *Group, subscription *UserSubscription, platform string) error {
+	if s == nil {
+		return nil
+	}
+	if s.privateOperational {
+		if apiKey != nil && apiKey.HasRateLimits() {
+			if err := s.checkAPIKeyRateLimits(ctx, apiKey); err != nil {
+				return err
+			}
+		}
+		return s.checkRPM(ctx, user, group)
+	}
 	// 简易模式：跳过所有计费检查
-	if s.cfg.RunMode == config.RunModeSimple {
+	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
 		return nil
 	}
 	if s.circuitBreaker != nil && !s.circuitBreaker.Allow() {

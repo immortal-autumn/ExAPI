@@ -61,6 +61,50 @@ func ProvideBatchImageWorkerRuntime(
 	return runtime
 }
 
+func ProvidePrivateBatchImageWorkerRuntime(
+	repo BatchImageRepository,
+	accountRepo AccountRepository,
+	apiKeyRepo APIKeyRepository,
+	queue BatchImageQueue,
+	billingRepo UsageBillingRepository,
+	billingCache *BillingCacheService,
+	usageLogRepo UsageLogRepository,
+	pricing *BatchImageModelPricingResolver,
+	authCache APIKeyAuthCacheInvalidator,
+	cfg *config.Config,
+) *BatchImageWorkerRuntime {
+	processor := &BatchImagePipelineProcessor{
+		ProviderProcessor: &BatchImageProviderProcessor{
+			Repo:             repo,
+			ProviderRegistry: NewBatchImageProviderRegistryFromConfig(cfg),
+			AccountResolver:  &BatchImageAccountRepositoryResolver{Repo: accountRepo},
+			AuthCache:        authCache,
+		},
+		SettlementService: &BatchImageSettlementService{
+			Repo:               repo,
+			BillingRepo:        billingRepo,
+			APIKeys:            apiKeyRepo,
+			Accounts:           accountRepo,
+			BillingCache:       billingCache,
+			UsageLogRepo:       usageLogRepo,
+			Pricing:            pricing,
+			AuthCache:          authCache,
+			Config:             cfg,
+			PrivateOperational: true,
+		},
+	}
+	runtime := NewBatchImageWorkerRuntime(NewBatchImageWorker(queue, processor, NewBatchImageWorkerOptionsFromConfig(cfg)), cfg)
+	runtime.billingRecovery = &BatchImageBillingRecoveryService{
+		Repo:       repo,
+		AuthCache:  authCache,
+		Queue:      queue,
+		StaleAfter: NewBatchImageWorkerOptionsFromConfig(cfg).StaleActiveAfter,
+		Limit:      NewBatchImageWorkerOptionsFromConfig(cfg).RecoverLimit,
+	}
+	runtime.Start()
+	return runtime
+}
+
 func (r *BatchImageWorkerRuntime) Start() {
 	if r == nil || r.worker == nil || r.cfg == nil || !r.cfg.BatchImage.QueueEnabled {
 		return

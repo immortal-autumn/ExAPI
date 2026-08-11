@@ -154,7 +154,7 @@ func TestPublicControlPlaneGuardRejectsSpoofedPrivateHostFromRemotePeer(t *testi
 	}
 }
 
-func TestPublicControlPlaneGuardStandardModeMustBeExplicit(t *testing.T) {
+func TestPublicControlPlaneGuardAlwaysUsesPrivateMode(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "false")
 	t.Setenv("SUB2API_PUBLIC_HOST", "sub2api.research.for-immortal.cn")
@@ -168,5 +168,8 @@ func TestPublicControlPlaneGuardStandardModeMustBeExplicit(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusNoContent, w.Code)
+	// The private-only revision intentionally ignores the removed mode switch;
+	// a public host cannot expose the control plane even when the old variable
+	// is set to false.
+	require.Equal(t, http.StatusNotFound, w.Code)
 }

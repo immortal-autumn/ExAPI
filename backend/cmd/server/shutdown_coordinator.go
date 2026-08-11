@@ -117,7 +117,6 @@ func provideCleanup(
 	tokenRefresh *service.TokenRefreshService,
 	accountExpiry *service.AccountExpiryService,
 	proxyExpiry *service.ProxyExpiryService,
-	subscriptionExpiry *service.SubscriptionExpiryService,
 	usageCleanup *service.UsageCleanupService,
 	idempotencyCleanup *service.IdempotencyCleanupService,
 	batchImageCleanup *service.BatchImageCleanupService,
@@ -126,7 +125,6 @@ func provideCleanup(
 	emailQueue *service.EmailQueueService,
 	billingCache *service.BillingCacheService,
 	usageRecordWorkerPool *service.UsageRecordWorkerPool,
-	subscriptionService *service.SubscriptionService,
 	oauth *service.OAuthService,
 	openaiOAuth *service.OpenAIOAuthService,
 	geminiOAuth *service.GeminiOAuthService,
@@ -135,9 +133,7 @@ func provideCleanup(
 	openAIGateway *service.OpenAIGatewayService,
 	scheduledTestRunner *service.ScheduledTestRunnerService,
 	backupSvc *service.BackupService,
-	paymentOrderExpiry *service.PaymentOrderExpiryService,
 	channelMonitorRunner *service.ChannelMonitorRunner,
-	quotaFlusher *service.UserPlatformQuotaUsageFlusher,
 	upstreamBillingProbe *service.UpstreamBillingProbeService,
 	auditLog *service.AuditLogService,
 	promptAudit *securityaudit.PromptService,
@@ -218,11 +214,6 @@ func provideCleanup(
 					proxyExpiry.Stop()
 				}
 			}),
-			stop("SubscriptionExpiryService", func() {
-				if subscriptionExpiry != nil {
-					subscriptionExpiry.Stop()
-				}
-			}),
 			stop("PricingService", func() {
 				if pricing != nil {
 					pricing.Stop()
@@ -231,11 +222,6 @@ func provideCleanup(
 			stop("ScheduledTestRunnerService", func() {
 				if scheduledTestRunner != nil {
 					scheduledTestRunner.Stop()
-				}
-			}),
-			stop("PaymentOrderExpiryService", func() {
-				if paymentOrderExpiry != nil {
-					paymentOrderExpiry.Stop()
 				}
 			}),
 			stop("ChannelMonitorRunner", func() {
@@ -310,11 +296,6 @@ func provideCleanup(
 					auditLog.Stop()
 				}
 			}),
-			stop("UserPlatformQuotaUsageFlusher", func() {
-				if quotaFlusher != nil {
-					quotaFlusher.Stop()
-				}
-			}),
 			stop("BillingCacheService", func() {
 				if billingCache != nil {
 					billingCache.Stop()
@@ -324,11 +305,6 @@ func provideCleanup(
 	}
 	coordinator.services.steps = func(context.Context) []cleanupStep {
 		return []cleanupStep{
-			stop("SubscriptionService", func() {
-				if subscriptionService != nil {
-					subscriptionService.Stop()
-				}
-			}),
 			stop("OAuthService", func() {
 				if oauth != nil {
 					oauth.Stop()

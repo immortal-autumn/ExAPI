@@ -66,6 +66,22 @@ func TestBatchImagePublicService_Submit(t *testing.T) {
 		require.Equal(t, "batch-session-123", batchImageDerefString(job.SessionID))
 	})
 
+	t.Run("private operational submit records zero hold and never reserves balance", func(t *testing.T) {
+		svc, repo, queue, gemini, _ := newTestBatchImagePublicService(true)
+		svc.PrivateOperational = true
+		billing := svc.BillingRepo.(*fakeBatchImageBillingRepo)
+		billing.reserveErr = errors.New("reserve must not be called")
+
+		got, err := svc.Submit(ctx, testBatchImageOwner(), validBatchImageSubmitRequest(), "private-submit")
+		require.NoError(t, err)
+		require.Zero(t, got.HoldAmount)
+		require.Empty(t, billing.reserves)
+		require.Len(t, gemini.submits, 1)
+		require.Equal(t, []string{got.ID}, queue.enqueued)
+		require.NotNil(t, repo.jobs[got.ID].HoldAmount)
+		require.Zero(t, *repo.jobs[got.ID].HoldAmount)
+	})
+
 	t.Run("combines user group image rate account rate discount and hold margin", func(t *testing.T) {
 		svc, repo, _, _, _ := newTestBatchImagePublicService(true)
 		groupID := int64(7)

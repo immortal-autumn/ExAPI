@@ -11,6 +11,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
+	"github.com/Wei-Shaw/sub2api/internal/privatecutover"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/server/routes"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -97,7 +98,6 @@ func SetupPublicRouter(
 	handlers *handler.Handlers,
 	apiKeyAuth middleware2.APIKeyAuthMiddleware,
 	apiKeyService *service.APIKeyService,
-	subscriptionService *service.SubscriptionService,
 	opsService *service.OpsService,
 	settingService *service.SettingService,
 	compositeResolver *service.CompositeRouteResolver,
@@ -116,7 +116,7 @@ func SetupPublicRouter(
 	routes.RegisterCommonRoutes(r, func(ctx context.Context) error {
 		return probeReadiness(ctx, db, redisClient)
 	})
-	routes.RegisterGatewayRoutes(r, handlers, apiKeyAuth, apiKeyService, subscriptionService, opsService, settingService, compositeResolver, cfg)
+	routes.RegisterPrivateGatewayRoutes(r, handlers, apiKeyAuth, apiKeyService, opsService, settingService, compositeResolver, cfg)
 	return r
 }
 
@@ -158,6 +158,9 @@ func probeReadiness(ctx context.Context, db *sql.DB, redisClient *redis.Client) 
 	}
 	if !migrationsApplied {
 		return errors.New("schema migrations unavailable")
+	}
+	if err := privatecutover.VerifyRuntimeState(ctx, db); err != nil {
+		return fmt.Errorf("private runtime state: %w", err)
 	}
 
 	if redisClient == nil {

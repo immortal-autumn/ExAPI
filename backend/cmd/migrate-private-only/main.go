@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"strings"
@@ -22,10 +21,14 @@ import (
 func main() {
 	confirmation := flag.String("confirm", "", "required exact confirmation: DROP-SAAS-DATA-KEEP-USER-<lowest-active-admin-id>")
 	backupDir := flag.String("backup-dir", os.Getenv("EXAPI_BACKUP_DIR"), "directory whose pre-cutover backups are purged after commit")
-	reportPath := flag.String("report-file", os.Getenv("EXAPI_PRIVATE_MIGRATION_REPORT"), "write the signed migration report to this 0600 file")
+	noManagedBackups := flag.Bool("no-managed-backups", false, "assert that the application has no managed backup records when --backup-dir is omitted")
+	reportPath := flag.String("report-file", os.Getenv("EXAPI_PRIVATE_MIGRATION_REPORT"), "required 0600 file for the durable signed migration report")
 	flag.Parse()
 	if strings.TrimSpace(*confirmation) == "" {
 		log.Fatal("refusing to run without --confirm DROP-SAAS-DATA-KEEP-USER-<operator-id>")
+	}
+	if strings.TrimSpace(*reportPath) == "" {
+		log.Fatal("refusing to run without --report-file (or EXAPI_PRIVATE_MIGRATION_REPORT)")
 	}
 
 	reportKey, err := migrationReportKey()
@@ -42,16 +45,11 @@ func main() {
 	}
 	defer client.Close()
 
-	var report io.Writer = os.Stdout
-	if strings.TrimSpace(*reportPath) != "" {
-		file, err := os.OpenFile(*reportPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-		if err != nil {
-			log.Fatalf("open report file: %v", err)
-		}
-		defer file.Close()
-		report = file
-	}
-	if _, err := privatecutover.Run(context.Background(), db, *confirmation, reportKey, *backupDir, nil, report); err != nil {
+	if _, err := privatecutover.RunWithOptions(context.Background(), db, *confirmation, reportKey, privatecutover.CutoverOptions{
+		BackupDir:              *backupDir,
+		AssertNoManagedBackups: *noManagedBackups,
+		ReportPath:             *reportPath,
+	}, nil); err != nil {
 		log.Fatalf("private-only cutover failed: %v", err)
 	}
 }

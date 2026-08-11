@@ -336,6 +336,19 @@ func NewAPIKeyService(
 	return svc
 }
 
+// NewPrivateAPIKeyService omits customer subscription state while retaining
+// operator-owned key management, auth caching, group policy, and cost limits.
+func NewPrivateAPIKeyService(
+	apiKeyRepo APIKeyRepository,
+	userRepo UserRepository,
+	groupRepo GroupRepository,
+	userGroupRateRepo UserGroupRateRepository,
+	cache APIKeyCache,
+	cfg *config.Config,
+) *APIKeyService {
+	return NewAPIKeyService(apiKeyRepo, userRepo, groupRepo, nil, userGroupRateRepo, cache, cfg)
+}
+
 // SetRateLimitCacheInvalidator sets the optional rate limit cache invalidator.
 // Called after construction (e.g. in wire) to avoid circular dependencies.
 func (s *APIKeyService) SetRateLimitCacheInvalidator(inv RateLimitCacheInvalidator) {
@@ -427,6 +440,9 @@ func (s *APIKeyService) incrementAPIKeyErrorCount(ctx context.Context, userID in
 func (s *APIKeyService) canUserBindGroup(ctx context.Context, user *User, group *Group) bool {
 	// 订阅类型分组：需要有效订阅
 	if group.IsSubscriptionType() {
+		if s.userSubRepo == nil {
+			return false
+		}
 		_, err := s.userSubRepo.GetActiveByUserIDAndGroupID(ctx, user.ID, group.ID)
 		return err == nil // 有有效订阅则允许
 	}
@@ -1052,9 +1068,12 @@ func (s *APIKeyService) GetAvailableGroups(ctx context.Context, userID int64) ([
 	}
 
 	// 获取用户的所有有效订阅
-	activeSubscriptions, err := s.userSubRepo.ListActiveByUserID(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("list active subscriptions: %w", err)
+	var activeSubscriptions []UserSubscription
+	if s.userSubRepo != nil {
+		activeSubscriptions, err = s.userSubRepo.ListActiveByUserID(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("list active subscriptions: %w", err)
+		}
 	}
 
 	// 构建订阅分组 ID 集合

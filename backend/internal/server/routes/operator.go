@@ -71,6 +71,21 @@ func RegisterOperatorRoutes(
 		usage.GET("/:id", h.Usage.GetByID)
 	}
 
+	batchImages := operator.Group("/operator/batch-images")
+	batchImages.Use(h.BatchImage.BindOperatorAPIKey)
+	{
+		batchImages.POST("", h.BatchImage.Submit)
+		batchImages.GET("", h.BatchImage.List)
+		batchImages.GET("/models", h.BatchImage.Models)
+		batchImages.GET("/:id", h.BatchImage.Get)
+		batchImages.GET("/:id/items", h.BatchImage.Items)
+		batchImages.GET("/:id/items/:custom_id/content", h.BatchImage.ItemContent)
+		batchImages.GET("/:id/download", h.BatchImage.Download)
+		batchImages.POST("/:id/cancel", h.BatchImage.Cancel)
+		batchImages.DELETE("/:id", h.BatchImage.DeleteRecord)
+		batchImages.DELETE("/:id/outputs", h.BatchImage.DeleteOutputs)
+	}
+
 	monitors := operator.Group("/channel-monitors")
 	{
 		monitors.GET("", h.ChannelMonitor.List)

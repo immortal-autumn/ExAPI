@@ -19,6 +19,8 @@ func TestProbeReadiness(t *testing.T) {
 		mock.ExpectPing()
 		mock.ExpectQuery("SELECT EXISTS").
 			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery("SELECT EXISTS").
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 
 		redisServer := miniredis.RunT(t)
 		redisClient := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
@@ -72,8 +74,24 @@ func TestProbeReadiness(t *testing.T) {
 		mock.ExpectPing()
 		mock.ExpectQuery("SELECT EXISTS").
 			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery("SELECT EXISTS").
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 
 		require.EqualError(t, probeReadiness(context.Background(), db, nil), "redis unavailable")
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("private_cutover_incomplete", func(t *testing.T) {
+		db, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
+		require.NoError(t, err)
+		defer db.Close()
+		mock.ExpectPing()
+		mock.ExpectQuery("SELECT EXISTS").
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery("SELECT EXISTS").
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+
+		require.ErrorContains(t, probeReadiness(context.Background(), db, nil), "private runtime state is incomplete")
 		require.NoError(t, mock.ExpectationsWereMet())
 	})
 }

@@ -707,3 +707,53 @@ func NewAdminService(
 		compositeResolver:    compositeResolver,
 	}
 }
+
+// NewPrivateAdminService builds the retained operational admin surface without
+// customer subscription grants, user-subscription storage, or affiliate
+// accounting services. The full constructor remains available to legacy test
+// and migration tooling, but the production private Wire graph never asks for
+// those dependencies.
+func NewPrivateAdminService(
+	userRepo UserRepository,
+	groupRepo AdminGroupRepository,
+	accountRepo AdminAccountRepository,
+	proxyRepo ProxyRepository,
+	apiKeyRepo APIKeyRepository,
+	redeemCodeRepo RedeemCodeRepository,
+	userGroupRateRepo UserGroupRateRepository,
+	userRPMCache UserRPMCache,
+	billingCacheService *BillingCacheService,
+	proxyProber ProxyExitInfoProber,
+	proxyLatencyCache ProxyLatencyCache,
+	authCacheInvalidator APIKeyAuthCacheInvalidator,
+	entClient *dbent.Client,
+	settingService *SettingService,
+	privacyClientFactory PrivacyClientFactory,
+	runtimeBlocker AccountRuntimeBlocker,
+	compositeRouteRepo CompositeModelRouteRepository,
+	compositeResolver *CompositeRouteResolver,
+) AdminService {
+	return NewAdminService(
+		userRepo,
+		groupRepo,
+		accountRepo,
+		proxyRepo,
+		apiKeyRepo,
+		redeemCodeRepo,
+		userGroupRateRepo,
+		userRPMCache,
+		billingCacheService,
+		proxyProber,
+		proxyLatencyCache,
+		authCacheInvalidator,
+		entClient,
+		settingService,
+		nil,
+		nil,
+		privacyClientFactory,
+		runtimeBlocker,
+		nil,
+		compositeRouteRepo,
+		compositeResolver,
+	)
+}

@@ -86,10 +86,13 @@ func InitEnt(cfg *config.Config) (*ent.Client, *sql.DB, error) {
 		return nil, nil, err
 	}
 
-	// 启动阶段：从配置或数据库中确保系统密钥可用。
-	if err := ensureBootstrapSecrets(migrationCtx, client, cfg); err != nil {
-		_ = client.Close()
-		return nil, nil, err
+	// Private ExAPI has no JWT/TOTP runtime and the offline cutover removes the
+	// legacy security_secrets table. Only legacy builds bootstrap those secrets.
+	if !config.SingleUserPrivateControlPlaneEnabled() {
+		if err := ensureBootstrapSecrets(migrationCtx, client, cfg); err != nil {
+			_ = client.Close()
+			return nil, nil, err
+		}
 	}
 
 	// 在密钥补齐后执行完整配置校验，避免空 jwt.secret 导致服务运行时失败。

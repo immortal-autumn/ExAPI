@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/privatecutover"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/google/wire"
 	"github.com/redis/go-redis/v9"
@@ -176,8 +178,15 @@ var ProviderSet = wire.NewSet(
 // 依赖：config.Config
 // 提供：*ent.Client
 func ProvideEnt(cfg *config.Config) (*ent.Client, error) {
-	client, _, err := InitEnt(cfg)
-	return client, err
+	client, db, err := InitEnt(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := privatecutover.VerifyRuntimeState(context.Background(), db); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("verify private runtime state: %w", err)
+	}
+	return client, nil
 }
 
 // ProvideImageStorageFactory 提供按需构造对象存储客户端的工厂。

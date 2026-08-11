@@ -738,6 +738,7 @@ type GatewayService struct {
 	tlsFPProfileService   *TLSFingerprintProfileService
 	balanceNotifyService  *BalanceNotifyService
 	userPlatformQuotaRepo UserPlatformQuotaRepository
+	privateOperational    bool
 }
 
 // NewGatewayService creates a new GatewayService
@@ -820,6 +821,49 @@ func NewGatewayService(
 	if path := strings.TrimSpace(os.Getenv(debugGatewayBodyEnv)); path != "" {
 		svc.initDebugGatewayBodyFile(path)
 	}
+	return svc
+}
+
+// NewPrivateGatewayService keeps the forwarding/scheduling graph while
+// removing the customer subscription dependency. Usage is recorded as
+// operational telemetry and only API-key/account operational limits are
+// settled by the private usage path.
+func NewPrivateGatewayService(
+	accountRepo AccountRepository,
+	groupRepo GroupRepository,
+	usageLogRepo UsageLogRepository,
+	usageBillingRepo UsageBillingRepository,
+	userRepo UserRepository,
+	userGroupRateRepo UserGroupRateRepository,
+	cache GatewayCache,
+	cfg *config.Config,
+	schedulerSnapshot *SchedulerSnapshotService,
+	concurrencyService *ConcurrencyService,
+	billingService *BillingService,
+	rateLimitService *RateLimitService,
+	billingCacheService *BillingCacheService,
+	identityService *IdentityService,
+	httpUpstream HTTPUpstream,
+	deferredService *DeferredService,
+	claudeTokenProvider *ClaudeTokenProvider,
+	sessionLimitCache SessionLimitCache,
+	rpmCache RPMCache,
+	digestStore *DigestSessionStore,
+	settingService *SettingService,
+	tlsFPProfileService *TLSFingerprintProfileService,
+	channelService *ChannelService,
+	resolver *ModelPricingResolver,
+	compositeResolver *CompositeRouteResolver,
+) *GatewayService {
+	svc := NewGatewayService(
+		accountRepo, groupRepo, usageLogRepo, usageBillingRepo, userRepo, nil,
+		userGroupRateRepo, cache, cfg, schedulerSnapshot, concurrencyService,
+		billingService, rateLimitService, billingCacheService, identityService,
+		httpUpstream, deferredService, claudeTokenProvider, sessionLimitCache,
+		rpmCache, digestStore, settingService, tlsFPProfileService,
+		channelService, resolver, compositeResolver, nil, nil,
+	)
+	svc.privateOperational = true
 	return svc
 }
 

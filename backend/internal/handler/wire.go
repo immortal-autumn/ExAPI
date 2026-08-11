@@ -140,9 +140,11 @@ func ProvideBatchImageHandler(
 	download *service.BatchImageDownloadService,
 	cleanup *service.BatchImageCleanupService,
 	openAI *OpenAIGatewayHandler,
+	apiKeyService *service.APIKeyService,
 ) *BatchImageHandler {
 	h := NewBatchImageHandler(batchService, download, cleanup)
 	h.openAI = openAI
+	h.apiKeys = apiKeyService
 	return h
 }
 
@@ -165,6 +167,111 @@ func ProvideAdminSettingHandler(settingService *service.SettingService, emailSer
 	h.SetAliyunCaptchaService(aliyunCaptchaService)
 	h.SetStepUpDeps(totpService, userService)
 	return h
+}
+
+// ProvidePrivateAdminSettingHandler wires only the operational settings
+// dependencies retained by private ExAPI. Customer auth, CAPTCHA, payment,
+// user-attribute, password, and TOTP services are intentionally absent.
+func ProvidePrivateAdminSettingHandler(
+	settingService *service.SettingService,
+	emailService *service.EmailService,
+	opsService *service.OpsService,
+	notificationEmailService *service.NotificationEmailService,
+) *admin.SettingHandler {
+	h := admin.NewSettingHandler(settingService, emailService, nil, opsService, nil, nil, nil)
+	h.SetNotificationEmailService(notificationEmailService)
+	return h
+}
+
+// ProvidePrivateAdminHandlers constructs only handlers reachable from the
+// private operator route table. Nil fields are deliberately non-routable SaaS
+// surfaces retained in the struct solely for source compatibility.
+func ProvidePrivateAdminHandlers(
+	dashboardHandler *admin.DashboardHandler,
+	groupHandler *admin.GroupHandler,
+	accountHandler *admin.AccountHandler,
+	dataManagementHandler *admin.DataManagementHandler,
+	backupHandler *admin.BackupHandler,
+	oauthHandler *admin.OAuthHandler,
+	openaiOAuthHandler *admin.OpenAIOAuthHandler,
+	geminiOAuthHandler *admin.GeminiOAuthHandler,
+	antigravityOAuthHandler *admin.AntigravityOAuthHandler,
+	grokOAuthHandler *admin.GrokOAuthHandler,
+	proxyHandler *admin.ProxyHandler,
+	settingHandler *admin.SettingHandler,
+	opsHandler *admin.OpsHandler,
+	systemHandler *admin.SystemHandler,
+	usageHandler *admin.UsageHandler,
+	errorPassthroughHandler *admin.ErrorPassthroughHandler,
+	tlsFingerprintProfileHandler *admin.TLSFingerprintProfileHandler,
+	apiKeyHandler *admin.AdminAPIKeyHandler,
+	scheduledTestHandler *admin.ScheduledTestHandler,
+	channelHandler *admin.ChannelHandler,
+	channelMonitorHandler *admin.ChannelMonitorHandler,
+	channelMonitorTemplateHandler *admin.ChannelMonitorRequestTemplateHandler,
+	contentModerationHandler *admin.ContentModerationHandler,
+	promptAuditHandler *securityaudit.PromptAdminHandler,
+	auditLogHandler *admin.AuditLogHandler,
+	upstreamBillingProbe *service.UpstreamBillingProbeService,
+	cockpitService *service.CockpitService,
+	ollamaCloudUsage *service.OllamaCloudUsageService,
+) *AdminHandlers {
+	accountHandler.SetUpstreamBillingProbeService(upstreamBillingProbe)
+	accountHandler.SetCockpitService(cockpitService)
+	accountHandler.SetOllamaCloudUsageService(ollamaCloudUsage)
+	return &AdminHandlers{
+		Dashboard:              dashboardHandler,
+		Group:                  groupHandler,
+		Account:                accountHandler,
+		DataManagement:         dataManagementHandler,
+		Backup:                 backupHandler,
+		OAuth:                  oauthHandler,
+		OpenAIOAuth:            openaiOAuthHandler,
+		GeminiOAuth:            geminiOAuthHandler,
+		AntigravityOAuth:       antigravityOAuthHandler,
+		GrokOAuth:              grokOAuthHandler,
+		Proxy:                  proxyHandler,
+		Setting:                settingHandler,
+		Ops:                    opsHandler,
+		System:                 systemHandler,
+		Usage:                  usageHandler,
+		ErrorPassthrough:       errorPassthroughHandler,
+		TLSFingerprintProfile:  tlsFingerprintProfileHandler,
+		APIKey:                 apiKeyHandler,
+		ScheduledTest:          scheduledTestHandler,
+		Channel:                channelHandler,
+		ChannelMonitor:         channelMonitorHandler,
+		ChannelMonitorTemplate: channelMonitorTemplateHandler,
+		ContentModeration:      contentModerationHandler,
+		PromptAudit:            promptAuditHandler,
+		AuditLog:               auditLogHandler,
+	}
+}
+
+func ProvidePrivateHandlers(
+	apiKeyHandler *APIKeyHandler,
+	usageHandler *UsageHandler,
+	channelMonitorUserHandler *ChannelMonitorUserHandler,
+	adminHandlers *AdminHandlers,
+	gatewayHandler *GatewayHandler,
+	openaiGatewayHandler *OpenAIGatewayHandler,
+	settingHandler *SettingHandler,
+	asyncImageHandler *AsyncImageHandler,
+	batchImageHandler *BatchImageHandler,
+	_ *service.IdempotencyCoordinator,
+	_ *service.IdempotencyCleanupService,
+) *Handlers {
+	return &Handlers{
+		APIKey:         apiKeyHandler,
+		Usage:          usageHandler,
+		ChannelMonitor: channelMonitorUserHandler,
+		Admin:          adminHandlers,
+		Gateway:        gatewayHandler,
+		OpenAIGateway:  openaiGatewayHandler,
+		Setting:        settingHandler,
+		AsyncImage:     asyncImageHandler,
+		BatchImage:     batchImageHandler,
+	}
 }
 
 // ProvideHandlers creates the Handlers struct
@@ -218,6 +325,14 @@ func ProvideHandlers(
 
 // ProviderSet is the Wire provider set for all handlers
 var ProviderSet = wire.NewSet(
+	service.NewAdminService,
+	service.ProvideBillingCacheService,
+	service.ProvideAPIKeyService,
+	service.NewGatewayService,
+	service.NewOpenAIGatewayService,
+	service.NewBatchImagePublicService,
+	service.ProvideBatchImageWorkerRuntime,
+	wire.Bind(new(service.AccountRuntimeBlocker), new(*service.OpenAIGatewayService)),
 	// Top-level handlers
 	NewAuthHandler,
 	NewUserHandler,
@@ -277,4 +392,54 @@ var ProviderSet = wire.NewSet(
 	// AdminHandlers and Handlers constructors
 	ProvideAdminHandlers,
 	ProvideHandlers,
+)
+
+// PrivateProviderSet is the production handler graph for ExAPI. Wire only
+// constructs this dependency closure, so removed customer/commercial handlers
+// and their auth/payment services do not enter the running process.
+var PrivateProviderSet = wire.NewSet(
+	service.NewPrivateAdminService,
+	service.ProvidePrivateBillingCacheService,
+	service.ProvidePrivateAPIKeyService,
+	service.NewPrivateGatewayService,
+	service.NewPrivateOpenAIGatewayService,
+	service.NewPrivateBatchImagePublicService,
+	service.ProvidePrivateBatchImageWorkerRuntime,
+	wire.Bind(new(service.AccountRuntimeBlocker), new(*service.OpenAIGatewayService)),
+	NewAPIKeyHandler,
+	NewUsageHandler,
+	NewChannelMonitorUserHandler,
+	ProvideGatewayHandler,
+	ProvideOpenAIGatewayHandler,
+	ProvideSettingHandler,
+	NewAsyncImageHandler,
+	ProvideBatchImageHandler,
+
+	admin.NewDashboardHandler,
+	admin.NewGroupHandler,
+	admin.ProvideAccountHandler,
+	admin.NewDataManagementHandler,
+	admin.NewBackupHandler,
+	admin.NewOAuthHandler,
+	admin.NewOpenAIOAuthHandler,
+	admin.NewGeminiOAuthHandler,
+	admin.NewAntigravityOAuthHandler,
+	admin.NewGrokOAuthHandler,
+	admin.NewProxyHandler,
+	ProvidePrivateAdminSettingHandler,
+	admin.NewOpsHandler,
+	ProvideSystemHandler,
+	admin.NewUsageHandler,
+	admin.NewErrorPassthroughHandler,
+	admin.NewTLSFingerprintProfileHandler,
+	admin.NewAdminAPIKeyHandler,
+	admin.NewScheduledTestHandler,
+	admin.NewChannelHandler,
+	admin.NewChannelMonitorHandler,
+	admin.NewChannelMonitorRequestTemplateHandler,
+	admin.NewContentModerationHandler,
+	admin.NewAuditLogHandler,
+
+	ProvidePrivateAdminHandlers,
+	ProvidePrivateHandlers,
 )

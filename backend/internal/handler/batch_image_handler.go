@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -22,6 +23,42 @@ type BatchImageHandler struct {
 	download *service.BatchImageDownloadService
 	cleanup  *service.BatchImageCleanupService
 	openAI   *OpenAIGatewayHandler
+	apiKeys  batchImageAPIKeyLookup
+}
+
+type batchImageAPIKeyLookup interface {
+	GetByID(ctx context.Context, id int64) (*service.APIKey, error)
+}
+
+// BindOperatorAPIKey resolves an operator-owned key by opaque database ID.
+// The browser never receives or replays the raw gateway credential.
+func (h *BatchImageHandler) BindOperatorAPIKey(c *gin.Context) {
+	operator, ok := middleware.GetOperatorFromContext(c)
+	if !ok || operator == nil || h == nil || h.apiKeys == nil {
+		batchImageError(c, infraerrors.New(http.StatusServiceUnavailable, "OPERATOR_UNAVAILABLE", "Private operator unavailable"))
+		c.Abort()
+		return
+	}
+	keyID, err := strconv.ParseInt(strings.TrimSpace(c.Query("api_key_id")), 10, 64)
+	if err != nil || keyID <= 0 {
+		batchImageError(c, infraerrors.New(http.StatusBadRequest, "API_KEY_ID_REQUIRED", "api_key_id is required"))
+		c.Abort()
+		return
+	}
+	apiKey, err := h.apiKeys.GetByID(c.Request.Context(), keyID)
+	if err != nil || apiKey == nil || apiKey.UserID != operator.ID {
+		batchImageError(c, service.ErrAPIKeyNotFound)
+		c.Abort()
+		return
+	}
+	if !apiKey.IsActive() || apiKey.IsExpired() || apiKey.IsQuotaExhausted() {
+		batchImageError(c, infraerrors.New(http.StatusForbidden, "API_KEY_UNAVAILABLE", "API key is inactive, expired, or exhausted"))
+		c.Abort()
+		return
+	}
+	apiKey.User = operator
+	c.Set(string(middleware.ContextKeyAPIKey), apiKey)
+	c.Next()
 }
 
 func NewBatchImageHandler(service *service.BatchImagePublicService, download *service.BatchImageDownloadService, cleanup *service.BatchImageCleanupService) *BatchImageHandler {

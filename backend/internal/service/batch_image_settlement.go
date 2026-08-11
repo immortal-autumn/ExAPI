@@ -55,12 +55,24 @@ func (r *BatchImageModelPricingResolver) BatchImageUnitPrice(ctx context.Context
 }
 
 type BatchImageSettlementService struct {
-	Repo         BatchImageRepository
-	BillingRepo  UsageBillingRepository
-	UsageLogRepo UsageLogRepository
-	Pricing      BatchImagePricingResolver
-	AuthCache    APIKeyAuthCacheInvalidator
-	Config       *config.Config
+	Repo               BatchImageRepository
+	BillingRepo        UsageBillingRepository
+	APIKeys            batchImageSettlementAPIKeyLookup
+	Accounts           batchImageSettlementAccountLookup
+	BillingCache       *BillingCacheService
+	UsageLogRepo       UsageLogRepository
+	Pricing            BatchImagePricingResolver
+	AuthCache          APIKeyAuthCacheInvalidator
+	Config             *config.Config
+	PrivateOperational bool
+}
+
+type batchImageSettlementAPIKeyLookup interface {
+	GetByID(ctx context.Context, id int64) (*APIKey, error)
+}
+
+type batchImageSettlementAccountLookup interface {
+	GetByID(ctx context.Context, id int64) (*Account, error)
 }
 
 type BatchImageSettlementResult struct {
@@ -141,7 +153,7 @@ func (s *BatchImageSettlementService) Settle(ctx context.Context, batchID string
 	if job.HoldAmount != nil {
 		holdAmount = *job.HoldAmount
 	}
-	if actualCost-holdAmount > batchImageCostEpsilon {
+	if !s.PrivateOperational && actualCost-holdAmount > batchImageCostEpsilon {
 		msg := fmt.Sprintf("actual cost %.10f exceeds held amount %.10f", actualCost, holdAmount)
 		if failErr := s.recordSettlementFailure(ctx, job, "SETTLEMENT_COST_EXCEEDS_HOLD", msg); failErr != nil {
 			return nil, failErr
@@ -149,14 +161,25 @@ func (s *BatchImageSettlementService) Settle(ctx context.Context, batchID string
 		return nil, ErrBatchImageSettlementCostExceedsHold
 	}
 
-	if err := captureBatchImageBalanceHold(ctx, s.BillingRepo, job, actualCost, manifestHash); err != nil {
-		msg := truncateBatchImageMessage(err.Error(), batchImageMaxErrorMessageLength)
-		if failErr := s.recordSettlementFailure(ctx, job, "SETTLEMENT_BILLING_FAILED", msg); failErr != nil {
-			return nil, failErr
+	if s.PrivateOperational {
+		if err := s.applyPrivateOperationalUsage(ctx, job, actualCost, manifestHash); err != nil {
+			msg := truncateBatchImageMessage(err.Error(), batchImageMaxErrorMessageLength)
+			if failErr := s.recordSettlementFailure(ctx, job, "SETTLEMENT_BILLING_FAILED", msg); failErr != nil {
+				return nil, failErr
+			}
+			return nil, ErrBatchImageSettlementBillingFailed.WithCause(err)
 		}
-		return nil, err
+		s.invalidateAuthCache(ctx, job.UserID)
+	} else {
+		if err := captureBatchImageBalanceHold(ctx, s.BillingRepo, job, actualCost, manifestHash); err != nil {
+			msg := truncateBatchImageMessage(err.Error(), batchImageMaxErrorMessageLength)
+			if failErr := s.recordSettlementFailure(ctx, job, "SETTLEMENT_BILLING_FAILED", msg); failErr != nil {
+				return nil, failErr
+			}
+			return nil, err
+		}
+		s.invalidateAuthCache(ctx, job.UserID)
 	}
-	s.invalidateAuthCache(ctx, job.UserID)
 
 	now := time.Now()
 	outputExpiresAt := now.Add(s.outputRetentionAfterTerminal())
@@ -180,6 +203,63 @@ func (s *BatchImageSettlementService) Settle(ctx context.Context, batchID string
 	s.recordUsageLog(ctx, job, actualCost, result.RequestID, now)
 
 	return result, nil
+}
+
+func (s *BatchImageSettlementService) applyPrivateOperationalUsage(ctx context.Context, job *BatchImageJob, actualCost float64, manifestHash string) error {
+	if s == nil || s.BillingRepo == nil || s.APIKeys == nil || s.Accounts == nil || job == nil || job.APIKeyID == nil || job.AccountID == nil {
+		return errors.New("private batch image operational billing is not configured")
+	}
+	apiKey, err := s.APIKeys.GetByID(ctx, *job.APIKeyID)
+	if err != nil {
+		return fmt.Errorf("load batch image API key: %w", err)
+	}
+	if apiKey == nil || apiKey.UserID != job.UserID {
+		return errors.New("batch image API key ownership changed")
+	}
+	account, err := s.Accounts.GetByID(ctx, *job.AccountID)
+	if err != nil {
+		return fmt.Errorf("load batch image account: %w", err)
+	}
+	if account == nil {
+		return errors.New("batch image account is unavailable")
+	}
+
+	cmd := &UsageBillingCommand{
+		RequestID:          BatchImageCaptureRequestID(job.BatchID),
+		APIKeyID:           apiKey.ID,
+		RequestPayloadHash: strings.TrimSpace(manifestHash),
+		UserID:             job.UserID,
+		AccountID:          account.ID,
+		AccountType:        account.Type,
+		Model:              job.Model,
+		BillingType:        BillingTypeOperational,
+		ImageCount:         job.SuccessCount,
+		MediaType:          "image",
+	}
+	if actualCost > 0 {
+		if apiKey.Quota > 0 {
+			cmd.APIKeyQuotaCost = actualCost
+		}
+		if apiKey.HasRateLimits() {
+			cmd.APIKeyRateLimitCost = actualCost
+		}
+		if account.IsAPIKeyOrBedrock() && account.HasAnyQuotaLimit() {
+			cmd.AccountQuotaCost = actualCost
+		}
+	}
+	cmd.Normalize()
+	result, err := s.BillingRepo.Apply(ctx, cmd)
+	if err != nil {
+		return err
+	}
+	if apiKey.HasRateLimits() && actualCost > 0 && s.BillingCache != nil {
+		if result != nil && result.Applied {
+			s.BillingCache.QueueUpdateAPIKeyRateLimitUsage(apiKey.ID, actualCost)
+		} else {
+			_ = s.BillingCache.InvalidateAPIKeyRateLimit(ctx, apiKey.ID)
+		}
+	}
+	return nil
 }
 
 // isBatchImageSettlementRetryExhausted 判断 settling job 是否已达重试上限。
@@ -258,6 +338,11 @@ func (s *BatchImageSettlementService) recordUsageLog(ctx context.Context, job *B
 	inboundEndpoint := "/v1/images/batches"
 	upstreamEndpoint := "vertex:batchPredictionJobs"
 	imageSize := "1K"
+	billingType := BillingTypeBalance
+	if s.PrivateOperational {
+		billingType = BillingTypeOperational
+		inboundEndpoint = "/api/v1/operator/batch-images"
+	}
 	usageLog := &UsageLog{
 		UserID:                job.UserID,
 		APIKeyID:              *job.APIKeyID,
@@ -273,7 +358,7 @@ func (s *BatchImageSettlementService) recordUsageLog(ctx context.Context, job *B
 		ActualCost:            actualCost,
 		RateMultiplier:        job.GroupRateMultiplier * job.BatchDiscountMultiplier,
 		AccountRateMultiplier: &accountRateMultiplier,
-		BillingType:           BillingTypeBalance,
+		BillingType:           billingType,
 		RequestType:           RequestTypeSync,
 		BillingMode:           &billingMode,
 		ImageSize:             &imageSize,

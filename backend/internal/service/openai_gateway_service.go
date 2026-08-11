@@ -423,6 +423,7 @@ type OpenAIGatewayService struct {
 	userPlatformQuotaRepo UserPlatformQuotaRepository
 	liveAttestation       liveattestation.Provider
 	liveAttestationCipher SecretEncryptor
+	privateOperational    bool
 
 	openaiWSPoolOnce               sync.Once
 	openaiWSStateStoreOnce         sync.Once
@@ -531,6 +532,41 @@ func NewOpenAIGatewayService(
 		openAITokenProvider.SetAccountRuntimeBlocker(svc)
 	}
 	svc.logOpenAIWSModeBootstrap()
+	return svc
+}
+
+// NewPrivateOpenAIGatewayService omits customer subscription state from the
+// production dependency graph. Cost calculation and usage telemetry remain;
+// private settlement only updates API-key/account operational limits.
+func NewPrivateOpenAIGatewayService(
+	accountRepo AccountRepository,
+	usageLogRepo UsageLogRepository,
+	usageBillingRepo UsageBillingRepository,
+	userRepo UserRepository,
+	userGroupRateRepo UserGroupRateRepository,
+	cache GatewayCache,
+	cfg *config.Config,
+	schedulerSnapshot *SchedulerSnapshotService,
+	concurrencyService *ConcurrencyService,
+	billingService *BillingService,
+	rateLimitService *RateLimitService,
+	billingCacheService *BillingCacheService,
+	httpUpstream HTTPUpstream,
+	deferredService *DeferredService,
+	openAITokenProvider *OpenAITokenProvider,
+	grokTokenProvider *GrokTokenProvider,
+	resolver *ModelPricingResolver,
+	channelService *ChannelService,
+	settingService *SettingService,
+) *OpenAIGatewayService {
+	svc := NewOpenAIGatewayService(
+		accountRepo, usageLogRepo, usageBillingRepo, userRepo, nil, userGroupRateRepo,
+		cache, cfg, schedulerSnapshot, concurrencyService, billingService,
+		rateLimitService, billingCacheService, httpUpstream, deferredService,
+		openAITokenProvider, grokTokenProvider, resolver, channelService, nil,
+		settingService, nil,
+	)
+	svc.privateOperational = true
 	return svc
 }
 

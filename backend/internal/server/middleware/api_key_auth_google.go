@@ -15,7 +15,13 @@ import (
 
 // APIKeyAuthGoogle is a Google-style error wrapper for API key auth.
 func APIKeyAuthGoogle(apiKeyService *service.APIKeyService, cfg *config.Config) gin.HandlerFunc {
-	return APIKeyAuthWithSubscriptionGoogle(apiKeyService, nil, cfg)
+	return apiKeyAuthWithSubscriptionGoogle(apiKeyService, nil, cfg, false)
+}
+
+// APIKeyAuthGooglePrivate keeps Gemini's native error envelope while omitting
+// customer subscription lookups from the private public gateway.
+func APIKeyAuthGooglePrivate(apiKeyService *service.APIKeyService, cfg *config.Config) gin.HandlerFunc {
+	return apiKeyAuthWithSubscriptionGoogle(apiKeyService, nil, cfg, true)
 }
 
 // APIKeyAuthWithSubscriptionGoogle behaves like ApiKeyAuthWithSubscription but returns Google-style errors:
@@ -23,6 +29,10 @@ func APIKeyAuthGoogle(apiKeyService *service.APIKeyService, cfg *config.Config) 
 //
 // It is intended for Gemini native endpoints (/v1beta) to match Gemini SDK expectations.
 func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config) gin.HandlerFunc {
+	return apiKeyAuthWithSubscriptionGoogle(apiKeyService, subscriptionService, cfg, false)
+}
+
+func apiKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config, privateOperational bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if rejectInvalidAuthAbuse(c, apiKeyService) {
 			abortWithGoogleError(c, 429, "Too many invalid authentication attempts; retry later")
@@ -199,7 +209,7 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 			}
 
 			c.Set(string(ContextKeySubscription), subscription)
-		} else {
+		} else if !privateOperational {
 			if apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
 				abortWithGoogleError(c, 403, "Insufficient account balance")
 				return

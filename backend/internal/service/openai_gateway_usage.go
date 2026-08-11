@@ -247,6 +247,10 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if isSubscriptionBilling {
 		billingType = BillingTypeSubscription
 	}
+	if s.privateOperational {
+		isSubscriptionBilling = false
+		billingType = BillingTypeOperational
+	}
 
 	// Create usage log
 	durationMs := int(result.Duration.Milliseconds())
@@ -383,21 +387,24 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		quotaPlatform = PlatformFromAPIKey(apiKey)
 	}
 
-	billingErr := func() error {
-		_, err := applyUsageBilling(ctx, requestID, usageLog, &postUsageBillingParams{
-			Cost:                  cost,
-			User:                  user,
-			APIKey:                apiKey,
-			Account:               account,
-			Subscription:          subscription,
-			RequestPayloadHash:    resolveUsageBillingPayloadFingerprint(ctx, input.RequestPayloadHash),
-			IsSubscriptionBill:    isSubscriptionBilling,
-			AccountRateMultiplier: accountRateMultiplier,
-			APIKeyService:         input.APIKeyService,
-			Platform:              quotaPlatform,
-		}, s.billingDeps(), s.usageBillingRepo)
-		return err
-	}()
+	usageParams := &postUsageBillingParams{
+		Cost:                  cost,
+		User:                  user,
+		APIKey:                apiKey,
+		Account:               account,
+		Subscription:          subscription,
+		RequestPayloadHash:    resolveUsageBillingPayloadFingerprint(ctx, input.RequestPayloadHash),
+		IsSubscriptionBill:    isSubscriptionBilling,
+		AccountRateMultiplier: accountRateMultiplier,
+		APIKeyService:         input.APIKeyService,
+		Platform:              quotaPlatform,
+	}
+	var billingErr error
+	if s.privateOperational {
+		_, billingErr = applyPrivateOperationalUsage(ctx, requestID, usageLog, usageParams, s.billingDeps(), s.usageBillingRepo)
+	} else {
+		_, billingErr = applyUsageBilling(ctx, requestID, usageLog, usageParams, s.billingDeps(), s.usageBillingRepo)
+	}
 
 	if billingErr != nil {
 		usageLog.ActualCost = 0

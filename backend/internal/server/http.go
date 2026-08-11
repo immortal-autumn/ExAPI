@@ -103,7 +103,6 @@ func ProvidePublicRouter(
 	handlers *handler.Handlers,
 	apiKeyAuth middleware2.APIKeyAuthMiddleware,
 	apiKeyService *service.APIKeyService,
-	subscriptionService *service.SubscriptionService,
 	opsService *service.OpsService,
 	settingService *service.SettingService,
 	compositeResolver *service.CompositeRouteResolver,
@@ -116,7 +115,7 @@ func ProvidePublicRouter(
 	r := gin.New()
 	r.Use(middleware2.Recovery())
 	configureTrustedProxies(r, cfg.Server)
-	return &PublicRouter{SetupPublicRouter(r, handlers, apiKeyAuth, apiKeyService, subscriptionService, opsService, settingService, compositeResolver, cfg, db, redisClient)}
+	return &PublicRouter{SetupPublicRouter(r, handlers, apiKeyAuth, apiKeyService, opsService, settingService, compositeResolver, cfg, db, redisClient)}
 }
 
 func configureTrustedProxies(r *gin.Engine, cfg config.ServerConfig) {

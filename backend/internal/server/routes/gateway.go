@@ -22,7 +22,8 @@ import (
 	"github.com/tidwall/sjson"
 )
 
-// RegisterGatewayRoutes 注册 API 网关路由（Claude/OpenAI/Gemini 兼容）
+// RegisterGatewayRoutes retains the historical constructor for compatibility
+// tests and downstream integrations.
 func RegisterGatewayRoutes(
 	r *gin.Engine,
 	h *handler.Handlers,
@@ -34,6 +35,38 @@ func RegisterGatewayRoutes(
 	compositeResolver *service.CompositeRouteResolver,
 	cfg *config.Config,
 ) {
+	registerGatewayRoutes(r, h, apiKeyAuth, apiKeyService, subscriptionService, opsService, settingService, compositeResolver, cfg, false)
+}
+
+// RegisterPrivateGatewayRoutes registers the public API-key gateway without
+// constructing customer subscription state.
+func RegisterPrivateGatewayRoutes(
+	r *gin.Engine,
+	h *handler.Handlers,
+	apiKeyAuth middleware.APIKeyAuthMiddleware,
+	apiKeyService *service.APIKeyService,
+	opsService *service.OpsService,
+	settingService *service.SettingService,
+	compositeResolver *service.CompositeRouteResolver,
+	cfg *config.Config,
+) {
+	registerGatewayRoutes(r, h, apiKeyAuth, apiKeyService, nil, opsService, settingService, compositeResolver, cfg, true)
+}
+
+// registerGatewayRoutes is shared with legacy unit-test wiring. A nil
+// subscription service is the private-only operational policy.
+func registerGatewayRoutes(
+	r *gin.Engine,
+	h *handler.Handlers,
+	apiKeyAuth middleware.APIKeyAuthMiddleware,
+	apiKeyService *service.APIKeyService,
+	subscriptionService *service.SubscriptionService,
+	opsService *service.OpsService,
+	settingService *service.SettingService,
+	compositeResolver *service.CompositeRouteResolver,
+	cfg *config.Config,
+	privateOperational bool,
+) {
 	bodyLimit := middleware.RequestBodyLimit(cfg.Gateway.MaxBodySize)
 	textBodyLimit := middleware.RequestBodyLimit(cfg.Gateway.TextMaxBodySize)
 	clientRequestID := middleware.ClientRequestID()
@@ -41,6 +74,10 @@ func RegisterGatewayRoutes(
 	endpointNorm := handler.InboundEndpointMiddleware()
 	compositeTarget := compositeTargetPlatformMiddleware(compositeResolver)
 	compositeGeminiTarget := compositeGeminiTargetPlatformMiddleware(compositeResolver)
+	googleAPIKeyAuth := middleware.APIKeyAuthWithSubscriptionGoogle(apiKeyService, subscriptionService, cfg)
+	if privateOperational {
+		googleAPIKeyAuth = middleware.APIKeyAuthGooglePrivate(apiKeyService, cfg)
+	}
 
 	// 未分组 Key 拦截中间件（按协议格式区分错误响应）
 	requireGroupAnthropic := middleware.RequireGroupAssignment(settingService, middleware.AnthropicErrorWriter)
@@ -180,7 +217,9 @@ func RegisterGatewayRoutes(
 	gateway.Use(opsErrorLogger)
 	gateway.Use(endpointNorm)
 	gateway.Use(gin.HandlerFunc(apiKeyAuth))
-	gateway.GET("/sub2api/billing", h.Gateway.KeyBillingInfo)
+	if !privateOperational {
+		gateway.GET("/sub2api/billing", h.Gateway.KeyBillingInfo)
+	}
 	gateway.Use(compositeTarget)
 	gateway.Use(requireGroupAnthropic)
 	{
@@ -270,7 +309,7 @@ func RegisterGatewayRoutes(
 	gemini.Use(clientRequestID)
 	gemini.Use(opsErrorLogger)
 	gemini.Use(endpointNorm)
-	gemini.Use(middleware.APIKeyAuthWithSubscriptionGoogle(apiKeyService, subscriptionService, cfg))
+	gemini.Use(googleAPIKeyAuth)
 	gemini.Use(compositeGeminiTarget)
 	gemini.Use(requireGroupGoogle)
 	{
@@ -366,7 +405,7 @@ func RegisterGatewayRoutes(
 	antigravityV1Beta.Use(opsErrorLogger)
 	antigravityV1Beta.Use(endpointNorm)
 	antigravityV1Beta.Use(middleware.ForcePlatform(service.PlatformAntigravity))
-	antigravityV1Beta.Use(middleware.APIKeyAuthWithSubscriptionGoogle(apiKeyService, subscriptionService, cfg))
+	antigravityV1Beta.Use(googleAPIKeyAuth)
 	antigravityV1Beta.Use(requireGroupGoogle)
 	{
 		antigravityV1Beta.GET("/models", h.Gateway.GeminiV1BetaListModels)

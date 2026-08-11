@@ -82,16 +82,17 @@ type BatchImageOwner struct {
 }
 
 type BatchImagePublicService struct {
-	Repo              BatchImageRepository
-	AccountRepo       BatchImageAccountSelectionRepository
-	GroupRepo         BatchImageGroupPricingRepository
-	UserGroupRateRepo BatchImageUserGroupRateRepository
-	Queue             BatchImageQueue
-	ProviderRegistry  *BatchImageProviderRegistry
-	Pricing           BatchImagePricingResolver
-	BillingRepo       UsageBillingRepository
-	AuthCache         APIKeyAuthCacheInvalidator
-	Config            *config.Config
+	Repo               BatchImageRepository
+	AccountRepo        BatchImageAccountSelectionRepository
+	GroupRepo          BatchImageGroupPricingRepository
+	UserGroupRateRepo  BatchImageUserGroupRateRepository
+	Queue              BatchImageQueue
+	ProviderRegistry   *BatchImageProviderRegistry
+	Pricing            BatchImagePricingResolver
+	BillingRepo        UsageBillingRepository
+	AuthCache          APIKeyAuthCacheInvalidator
+	Config             *config.Config
+	PrivateOperational bool
 }
 
 type BatchImagePricingSnapshot struct {
@@ -197,6 +198,12 @@ func NewBatchImagePublicService(repo BatchImageRepository, accountRepo AccountRe
 	}
 }
 
+func NewPrivateBatchImagePublicService(repo BatchImageRepository, accountRepo AccountRepository, groupRepo GroupRepository, userGroupRateRepo UserGroupRateRepository, queue BatchImageQueue, pricing *BatchImageModelPricingResolver, authCache APIKeyAuthCacheInvalidator, cfg *config.Config) *BatchImagePublicService {
+	svc := NewBatchImagePublicService(repo, accountRepo, groupRepo, userGroupRateRepo, queue, pricing, nil, authCache, cfg)
+	svc.PrivateOperational = true
+	return svc
+}
+
 func (s *BatchImagePublicService) Submit(ctx context.Context, owner BatchImageOwner, req BatchImageSubmitRequest, idempotencyKey string) (*BatchImagePublicBatch, error) {
 	if !s.enabled() {
 		return nil, ErrBatchImageDisabled
@@ -257,6 +264,9 @@ func (s *BatchImagePublicService) Submit(ctx context.Context, owner BatchImageOw
 	accountID := account.ID
 	holdID := BatchImageHoldRequestID(batchID)
 	holdAmount := pricingSnapshot.HoldAmount
+	if s.PrivateOperational {
+		holdAmount = 0
+	}
 	job, err := s.Repo.CreateBatchImageJob(ctx, CreateBatchImageJobParams{
 		BatchID:                 batchID,
 		UserID:                  owner.UserID,
@@ -287,14 +297,16 @@ func (s *BatchImagePublicService) Submit(ctx context.Context, owner BatchImageOw
 	if err != nil {
 		return nil, err
 	}
-	if err := reserveBatchImageBalanceHold(ctx, s.BillingRepo, job, requestHash); err != nil {
-		code := "BILLING_HOLD_FAILED"
-		if errors.Is(err, ErrBatchImageInsufficientBalance) {
-			code = "INSUFFICIENT_BALANCE"
+	if !s.PrivateOperational {
+		if err := reserveBatchImageBalanceHold(ctx, s.BillingRepo, job, requestHash); err != nil {
+			code := "BILLING_HOLD_FAILED"
+			if errors.Is(err, ErrBatchImageInsufficientBalance) {
+				code = "INSUFFICIENT_BALANCE"
+			}
+			_ = s.Repo.RecordBatchImageJobSubmitFailure(ctx, job.BatchID, code, sanitizeBatchImagePublicMessage(err.Error()), true)
+			s.hidePreUpstreamSubmitFailure(ctx, owner, job)
+			return nil, err
 		}
-		_ = s.Repo.RecordBatchImageJobSubmitFailure(ctx, job.BatchID, code, sanitizeBatchImagePublicMessage(err.Error()), true)
-		s.hidePreUpstreamSubmitFailure(ctx, owner, job)
-		return nil, err
 	}
 	s.invalidateAuthCache(ctx, owner.UserID)
 	if err := s.createPendingItems(ctx, job.BatchID, requestHash, normalized.Items); err != nil {

@@ -722,6 +722,16 @@ func ProvideBillingCacheService(
 	return NewBillingCacheService(cache, userRepo, subRepo, apiKeyRepo, rpmCache, rateRepo, cfg, userPlatformQuotaRepo)
 }
 
+func ProvidePrivateBillingCacheService(
+	cache BillingCache,
+	apiKeyRepo APIKeyRepository,
+	rpmCache UserRPMCache,
+	rateRepo UserGroupRateRepository,
+	cfg *config.Config,
+) *BillingCacheService {
+	return NewPrivateBillingCacheService(cache, apiKeyRepo, rpmCache, rateRepo, cfg)
+}
+
 // ProvideAPIKeyService wires APIKeyService and connects rate-limit cache invalidation.
 func ProvideAPIKeyService(
 	apiKeyRepo APIKeyRepository,
@@ -735,6 +745,22 @@ func ProvideAPIKeyService(
 	concurrencyService *ConcurrencyService,
 ) *APIKeyService {
 	svc := NewAPIKeyService(apiKeyRepo, userRepo, groupRepo, userSubRepo, userGroupRateRepo, cache, cfg)
+	svc.SetRateLimitCacheInvalidator(billingCacheService)
+	svc.SetConcurrencyService(concurrencyService)
+	return svc
+}
+
+func ProvidePrivateAPIKeyService(
+	apiKeyRepo APIKeyRepository,
+	userRepo UserRepository,
+	groupRepo GroupRepository,
+	userGroupRateRepo UserGroupRateRepository,
+	cache APIKeyCache,
+	cfg *config.Config,
+	billingCacheService *BillingCacheService,
+	concurrencyService *ConcurrencyService,
+) *APIKeyService {
+	svc := NewPrivateAPIKeyService(apiKeyRepo, userRepo, groupRepo, userGroupRateRepo, cache, cfg)
 	svc.SetRateLimitCacheInvalidator(billingCacheService)
 	svc.SetConcurrencyService(concurrencyService)
 	return svc
@@ -771,7 +797,6 @@ var ProviderSet = wire.NewSet(
 	ProvideAuthService,
 	NewPasskeyService,
 	NewUserService,
-	ProvideAPIKeyService,
 	ProvideAPIKeyAuthCacheInvalidator,
 	ProvideAuthCacheInvalidationWorker,
 	NewGroupService,
@@ -785,19 +810,12 @@ var ProviderSet = wire.NewSet(
 	NewCockpitService,
 	ProvidePricingService,
 	NewBillingService,
-	ProvideBillingCacheService,
 	NewAnnouncementService,
-	NewAdminService,
-	NewGatewayService,
-	NewOpenAIGatewayService,
 	ProvideImageStorageSettingService,
 	ProvideImageTaskService,
 	ProvideBatchImageModelPricingResolver,
-	NewBatchImagePublicService,
 	NewBatchImageDownloadService,
 	ProvideBatchImageCleanupService,
-	ProvideBatchImageWorkerRuntime,
-	wire.Bind(new(AccountRuntimeBlocker), new(*OpenAIGatewayService)),
 	NewOAuthService,
 	ProvideOpenAIOAuthService,
 	NewGrokOAuthService,

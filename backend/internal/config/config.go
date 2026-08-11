@@ -1838,7 +1838,10 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 
 	// Auto-generate TOTP encryption key if not set (32 bytes = 64 hex chars for AES-256)
 	cfg.Totp.EncryptionKey = strings.TrimSpace(cfg.Totp.EncryptionKey)
-	if cfg.Totp.EncryptionKey == "" {
+	if SingleUserPrivateControlPlaneEnabled() {
+		cfg.Totp.EncryptionKey = ""
+		cfg.Totp.EncryptionKeyConfigured = false
+	} else if cfg.Totp.EncryptionKey == "" {
 		key, err := generateJWTSecret(32) // Reuse the same random generation function
 		if err != nil {
 			return nil, fmt.Errorf("generate totp encryption key error: %w", err)
@@ -2597,14 +2600,16 @@ func (c *Config) Validate() error {
 	if SingleUserPrivateControlPlaneEnabled() && strings.TrimSpace(c.Redis.Password) == "" {
 		return fmt.Errorf("redis.password is required in private single-operator mode")
 	}
-	jwtSecret := strings.TrimSpace(c.JWT.Secret)
-	if jwtSecret == "" {
-		return fmt.Errorf("jwt.secret is required")
-	}
-	// NOTE: 按 UTF-8 编码后的字节长度计算。
-	// 选择 bytes 而不是 rune 计数，确保二进制/随机串的长度语义更接近“熵”而非“字符数”。
-	if len([]byte(jwtSecret)) < 32 {
-		return fmt.Errorf("jwt.secret must be at least 32 bytes")
+	if !SingleUserPrivateControlPlaneEnabled() {
+		jwtSecret := strings.TrimSpace(c.JWT.Secret)
+		if jwtSecret == "" {
+			return fmt.Errorf("jwt.secret is required")
+		}
+		// NOTE: 按 UTF-8 编码后的字节长度计算。
+		// 选择 bytes 而不是 rune 计数，确保二进制/随机串的长度语义更接近“熵”而非“字符数”。
+		if len([]byte(jwtSecret)) < 32 {
+			return fmt.Errorf("jwt.secret must be at least 32 bytes")
+		}
 	}
 	switch c.Log.Level {
 	case "debug", "info", "warn", "error":
