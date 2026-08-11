@@ -23,9 +23,16 @@ import (
 )
 
 const (
-	ConfirmationPrefix   = "DROP-SAAS-DATA-KEEP-USER-"
-	privateSchemaVersion = 1
-	advisoryLockKey      = "exapi:migrate-private-only:v1"
+	ConfirmationPrefix    = "DROP-SAAS-DATA-KEEP-USER-"
+	privateSchemaVersion  = 1
+	advisoryLockKey       = "exapi:migrate-private-only:v1"
+	privateStateUpsertSQL = `INSERT INTO exapi_private_state (id, private_schema_version, operator_id, cutover_at)
+		VALUES (true, $1, $2, $3)
+		ON CONFLICT (id) DO UPDATE SET
+			private_schema_version = EXCLUDED.private_schema_version,
+			operator_id = EXCLUDED.operator_id,
+			cutover_at = EXCLUDED.cutover_at,
+			report_sha256 = ''`
 )
 
 // CutoverOptions controls the destructive, offline-only migration. A backup
@@ -283,7 +290,7 @@ func RunWithOptions(ctx context.Context, db *sql.DB, confirmation string, report
 	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS exapi_private_state (id boolean PRIMARY KEY DEFAULT true CHECK (id), private_schema_version integer NOT NULL, operator_id bigint NOT NULL REFERENCES users(id), cutover_at timestamptz NOT NULL, report_sha256 text NOT NULL DEFAULT '')`); err != nil {
 		return MigrationReport{}, fmt.Errorf("create private state: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO exapi_private_state (id, private_schema_version, operator_id, cutover_at) VALUES (true, $1, $2, $3) ON CONFLICT (id) DO UPDATE SET private_schema_version = EXCLUDED.private_schema_version, operator_id = EXCLUDED.operator_id, cutover_at = EXCLUDED.cutover_at`, privateSchemaVersion, operatorID, cutoverAt); err != nil {
+	if _, err := tx.ExecContext(ctx, privateStateUpsertSQL, privateSchemaVersion, operatorID, cutoverAt); err != nil {
 		return MigrationReport{}, fmt.Errorf("record private schema version: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -352,13 +359,54 @@ func validateReportOptions(options CutoverOptions) error {
 		}
 		return nil
 	}
-	directory := filepath.Dir(filepath.Clean(path))
+	cleanPath := filepath.Clean(path)
+	if destinationInfo, err := os.Stat(cleanPath); err == nil {
+		if destinationInfo.IsDir() {
+			return fmt.Errorf("validate migration report path: %s is a directory", cleanPath)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("validate migration report path: %w", err)
+	}
+
+	directory := filepath.Dir(cleanPath)
 	info, err := os.Stat(directory)
 	if err != nil {
 		return fmt.Errorf("validate migration report directory: %w", err)
 	}
 	if !info.IsDir() {
 		return fmt.Errorf("validate migration report directory: %s is not a directory", directory)
+	}
+	// Prove the final report can be staged with its required protections before
+	// the destructive transaction begins. Stat/access-bit checks alone are not
+	// sufficient for read-only mounts, ACLs, quotas, or exhausted filesystems.
+	probe, err := os.CreateTemp(directory, "."+filepath.Base(cleanPath)+".preflight-*")
+	if err != nil {
+		return fmt.Errorf("probe migration report destination: %w", err)
+	}
+	probePath := probe.Name()
+	defer func() {
+		_ = probe.Close()
+		_ = os.Remove(probePath)
+	}()
+	if err := probe.Chmod(0o600); err != nil {
+		return fmt.Errorf("protect migration report preflight: %w", err)
+	}
+	if err := probe.Sync(); err != nil {
+		return fmt.Errorf("sync migration report preflight: %w", err)
+	}
+	if err := probe.Close(); err != nil {
+		return fmt.Errorf("close migration report preflight: %w", err)
+	}
+	if err := os.Remove(probePath); err != nil {
+		return fmt.Errorf("remove migration report preflight: %w", err)
+	}
+	directoryHandle, err := os.Open(directory)
+	if err != nil {
+		return fmt.Errorf("open migration report directory preflight: %w", err)
+	}
+	defer directoryHandle.Close()
+	if err := directoryHandle.Sync(); err != nil {
+		return fmt.Errorf("sync migration report directory preflight: %w", err)
 	}
 	return nil
 }

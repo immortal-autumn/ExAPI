@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -88,6 +89,12 @@ func TestRecordReportDigestRejectsMissingStateRow(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestPrivateStateUpsertClearsStaleReportDigest(t *testing.T) {
+	sql := strings.Join(strings.Fields(privateStateUpsertSQL), " ")
+	require.Contains(t, sql, "ON CONFLICT (id) DO UPDATE")
+	require.Contains(t, sql, "report_sha256 = ''")
+}
+
 func TestWriteDurableReportInstallsProtectedFile(t *testing.T) {
 	directory := t.TempDir()
 	path := filepath.Join(directory, "private-cutover-report.json")
@@ -110,6 +117,35 @@ func TestWriteDurableReportCompatibilityOutput(t *testing.T) {
 	require.NoError(t, writeDurableReport("", &output, []byte("report")))
 	require.Equal(t, "report", output.String())
 	require.ErrorContains(t, writeDurableReport("", nil, []byte("report")), "output is required")
+}
+
+func TestValidateReportOptionsProbesDestinationBeforeCutover(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "private-cutover-report.json")
+	require.NoError(t, validateReportOptions(CutoverOptions{ReportPath: path}))
+
+	matches, err := filepath.Glob(filepath.Join(directory, ".private-cutover-report.json.preflight-*"))
+	require.NoError(t, err)
+	require.Empty(t, matches)
+
+	require.ErrorContains(t,
+		validateReportOptions(CutoverOptions{ReportPath: directory}),
+		"is a directory",
+	)
+}
+
+func TestValidateReportOptionsRejectsUnwritableDestination(t *testing.T) {
+	directory := t.TempDir()
+	require.NoError(t, os.Chmod(directory, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(directory, 0o700) })
+
+	err := validateReportOptions(CutoverOptions{
+		ReportPath: filepath.Join(directory, "private-cutover-report.json"),
+	})
+	if err == nil {
+		t.Skip("current user can write through directory permissions")
+	}
+	require.ErrorContains(t, err, "probe migration report destination")
 }
 
 func TestParseConfirmationRejectsNearMisses(t *testing.T) {

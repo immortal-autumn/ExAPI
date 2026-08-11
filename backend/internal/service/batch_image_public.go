@@ -76,9 +76,11 @@ type BatchImageReferenceInput struct {
 }
 
 type BatchImageOwner struct {
-	UserID   int64
-	APIKeyID int64
-	GroupID  *int64
+	UserID                 int64
+	APIKeyID               int64
+	GroupID                *int64
+	APIKeyQuotaTracked     bool
+	APIKeyRateLimitTracked bool
 }
 
 type BatchImagePublicService struct {
@@ -288,6 +290,10 @@ func (s *BatchImagePublicService) Submit(ctx context.Context, owner BatchImageOw
 		BillableUnitPrice:       pricingSnapshot.BillableUnitPrice,
 		HoldUnitPrice:           pricingSnapshot.HoldUnitPrice,
 		PricingSnapshotVersion:  1,
+		APIKeyQuotaTracked:      owner.APIKeyQuotaTracked,
+		APIKeyRateLimitTracked:  owner.APIKeyRateLimitTracked,
+		AccountTypeSnapshot:     account.Type,
+		AccountQuotaTracked:     account.IsAPIKeyOrBedrock() && account.HasAnyQuotaLimit(),
 		Currency:                "USD",
 		HoldID:                  &holdID,
 		IdempotencyKey:          batchImageOptionalStringPtr(idempotencyKey),

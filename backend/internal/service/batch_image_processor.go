@@ -35,6 +35,10 @@ type BatchImageAccountLookup interface {
 	GetByID(ctx context.Context, id int64) (*Account, error)
 }
 
+type batchImageDeletedAccountLookup interface {
+	GetByIDIncludingDeleted(ctx context.Context, id int64) (*Account, error)
+}
+
 type BatchImageAccountRepositoryResolver struct {
 	Repo BatchImageAccountLookup
 }
@@ -43,7 +47,15 @@ func (r *BatchImageAccountRepositoryResolver) ResolveBatchImageAccount(ctx conte
 	if r == nil || r.Repo == nil {
 		return nil, ErrAccountNotFound
 	}
-	return r.Repo.GetByID(ctx, accountID)
+	account, err := r.Repo.GetByID(ctx, accountID)
+	if err == nil || !errors.Is(err, ErrAccountNotFound) {
+		return account, err
+	}
+	retained, ok := r.Repo.(batchImageDeletedAccountLookup)
+	if !ok {
+		return nil, err
+	}
+	return retained.GetByIDIncludingDeleted(ctx, accountID)
 }
 
 type BatchImageProviderProcessor struct {

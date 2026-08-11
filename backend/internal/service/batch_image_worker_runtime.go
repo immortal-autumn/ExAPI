@@ -64,7 +64,6 @@ func ProvideBatchImageWorkerRuntime(
 func ProvidePrivateBatchImageWorkerRuntime(
 	repo BatchImageRepository,
 	accountRepo AccountRepository,
-	apiKeyRepo APIKeyRepository,
 	queue BatchImageQueue,
 	billingRepo UsageBillingRepository,
 	billingCache *BillingCacheService,
@@ -83,8 +82,6 @@ func ProvidePrivateBatchImageWorkerRuntime(
 		SettlementService: &BatchImageSettlementService{
 			Repo:               repo,
 			BillingRepo:        billingRepo,
-			APIKeys:            apiKeyRepo,
-			Accounts:           accountRepo,
 			BillingCache:       billingCache,
 			UsageLogRepo:       usageLogRepo,
 			Pricing:            pricing,

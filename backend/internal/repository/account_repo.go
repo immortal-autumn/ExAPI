@@ -26,6 +26,7 @@ import (
 	dbgroup "github.com/Wei-Shaw/sub2api/ent/group"
 	dbpredicate "github.com/Wei-Shaw/sub2api/ent/predicate"
 	dbproxy "github.com/Wei-Shaw/sub2api/ent/proxy"
+	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
@@ -274,6 +275,25 @@ func (r *accountRepository) GetByID(ctx context.Context, id int64) (*service.Acc
 		return nil, translatePersistenceError(err, service.ErrAccountNotFound, nil)
 	}
 
+	accounts, err := r.accountsToService(ctx, []*dbent.Account{m})
+	if err != nil {
+		return nil, err
+	}
+	if len(accounts) == 0 {
+		return nil, service.ErrAccountNotFound
+	}
+	return &accounts[0], nil
+}
+
+// GetByIDIncludingDeleted is intentionally scoped to already-admitted batch
+// image work. Account deletion removes the resource from scheduling, but an
+// upstream asynchronous job may still need the retained credential tombstone
+// to poll, index, cancel, download, or clean up provider artifacts.
+func (r *accountRepository) GetByIDIncludingDeleted(ctx context.Context, id int64) (*service.Account, error) {
+	m, err := r.client.Account.Query().Where(dbaccount.IDEQ(id)).Only(mixins.SkipSoftDelete(ctx))
+	if err != nil {
+		return nil, translatePersistenceError(err, service.ErrAccountNotFound, nil)
+	}
 	accounts, err := r.accountsToService(ctx, []*dbent.Account{m})
 	if err != nil {
 		return nil, err

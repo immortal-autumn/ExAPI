@@ -131,6 +131,10 @@ type BatchImageJob struct {
 	BillableUnitPrice       float64
 	HoldUnitPrice           float64
 	PricingSnapshotVersion  int
+	APIKeyQuotaTracked      bool
+	APIKeyRateLimitTracked  bool
+	AccountTypeSnapshot     string
+	AccountQuotaTracked     bool
 	Currency                string
 	HoldID                  *string
 
@@ -191,6 +195,10 @@ type CreateBatchImageJobParams struct {
 	BillableUnitPrice       float64
 	HoldUnitPrice           float64
 	PricingSnapshotVersion  int
+	APIKeyQuotaTracked      bool
+	APIKeyRateLimitTracked  bool
+	AccountTypeSnapshot     string
+	AccountQuotaTracked     bool
 	Currency                string
 	HoldID                  *string
 

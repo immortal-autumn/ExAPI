@@ -24,10 +24,15 @@ type BatchImageHandler struct {
 	cleanup  *service.BatchImageCleanupService
 	openAI   *OpenAIGatewayHandler
 	apiKeys  batchImageAPIKeyLookup
+	billing  batchImageBillingEligibilityChecker
 }
 
 type batchImageAPIKeyLookup interface {
 	GetByID(ctx context.Context, id int64) (*service.APIKey, error)
+}
+
+type batchImageBillingEligibilityChecker interface {
+	CheckBillingEligibility(ctx context.Context, user *service.User, apiKey *service.APIKey, group *service.Group, subscription *service.UserSubscription, platform string) error
 }
 
 // BindOperatorAPIKey resolves an operator-owned key by opaque database ID.
@@ -79,6 +84,9 @@ func (h *BatchImageHandler) Submit(c *gin.Context) {
 	if !h.checkSecurityAuditBeforeSubmit(c, &req) {
 		return
 	}
+	if !h.checkPrivateBillingEligibility(c) {
+		return
+	}
 	if sessionID := service.ExtractClientSessionID(c); sessionID != "" {
 		req.SessionID = &sessionID
 	}
@@ -88,6 +96,33 @@ func (h *BatchImageHandler) Submit(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, got)
+}
+
+func (h *BatchImageHandler) checkPrivateBillingEligibility(c *gin.Context) bool {
+	if h == nil || h.service == nil || !h.service.PrivateOperational {
+		return true
+	}
+	apiKey, ok := middleware.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.User == nil {
+		batchImageError(c, infraerrors.New(http.StatusUnauthorized, "API_KEY_REQUIRED", "API key is required"))
+		return false
+	}
+	if h.billing == nil {
+		batchImageError(c, infraerrors.New(http.StatusServiceUnavailable, "BILLING_UNAVAILABLE", "Operational limiter unavailable"))
+		return false
+	}
+	if err := h.billing.CheckBillingEligibility(
+		c.Request.Context(),
+		apiKey.User,
+		apiKey,
+		apiKey.Group,
+		nil,
+		service.PlatformGemini,
+	); err != nil {
+		batchImageError(c, err)
+		return false
+	}
+	return true
 }
 
 func (h *BatchImageHandler) checkSecurityAuditBeforeSubmit(c *gin.Context, req *service.BatchImageSubmitRequest) bool {
@@ -318,9 +353,11 @@ func batchImageOwnerFromContext(c *gin.Context) (service.BatchImageOwner, bool) 
 		return service.BatchImageOwner{}, false
 	}
 	return service.BatchImageOwner{
-		UserID:   apiKey.UserID,
-		APIKeyID: apiKey.ID,
-		GroupID:  apiKey.GroupID,
+		UserID:                 apiKey.UserID,
+		APIKeyID:               apiKey.ID,
+		GroupID:                apiKey.GroupID,
+		APIKeyQuotaTracked:     apiKey.Quota > 0,
+		APIKeyRateLimitTracked: apiKey.HasRateLimits(),
 	}, true
 }
 

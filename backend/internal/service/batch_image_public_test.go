@@ -69,10 +69,16 @@ func TestBatchImagePublicService_Submit(t *testing.T) {
 	t.Run("private operational submit records zero hold and never reserves balance", func(t *testing.T) {
 		svc, repo, queue, gemini, _ := newTestBatchImagePublicService(true)
 		svc.PrivateOperational = true
+		accountRepo := svc.AccountRepo.(*publicBatchImageAccountRepo)
+		accountRepo.accounts[1].Type = AccountTypeAPIKey
+		accountRepo.accounts[1].Extra = map[string]any{"quota_limit": 100.0}
 		billing := svc.BillingRepo.(*fakeBatchImageBillingRepo)
 		billing.reserveErr = errors.New("reserve must not be called")
 
-		got, err := svc.Submit(ctx, testBatchImageOwner(), validBatchImageSubmitRequest(), "private-submit")
+		owner := testBatchImageOwner()
+		owner.APIKeyQuotaTracked = true
+		owner.APIKeyRateLimitTracked = true
+		got, err := svc.Submit(ctx, owner, validBatchImageSubmitRequest(), "private-submit")
 		require.NoError(t, err)
 		require.Zero(t, got.HoldAmount)
 		require.Empty(t, billing.reserves)
@@ -80,6 +86,10 @@ func TestBatchImagePublicService_Submit(t *testing.T) {
 		require.Equal(t, []string{got.ID}, queue.enqueued)
 		require.NotNil(t, repo.jobs[got.ID].HoldAmount)
 		require.Zero(t, *repo.jobs[got.ID].HoldAmount)
+		require.True(t, repo.jobs[got.ID].APIKeyQuotaTracked)
+		require.True(t, repo.jobs[got.ID].APIKeyRateLimitTracked)
+		require.Equal(t, AccountTypeAPIKey, repo.jobs[got.ID].AccountTypeSnapshot)
+		require.True(t, repo.jobs[got.ID].AccountQuotaTracked)
 	})
 
 	t.Run("combines user group image rate account rate discount and hold margin", func(t *testing.T) {

@@ -323,6 +323,34 @@ func TestCanTransitionBatchImageJob_PR5DirectIndexing(t *testing.T) {
 	require.True(t, CanTransitionBatchImageJob(BatchImageJobStatusIndexing, BatchImageJobStatusFailed))
 }
 
+func TestBatchImageAccountRepositoryResolverFallsBackToDeletedTombstone(t *testing.T) {
+	retained := &Account{ID: 42, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "retained"}}
+	lookup := &batchImageDeletedAccountLookupStub{retained: retained}
+	resolver := &BatchImageAccountRepositoryResolver{Repo: lookup}
+
+	got, err := resolver.ResolveBatchImageAccount(context.Background(), retained.ID)
+	require.NoError(t, err)
+	require.Same(t, retained, got)
+	require.Equal(t, 1, lookup.activeCalls)
+	require.Equal(t, 1, lookup.retainedCalls)
+}
+
+type batchImageDeletedAccountLookupStub struct {
+	retained      *Account
+	activeCalls   int
+	retainedCalls int
+}
+
+func (s *batchImageDeletedAccountLookupStub) GetByID(context.Context, int64) (*Account, error) {
+	s.activeCalls++
+	return nil, ErrAccountNotFound
+}
+
+func (s *batchImageDeletedAccountLookupStub) GetByIDIncludingDeleted(context.Context, int64) (*Account, error) {
+	s.retainedCalls++
+	return s.retained, nil
+}
+
 func newTestBatchImageProcessor(repo *fakeBatchImageRepository, provider *fakeProcessorProvider) *BatchImageProviderProcessor {
 	return &BatchImageProviderProcessor{
 		Repo:             repo,
@@ -422,6 +450,10 @@ func (r *fakeBatchImageRepository) CreateBatchImageJob(_ context.Context, params
 		BillableUnitPrice:       params.BillableUnitPrice,
 		HoldUnitPrice:           params.HoldUnitPrice,
 		PricingSnapshotVersion:  params.PricingSnapshotVersion,
+		APIKeyQuotaTracked:      params.APIKeyQuotaTracked,
+		APIKeyRateLimitTracked:  params.APIKeyRateLimitTracked,
+		AccountTypeSnapshot:     params.AccountTypeSnapshot,
+		AccountQuotaTracked:     params.AccountQuotaTracked,
 		Currency:                params.Currency,
 		IdempotencyKey:          params.IdempotencyKey,
 		RequestHash:             params.RequestHash,

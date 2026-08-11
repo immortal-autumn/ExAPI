@@ -57,22 +57,12 @@ func (r *BatchImageModelPricingResolver) BatchImageUnitPrice(ctx context.Context
 type BatchImageSettlementService struct {
 	Repo               BatchImageRepository
 	BillingRepo        UsageBillingRepository
-	APIKeys            batchImageSettlementAPIKeyLookup
-	Accounts           batchImageSettlementAccountLookup
 	BillingCache       *BillingCacheService
 	UsageLogRepo       UsageLogRepository
 	Pricing            BatchImagePricingResolver
 	AuthCache          APIKeyAuthCacheInvalidator
 	Config             *config.Config
 	PrivateOperational bool
-}
-
-type batchImageSettlementAPIKeyLookup interface {
-	GetByID(ctx context.Context, id int64) (*APIKey, error)
-}
-
-type batchImageSettlementAccountLookup interface {
-	GetByID(ctx context.Context, id int64) (*Account, error)
 }
 
 type BatchImageSettlementResult struct {
@@ -206,45 +196,38 @@ func (s *BatchImageSettlementService) Settle(ctx context.Context, batchID string
 }
 
 func (s *BatchImageSettlementService) applyPrivateOperationalUsage(ctx context.Context, job *BatchImageJob, actualCost float64, manifestHash string) error {
-	if s == nil || s.BillingRepo == nil || s.APIKeys == nil || s.Accounts == nil || job == nil || job.APIKeyID == nil || job.AccountID == nil {
+	if s == nil || s.BillingRepo == nil || job == nil || job.APIKeyID == nil || job.AccountID == nil {
 		return errors.New("private batch image operational billing is not configured")
-	}
-	apiKey, err := s.APIKeys.GetByID(ctx, *job.APIKeyID)
-	if err != nil {
-		return fmt.Errorf("load batch image API key: %w", err)
-	}
-	if apiKey == nil || apiKey.UserID != job.UserID {
-		return errors.New("batch image API key ownership changed")
-	}
-	account, err := s.Accounts.GetByID(ctx, *job.AccountID)
-	if err != nil {
-		return fmt.Errorf("load batch image account: %w", err)
-	}
-	if account == nil {
-		return errors.New("batch image account is unavailable")
 	}
 
 	cmd := &UsageBillingCommand{
 		RequestID:          BatchImageCaptureRequestID(job.BatchID),
-		APIKeyID:           apiKey.ID,
+		APIKeyID:           *job.APIKeyID,
 		RequestPayloadHash: strings.TrimSpace(manifestHash),
 		UserID:             job.UserID,
-		AccountID:          account.ID,
-		AccountType:        account.Type,
+		AccountID:          *job.AccountID,
+		AccountType:        job.AccountTypeSnapshot,
 		Model:              job.Model,
 		BillingType:        BillingTypeOperational,
 		ImageCount:         job.SuccessCount,
 		MediaType:          "image",
 	}
 	if actualCost > 0 {
-		if apiKey.Quota > 0 {
+		// The batch job is the immutable accounting source. Management rows can
+		// be deleted while upstream work is running, so settlement uses only the
+		// policy and pricing snapshots captured when the job was admitted.
+		if job.APIKeyQuotaTracked {
 			cmd.APIKeyQuotaCost = actualCost
 		}
-		if apiKey.HasRateLimits() {
+		if job.APIKeyRateLimitTracked {
 			cmd.APIKeyRateLimitCost = actualCost
 		}
-		if account.IsAPIKeyOrBedrock() && account.HasAnyQuotaLimit() {
-			cmd.AccountQuotaCost = actualCost
+		if job.PricingSnapshotVersion >= 1 && job.AccountQuotaTracked {
+			cmd.AccountQuotaCost = float64(job.SuccessCount) *
+				job.BaseUnitPrice *
+				job.GroupRateMultiplier *
+				job.BatchDiscountMultiplier *
+				job.AccountRateMultiplier
 		}
 	}
 	cmd.Normalize()
@@ -252,11 +235,11 @@ func (s *BatchImageSettlementService) applyPrivateOperationalUsage(ctx context.C
 	if err != nil {
 		return err
 	}
-	if apiKey.HasRateLimits() && actualCost > 0 && s.BillingCache != nil {
+	if job.APIKeyRateLimitTracked && actualCost > 0 && s.BillingCache != nil {
 		if result != nil && result.Applied {
-			s.BillingCache.QueueUpdateAPIKeyRateLimitUsage(apiKey.ID, actualCost)
+			s.BillingCache.QueueUpdateAPIKeyRateLimitUsage(*job.APIKeyID, actualCost)
 		} else {
-			_ = s.BillingCache.InvalidateAPIKeyRateLimit(ctx, apiKey.ID)
+			_ = s.BillingCache.InvalidateAPIKeyRateLimit(ctx, *job.APIKeyID)
 		}
 	}
 	return nil

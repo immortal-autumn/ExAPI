@@ -141,10 +141,12 @@ func ProvideBatchImageHandler(
 	cleanup *service.BatchImageCleanupService,
 	openAI *OpenAIGatewayHandler,
 	apiKeyService *service.APIKeyService,
+	billingCacheService *service.BillingCacheService,
 ) *BatchImageHandler {
 	h := NewBatchImageHandler(batchService, download, cleanup)
 	h.openAI = openAI
 	h.apiKeys = apiKeyService
+	h.billing = billingCacheService
 	return h
 }
 

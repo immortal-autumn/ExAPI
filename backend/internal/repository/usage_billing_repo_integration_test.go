@@ -80,6 +80,77 @@ func TestUsageBillingRepositoryApply_DeduplicatesBalanceBilling(t *testing.T) {
 	require.Equal(t, 1, dedupCount)
 }
 
+func TestUsageBillingRepositoryApply_OperationalUsageSurvivesManagementDeletion(t *testing.T) {
+	ctx := context.Background()
+	client := testEntClient(t)
+	repo := NewUsageBillingRepository(client, integrationDB)
+
+	user := mustCreateUser(t, client, &service.User{
+		Email:        fmt.Sprintf("operational-deleted-user-%d@example.com", time.Now().UnixNano()),
+		PasswordHash: "hash",
+	})
+	apiKey := mustCreateApiKey(t, client, &service.APIKey{
+		UserID:      user.ID,
+		Key:         "sk-operational-deleted-" + uuid.NewString(),
+		Name:        "operational-deleted",
+		Quota:       100,
+		RateLimit1d: 100,
+	})
+	account := mustCreateAccount(t, client, &service.Account{
+		Name:  "operational-deleted-account-" + uuid.NewString(),
+		Type:  service.AccountTypeAPIKey,
+		Extra: map[string]any{"quota_limit": 100.0},
+	})
+
+	_, err := integrationDB.ExecContext(ctx, `UPDATE api_keys SET deleted_at = NOW() WHERE id = $1`, apiKey.ID)
+	require.NoError(t, err)
+	_, err = integrationDB.ExecContext(ctx, `UPDATE accounts SET deleted_at = NOW() WHERE id = $1`, account.ID)
+	require.NoError(t, err)
+
+	cmd := &service.UsageBillingCommand{
+		RequestID:           uuid.NewString(),
+		APIKeyID:            apiKey.ID,
+		UserID:              user.ID,
+		AccountID:           account.ID,
+		AccountType:         service.AccountTypeAPIKey,
+		BillingType:         service.BillingTypeOperational,
+		APIKeyQuotaCost:     0.75,
+		APIKeyRateLimitCost: 0.75,
+		AccountQuotaCost:    0.75,
+	}
+	first, err := repo.Apply(ctx, cmd)
+	require.NoError(t, err)
+	require.True(t, first.Applied)
+
+	second, err := repo.Apply(ctx, cmd)
+	require.NoError(t, err)
+	require.False(t, second.Applied)
+
+	var quotaUsed, usage1d float64
+	require.NoError(t, integrationDB.QueryRowContext(ctx,
+		`SELECT quota_used, usage_1d FROM api_keys WHERE id = $1`, apiKey.ID,
+	).Scan(&quotaUsed, &usage1d))
+	require.InDelta(t, 0.75, quotaUsed, 0.000001)
+	require.InDelta(t, 0.75, usage1d, 0.000001)
+
+	var accountQuotaUsed float64
+	require.NoError(t, integrationDB.QueryRowContext(ctx,
+		`SELECT COALESCE((extra->>'quota_used')::numeric, 0) FROM accounts WHERE id = $1`, account.ID,
+	).Scan(&accountQuotaUsed))
+	require.InDelta(t, 0.75, accountQuotaUsed, 0.000001)
+
+	_, err = repo.Apply(ctx, &service.UsageBillingCommand{
+		RequestID:       uuid.NewString(),
+		APIKeyID:        apiKey.ID,
+		UserID:          user.ID,
+		AccountID:       account.ID,
+		AccountType:     service.AccountTypeAPIKey,
+		APIKeyQuotaCost: 0.25,
+	})
+	require.ErrorIs(t, err, service.ErrAPIKeyNotFound,
+		"non-operational billing must continue to reject deleted targets")
+}
+
 func TestUsageBillingRepositoryApply_DeduplicatesSubscriptionBilling(t *testing.T) {
 	ctx := context.Background()
 	client := testEntClient(t)

@@ -172,6 +172,7 @@ func (r *usageBillingRepository) applyBatchImageBalanceHold(
 }
 
 func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, tx *sql.Tx, cmd *service.UsageBillingCommand, result *service.UsageBillingApplyResult) error {
+	allowDeletedOperationalTarget := cmd.BillingType == service.BillingTypeOperational
 	if cmd.SubscriptionCost > 0 && cmd.SubscriptionID != nil {
 		if err := incrementUsageBillingSubscription(ctx, tx, *cmd.SubscriptionID, cmd.SubscriptionCost); err != nil {
 			return err
@@ -188,7 +189,7 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 	}
 
 	if cmd.APIKeyQuotaCost > 0 {
-		exhausted, err := incrementUsageBillingAPIKeyQuota(ctx, tx, cmd.APIKeyID, cmd.APIKeyQuotaCost)
+		exhausted, err := incrementUsageBillingAPIKeyQuota(ctx, tx, cmd.APIKeyID, cmd.APIKeyQuotaCost, allowDeletedOperationalTarget)
 		if err != nil {
 			return err
 		}
@@ -196,13 +197,13 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 	}
 
 	if cmd.APIKeyRateLimitCost > 0 {
-		if err := incrementUsageBillingAPIKeyRateLimit(ctx, tx, cmd.APIKeyID, cmd.APIKeyRateLimitCost); err != nil {
+		if err := incrementUsageBillingAPIKeyRateLimit(ctx, tx, cmd.APIKeyID, cmd.APIKeyRateLimitCost, allowDeletedOperationalTarget); err != nil {
 			return err
 		}
 	}
 
 	if cmd.AccountQuotaCost > 0 && (strings.EqualFold(cmd.AccountType, service.AccountTypeAPIKey) || strings.EqualFold(cmd.AccountType, service.AccountTypeBedrock)) {
-		quotaState, err := incrementUsageBillingAccountQuota(ctx, tx, cmd.AccountID, cmd.AccountQuotaCost)
+		quotaState, err := incrementUsageBillingAccountQuota(ctx, tx, cmd.AccountID, cmd.AccountQuotaCost, allowDeletedOperationalTarget)
 		if err != nil {
 			return err
 		}
@@ -413,7 +414,7 @@ func userExistsForBilling(ctx context.Context, tx *sql.Tx, userID int64) (bool, 
 	return true, nil
 }
 
-func incrementUsageBillingAPIKeyQuota(ctx context.Context, tx *sql.Tx, apiKeyID int64, amount float64) (bool, error) {
+func incrementUsageBillingAPIKeyQuota(ctx context.Context, tx *sql.Tx, apiKeyID int64, amount float64, allowDeleted bool) (bool, error) {
 	var exhausted bool
 	err := tx.QueryRowContext(ctx, `
 		UPDATE api_keys
@@ -427,9 +428,9 @@ func incrementUsageBillingAPIKeyQuota(ctx context.Context, tx *sql.Tx, apiKeyID 
 				ELSE status
 			END,
 			updated_at = NOW()
-		WHERE id = $2 AND deleted_at IS NULL
+		WHERE id = $2 AND (deleted_at IS NULL OR $5)
 		RETURNING quota > 0 AND quota_used >= quota AND quota_used - $1 < quota
-	`, amount, apiKeyID, service.StatusAPIKeyActive, service.StatusAPIKeyQuotaExhausted).Scan(&exhausted)
+	`, amount, apiKeyID, service.StatusAPIKeyActive, service.StatusAPIKeyQuotaExhausted, allowDeleted).Scan(&exhausted)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, service.ErrAPIKeyNotFound
 	}
@@ -439,7 +440,7 @@ func incrementUsageBillingAPIKeyQuota(ctx context.Context, tx *sql.Tx, apiKeyID 
 	return exhausted, nil
 }
 
-func incrementUsageBillingAPIKeyRateLimit(ctx context.Context, tx *sql.Tx, apiKeyID int64, cost float64) error {
+func incrementUsageBillingAPIKeyRateLimit(ctx context.Context, tx *sql.Tx, apiKeyID int64, cost float64, allowDeleted bool) error {
 	res, err := tx.ExecContext(ctx, `
 		UPDATE api_keys SET
 			usage_5h = CASE WHEN window_5h_start IS NOT NULL AND window_5h_start + INTERVAL '5 hours' <= NOW() THEN $1 ELSE usage_5h + $1 END,
@@ -449,8 +450,8 @@ func incrementUsageBillingAPIKeyRateLimit(ctx context.Context, tx *sql.Tx, apiKe
 			window_1d_start = CASE WHEN window_1d_start IS NULL OR window_1d_start + INTERVAL '24 hours' <= NOW() THEN date_trunc('day', NOW()) ELSE window_1d_start END,
 			window_7d_start = CASE WHEN window_7d_start IS NULL OR window_7d_start + INTERVAL '7 days' <= NOW() THEN date_trunc('day', NOW()) ELSE window_7d_start END,
 			updated_at = NOW()
-		WHERE id = $2 AND deleted_at IS NULL
-	`, cost, apiKeyID)
+		WHERE id = $2 AND (deleted_at IS NULL OR $3)
+	`, cost, apiKeyID, allowDeleted)
 	if err != nil {
 		return err
 	}
@@ -464,7 +465,7 @@ func incrementUsageBillingAPIKeyRateLimit(ctx context.Context, tx *sql.Tx, apiKe
 	return nil
 }
 
-func incrementUsageBillingAccountQuota(ctx context.Context, tx *sql.Tx, accountID int64, amount float64) (*service.AccountQuotaState, error) {
+func incrementUsageBillingAccountQuota(ctx context.Context, tx *sql.Tx, accountID int64, amount float64, allowDeleted bool) (*service.AccountQuotaState, error) {
 	rows, err := tx.QueryContext(ctx,
 		`UPDATE accounts SET extra = (
 			COALESCE(extra, '{}'::jsonb)
@@ -500,7 +501,7 @@ func incrementUsageBillingAccountQuota(ctx context.Context, tx *sql.Tx, accountI
 				   ELSE '{}'::jsonb END
 			ELSE '{}'::jsonb END
 		), updated_at = NOW()
-		WHERE id = $2 AND deleted_at IS NULL
+		WHERE id = $2 AND (deleted_at IS NULL OR $3)
 		RETURNING
 			COALESCE((extra->>'quota_used')::numeric, 0),
 			COALESCE((extra->>'quota_limit')::numeric, 0),
@@ -508,7 +509,7 @@ func incrementUsageBillingAccountQuota(ctx context.Context, tx *sql.Tx, accountI
 			COALESCE((extra->>'quota_daily_limit')::numeric, 0),
 			COALESCE((extra->>'quota_weekly_used')::numeric, 0),
 			COALESCE((extra->>'quota_weekly_limit')::numeric, 0)`,
-		amount, accountID)
+		amount, accountID, allowDeleted)
 	if err != nil {
 		return nil, err
 	}

@@ -72,18 +72,22 @@ func TestBatchImageSettlementService_PrivateOperationalAppliesCountersWithoutCap
 	job := testSettlingBatchImageJob("imgbatch_private")
 	zero := 0.0
 	job.HoldAmount = &zero
+	job.PricingSnapshotVersion = 1
+	job.BillableUnitPrice = 0.25
+	job.BaseUnitPrice = 0.4
+	job.GroupRateMultiplier = 1.5
+	job.BatchDiscountMultiplier = 0.5
+	job.AccountRateMultiplier = 2
+	job.APIKeyQuotaTracked = true
+	job.APIKeyRateLimitTracked = true
+	job.AccountTypeSnapshot = AccountTypeAPIKey
+	job.AccountQuotaTracked = true
 	repo.jobs[job.BatchID] = job
 	usageLogs := &openAIRecordUsageLogRepoStub{}
 	billing := &fakeBatchImageBillingRepo{}
 	svc := &BatchImageSettlementService{
-		Repo:        repo,
-		BillingRepo: billing,
-		APIKeys: batchImageSettlementAPIKeyLookupStub{key: &APIKey{
-			ID: *job.APIKeyID, UserID: job.UserID, Quota: 100, RateLimit1d: 100,
-		}},
-		Accounts: batchImageSettlementAccountLookupStub{account: &Account{
-			ID: *job.AccountID, Type: AccountTypeAPIKey, Extra: map[string]any{"quota_limit": 100.0},
-		}},
+		Repo:               repo,
+		BillingRepo:        billing,
 		Pricing:            &fakeBatchImagePricingResolver{unitPrice: 0.25},
 		UsageLogRepo:       usageLogs,
 		PrivateOperational: true,
@@ -100,27 +104,11 @@ func TestBatchImageSettlementService_PrivateOperationalAppliesCountersWithoutCap
 	require.Zero(t, billing.commands[0].SubscriptionCost)
 	require.Equal(t, 0.5, billing.commands[0].APIKeyQuotaCost)
 	require.Equal(t, 0.5, billing.commands[0].APIKeyRateLimitCost)
-	require.Equal(t, 0.5, billing.commands[0].AccountQuotaCost)
+	require.Equal(t, AccountTypeAPIKey, billing.commands[0].AccountType)
+	require.InDelta(t, 1.2, billing.commands[0].AccountQuotaCost, 1e-12,
+		"account quota uses success * base * group * discount * account snapshots")
 	require.NotNil(t, usageLogs.lastLog, "cost telemetry remains available")
 	require.Equal(t, BillingTypeOperational, usageLogs.lastLog.BillingType)
-}
-
-type batchImageSettlementAPIKeyLookupStub struct {
-	key *APIKey
-	err error
-}
-
-func (s batchImageSettlementAPIKeyLookupStub) GetByID(context.Context, int64) (*APIKey, error) {
-	return s.key, s.err
-}
-
-type batchImageSettlementAccountLookupStub struct {
-	account *Account
-	err     error
-}
-
-func (s batchImageSettlementAccountLookupStub) GetByID(context.Context, int64) (*Account, error) {
-	return s.account, s.err
 }
 
 func TestBatchImageSettlementService_CompletedJobReturnsAlreadySettledWithoutBilling(t *testing.T) {

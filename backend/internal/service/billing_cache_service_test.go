@@ -12,8 +12,12 @@ import (
 )
 
 type billingCacheWorkerStub struct {
-	balanceUpdates      int64
-	subscriptionUpdates int64
+	balanceUpdates         int64
+	subscriptionUpdates    int64
+	rateLimitUpdates       int64
+	rateLimitInvalidates   int64
+	rateLimitUpdateErr     error
+	rateLimitInvalidateErr error
 }
 
 func (b *billingCacheWorkerStub) GetUserBalance(ctx context.Context, userID int64) (float64, error) {
@@ -61,11 +65,13 @@ func (b *billingCacheWorkerStub) SetAPIKeyRateLimit(ctx context.Context, keyID i
 }
 
 func (b *billingCacheWorkerStub) UpdateAPIKeyRateLimitUsage(ctx context.Context, keyID int64, cost float64) error {
-	return nil
+	atomic.AddInt64(&b.rateLimitUpdates, 1)
+	return b.rateLimitUpdateErr
 }
 
 func (b *billingCacheWorkerStub) InvalidateAPIKeyRateLimit(ctx context.Context, keyID int64) error {
-	return nil
+	atomic.AddInt64(&b.rateLimitInvalidates, 1)
+	return b.rateLimitInvalidateErr
 }
 
 func (b *billingCacheWorkerStub) GetUserPlatformQuotaCache(ctx context.Context, userID int64, platform string) (*UserPlatformQuotaCacheEntry, bool, error) {
@@ -129,4 +135,24 @@ func TestBillingCacheServiceEnqueueAfterStopReturnsFalse(t *testing.T) {
 		amount: 1,
 	})
 	require.False(t, enqueued)
+}
+
+func TestQueueUpdateAPIKeyRateLimitUsageFallsBackAfterQueueStops(t *testing.T) {
+	cache := &billingCacheWorkerStub{}
+	svc := NewBillingCacheService(cache, nil, nil, nil, nil, nil, &config.Config{}, nil)
+	svc.Stop()
+
+	svc.QueueUpdateAPIKeyRateLimitUsage(42, 0.75)
+	require.Equal(t, int64(1), atomic.LoadInt64(&cache.rateLimitUpdates))
+	require.Zero(t, atomic.LoadInt64(&cache.rateLimitInvalidates))
+}
+
+func TestQueueUpdateAPIKeyRateLimitUsageInvalidatesAfterFallbackFailure(t *testing.T) {
+	cache := &billingCacheWorkerStub{rateLimitUpdateErr: errors.New("redis update failed")}
+	svc := NewBillingCacheService(cache, nil, nil, nil, nil, nil, &config.Config{}, nil)
+	svc.Stop()
+
+	svc.QueueUpdateAPIKeyRateLimitUsage(42, 0.75)
+	require.Equal(t, int64(1), atomic.LoadInt64(&cache.rateLimitUpdates))
+	require.Equal(t, int64(1), atomic.LoadInt64(&cache.rateLimitInvalidates))
 }
