@@ -6,7 +6,7 @@ import { formatChineseDateTime } from '@/utils/zhPresentation'
 import { opsAPI, type OpsRuntimeLogConfig, type OpsSystemLog, type OpsSystemLogSinkHealth } from '@/api/admin/ops'
 import Pagination from '@/components/common/Pagination.vue'
 import Select from '@/components/common/Select.vue'
-import { useAppStore } from '@/stores'
+import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 
 const appStore = useAppStore()

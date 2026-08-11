@@ -14,7 +14,9 @@ export const SINGLE_USER_ADMIN_ROUTES = [
   '/admin/prompt-audit',
 ] as const
 
-export const SINGLE_USER_PUBLIC_ROUTES = [] as const
+export const SINGLE_USER_PUBLIC_ROUTES = [
+  '/batch-image',
+] as const
 
 export const SINGLE_USER_COMPATIBILITY_REDIRECTS = [
   '/',
@@ -26,7 +28,6 @@ export const SINGLE_USER_COMPATIBILITY_REDIRECTS = [
 
 export const SINGLE_USER_SETTINGS_TABS = [
   'general',
-  'security',
   'gateway',
   'email',
   'backup',

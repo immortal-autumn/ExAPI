@@ -967,7 +967,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { formatChineseDateTime } from '@/utils/zhPresentation'
 import { useAppStore } from '@/stores/app'
-import { adminAPI } from '@/api/admin'
+import { operatorAPI as adminAPI } from '@/api/operator'
 import type { Proxy, ProxyAccountSummary, ProxyProtocol, ProxyQualityCheckResult } from '@/types'
 import type { Column } from '@/components/common/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -982,7 +982,6 @@ import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
 import { useClipboard } from '@/composables/useClipboard'
-import { useStepUp, isStepUpBlocked, isStepUpCancelled, stepUpBlockReason } from '@/composables/useStepUp'
 import { useSwipeSelect } from '@/composables/useSwipeSelect'
 import { useTableSelection } from '@/composables/useTableSelection'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
@@ -992,7 +991,6 @@ import { proxyExpiryBadgeClass, proxyExpiryLabelKey } from '@/utils/proxyExpiry'
 const { t } = useI18n()
 const appStore = useAppStore()
 const { copyToClipboard } = useClipboard()
-const proxyExportStepUp = useStepUp()
 
 const columns = computed<Column[]>(() => [
   { key: 'select', label: '', sortable: false },
@@ -1907,13 +1905,13 @@ const handleExportData = async () => {
   if (exportingData.value) return
   exportingData.value = true
   try {
-    const dataPayload = await proxyExportStepUp.run(() => adminAPI.proxies.exportData(
+    const dataPayload = await adminAPI.proxies.exportData(
       selectedCount.value > 0
         ? { ids: Array.from(selectedProxyIds.value) }
         : {
             filters: buildProxyQueryFilters()
           }
-    ))
+    )
     const timestamp = formatExportTimestamp()
     const filename = `exapi-proxy-${timestamp}.json`
     const blob = new Blob([JSON.stringify(dataPayload, null, 2)], { type: 'application/json' })
@@ -1925,17 +1923,7 @@ const handleExportData = async () => {
     URL.revokeObjectURL(url)
     appStore.showSuccess(t('admin.proxies.dataExported'))
   } catch (error: any) {
-    if (isStepUpCancelled(error)) {
-      // The operator explicitly cancelled the sensitive export.
-    } else if (isStepUpBlocked(error)) {
-      appStore.showError(
-        stepUpBlockReason(error) === 'STEP_UP_ADMIN_API_KEY_FORBIDDEN'
-          ? t('stepUp.adminApiKeyForbidden')
-          : t('stepUp.notEnabled')
-      )
-    } else {
-      appStore.showError(error?.message || t('admin.proxies.dataExportFailed'))
-    }
+    appStore.showError(error?.message || t('admin.proxies.dataExportFailed'))
   } finally {
     exportingData.value = false
     showExportDataDialog.value = false

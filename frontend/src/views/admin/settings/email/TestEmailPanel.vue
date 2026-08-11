@@ -1,6 +1,6 @@
 <template>
-<!-- Send Test Email - Only show when email verification is enabled -->
-<div v-if="form.email_verify_enabled" class="card">
+<!-- Send a private operational test message. -->
+<div class="card">
   <div
     class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
   >

@@ -4,7 +4,9 @@ import { computed, onMounted, watch } from 'vue'
 import Toast from '@/components/common/Toast.vue'
 import NavigationProgress from '@/components/common/NavigationProgress.vue'
 import { resolveRouteDocumentTitle } from '@/router/title'
-import { useAppStore, useAuthStore, useAdminSettingsStore } from '@/stores'
+import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
+import { useAdminSettingsStore } from '@/stores/adminSettings'
 import { updateFavicon } from '@/utils/branding'
 
 const route = useRoute()

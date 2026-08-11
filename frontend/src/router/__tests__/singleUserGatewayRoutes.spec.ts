@@ -30,7 +30,6 @@ describe('single-user gateway route pruning', () => {
       '@/views/auth/ResetPasswordView.vue',
       '@/views/public/LegalDocumentView.vue',
       '@/views/user/DashboardView.vue',
-      '@/views/user/BatchImageGuideView.vue',
       '@/views/user/UsageView.vue',
       '@/views/user/ProfileView.vue',
       '@/views/user/CustomPageView.vue',
@@ -40,14 +39,13 @@ describe('single-user gateway route pruning', () => {
       '@/views/user/RedeemView.vue',
       '@/views/user/AffiliateView.vue',
       '@/views/admin/UsersView.vue',
-      '@/views/admin/GroupsView.vue',
       '@/views/admin/orders/AdminOrdersView.vue',
       '@/views/admin/affiliates/AdminAffiliateInvitesView.vue',
     ]) {
       expect(routerSource).not.toContain(legacyImport)
     }
-
-    expect(routerSource).toContain("@/views/SingleUserGatewayRedirectView.vue")
+    expect(routerSource).toContain("import { privateRoutes } from './privateRoutes'")
+    expect(routerSource).not.toContain('SingleUserGatewayRedirectView')
   })
 
   it('keeps account-test client fallbacks localized', () => {

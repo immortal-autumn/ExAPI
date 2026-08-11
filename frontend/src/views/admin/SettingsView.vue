@@ -476,7 +476,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted, defineAsyncComponent } from "vue";
 import { useI18n } from "vue-i18n";
-import { adminAPI } from "@/api";
+import { operatorAPI as adminAPI } from "@/api/operator";
 import {
   appendAuthSourceDefaultsToUpdateRequest,
   buildAuthSourceDefaultsState,

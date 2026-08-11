@@ -174,11 +174,11 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { adminAPI } from '@/api/admin'
+import { operatorAPI as adminAPI } from '@/api/operator'
 import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores/app'
 import { useClipboard } from '@/composables/useClipboard'
-import type { CockpitQuotaSeverity, CockpitSummaryResponse } from '@/api/admin'
+import type { CockpitQuotaSeverity, CockpitSummaryResponse } from '@/api/operator'
 import {
   getLocalIntegrationLinks,
 } from '@/utils/singleUserCockpit'

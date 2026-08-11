@@ -20,6 +20,12 @@ export const privateRoutes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, requiresAdmin: true, titleKey: 'keys.title' },
   },
   {
+    path: '/batch-image',
+    name: 'OperatorBatchImage',
+    component: () => import('@/views/user/BatchImageGuideView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, titleKey: 'batchImage.title' },
+  },
+  {
     path: '/admin/accounts',
     name: 'AdminAccounts',
     component: () => import('@/views/admin/AccountsView.vue'),
@@ -82,7 +88,7 @@ export const privateRoutes: RouteRecordRaw[] = [
   {
     path: '/admin/settings',
     name: 'AdminSettings',
-    component: () => import('@/views/admin/SettingsView.vue'),
+    component: () => import('@/views/admin/PrivateSettingsView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, titleKey: 'admin.settings.title' },
   },
   {

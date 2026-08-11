@@ -26,14 +26,14 @@ const entryMatch = html.match(/<script[^>]+src=["'](?:\.\/|\/)?assets\/([^"']+\.
 if (!entryMatch) throw new Error('Unable to identify the module entry in index.html')
 
 const jsFiles = readdirSync(assetsRoot).filter((name) => name.endsWith('.js'))
-const forbiddenArtifactPattern = /(payment|stripe|airwallex|affiliate|subscription|redeem|captcha|passkey|totp|loginview|registerview)/i
+const forbiddenArtifactPattern = /(payment|stripe|airwallex|affiliate|subscription|redeem|captcha|passkey|totp|loginview|registerview|securitysettings|usestepup)/i
 const forbiddenArtifacts = jsFiles.filter((name) => forbiddenArtifactPattern.test(name))
 if (forbiddenArtifacts.length > 0) {
   throw new Error(`Private build emitted forbidden commercial/auth chunks: ${forbiddenArtifacts.join(', ')}`)
 }
-const settingsFiles = jsFiles.filter((name) => /^SettingsView-.*\.js$/.test(name))
+const settingsFiles = jsFiles.filter((name) => /^PrivateSettingsView-.*\.js$/.test(name))
 if (settingsFiles.length !== 1) {
-  throw new Error(`Expected one SettingsView chunk, found ${settingsFiles.length}`)
+  throw new Error(`Expected one PrivateSettingsView chunk, found ${settingsFiles.length}`)
 }
 const dashboardFiles = jsFiles.filter((name) => /^DashboardView-.*\.js$/.test(name))
 if (dashboardFiles.length !== 1) {
@@ -66,6 +66,27 @@ function staticGraph(rootFile) {
 function graphSizeKB(graph) {
   const bytes = [...graph].reduce((sum, name) => sum + statSync(resolve(assetsRoot, name)).size, 0)
   return bytes / 1024
+}
+
+const forbiddenContentPatterns = [
+  ['commercial admin API', /["'`]\/admin\/(?:users|subscriptions|redeem-codes|promo-codes|announcements|affiliates|user-attributes|payment)(?:\/|[?"'`])/i],
+  ['customer API', /["'`]\/(?:subscriptions|payment|redeem|affiliate)(?:\/|[?"'`])/i],
+  ['customer authentication API', /["'`]\/auth\/(?:login|register|refresh|logout|2fa|passkeys?|totp)(?:\/|[?"'`])/i],
+  ['online database restore API', /["'`]\/admin\/backups\/[^"'`]*\/restore(?:[?"'`])/i],
+  ['online self-update API', /["'`]\/admin\/system\/(?:check-updates|update|rollback|rollback-versions|restart)(?:[?"'`])/i],
+  ['legacy admin credential API', /["'`]\/admin\/settings\/admin-api-key(?:\/|[?"'`])/i],
+  ['customer security setting', /["'`](?:totp_enabled|passkey_enabled|session_binding_enabled|step_up_enabled|turnstile_[a-z0-9_]+|tencent_captcha_[a-z0-9_]+|aliyun_captcha_[a-z0-9_]+)["'`]/i],
+]
+
+const forbiddenContent = []
+for (const fileName of jsFiles) {
+  const source = readFileSync(resolve(assetsRoot, fileName), 'utf8')
+  for (const [label, pattern] of forbiddenContentPatterns) {
+    if (pattern.test(source)) forbiddenContent.push(`${fileName} (${label})`)
+  }
+}
+if (forbiddenContent.length > 0) {
+  throw new Error(`Private build contains forbidden API/settings code: ${forbiddenContent.join(', ')}`)
 }
 
 function assertPrivateGraph(label, graph, budgetKB, forbiddenPattern = /(stripe|airwallex|payment)/i) {

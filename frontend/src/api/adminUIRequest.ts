@@ -35,35 +35,18 @@ function normalizeAPIPath(path: string): string {
 }
 
 /**
- * User-facing web APIs that may emit Server-Timing when ENABLE_SERVER_TIMING is on.
- * Mirrors backend isUserTimingPath allowlist (excluding public payment surfaces).
+ * Private operator APIs that may emit Server-Timing on the control listener.
  */
 export function isUserTimingAPIPath(requestURL: string): boolean {
   const path = normalizeAPIPath(requestURL)
   if (!path) return false
 
-  if (
-    path === '/auth/me' ||
-    path === '/auth/revoke-all-sessions' ||
-    path === '/auth/oauth/bind-token'
-  ) {
-    return true
-  }
-  if (path === '/user' || path.startsWith('/user/')) return true
+  if (path === '/operator/me') return true
   if (path === '/keys' || path.startsWith('/keys/')) return true
   if (path === '/groups/available' || path === '/groups/rates') return true
-  if (path === '/channels/available') return true
   if (path === '/usage' || path.startsWith('/usage/')) return true
-  if (path === '/announcements' || path.startsWith('/announcements/')) return true
-  if (path === '/redeem' || path.startsWith('/redeem/')) return true
-  if (path === '/subscriptions' || path.startsWith('/subscriptions/')) return true
   if (path === '/channel-monitors' || path.startsWith('/channel-monitors/')) return true
-  if (path.startsWith('/payment/')) {
-    if (path.startsWith('/payment/public') || path.startsWith('/payment/webhook')) {
-      return false
-    }
-    return true
-  }
+  if (path === '/operator/batch-images' || path.startsWith('/operator/batch-images/')) return true
   return false
 }
 

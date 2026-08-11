@@ -154,7 +154,8 @@ import {
   type OpsThroughputTrendResponse,
   type OpsMetricThresholds
 } from '@/api/admin/ops'
-import { useAdminSettingsStore, useAppStore } from '@/stores'
+import { useAdminSettingsStore } from '@/stores/adminSettings'
+import { useAppStore } from '@/stores/app'
 import OpsDashboardHeader from './components/OpsDashboardHeader.vue'
 import OpsDashboardSkeleton from './components/OpsDashboardSkeleton.vue'
 import OpsConcurrencyCard from './components/OpsConcurrencyCard.vue'

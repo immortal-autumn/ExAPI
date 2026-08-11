@@ -1,6 +1,6 @@
 <template>
-<!-- SMTP Settings - Only show when email verification is enabled -->
-<div v-if="form.email_verify_enabled" class="card">
+<!-- SMTP remains available for private operational notifications. -->
+<div class="card">
   <div
     class="flex items-center justify-between border-b border-gray-100 px-6 py-4 dark:border-dark-700"
   >

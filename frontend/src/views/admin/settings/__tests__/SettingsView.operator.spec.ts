@@ -6,29 +6,25 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 
-const componentPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../SettingsView.vue')
+const componentPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../PrivateSettingsView.vue')
 const source = readFileSync(componentPath, 'utf8')
 
 const retainedTabs = [
   'GeneralSettingsTab',
-  'SecuritySettingsTab',
-  'GatewaySettingsTab',
   'EmailSettingsTab',
   'BackupSettingsTab',
 ]
 
 describe('SettingsView operator tab loading', () => {
-  it('lazy-loads each retained settings tab', () => {
+  it('loads only retained operator settings tabs', () => {
     for (const tab of retainedTabs) {
-      expect(source).toContain(
-        `const ${tab} = defineAsyncComponent(() => import("@/views/admin/settings/tabs/${tab}.vue"))`,
-      )
-      expect(source).not.toContain(`import ${tab} from`)
+      expect(source).toContain(`import ${tab} from`)
     }
+    expect(source).not.toContain('SecuritySettingsTab')
   })
 
   it('mounts retained tabs only when selected', () => {
-    for (const key of ['general', 'security', 'gateway', 'email', 'backup']) {
+    for (const key of ['general', 'gateway', 'email', 'backup']) {
       expect(source).toContain(`v-if="activeTab === '${key}'"`)
     }
   })
@@ -39,9 +35,8 @@ describe('SettingsView operator tab loading', () => {
     }
   })
 
-  it('guards customer and commercial loaders outside private mode', () => {
-    expect(source).toContain('if (!isSingleUserPrivateControlPlaneBrowser())')
-    expect(source).toContain('loadSubscriptionGroups();')
-    expect(source).toContain('loadProviders();')
+  it('uses the fail-closed private settings payload', () => {
+    expect(source).toContain('buildPrivateOperatorSettings')
+    expect(source).not.toContain('stripPrivateProductSettings')
   })
 })

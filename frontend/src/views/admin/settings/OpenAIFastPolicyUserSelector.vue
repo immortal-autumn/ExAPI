@@ -82,7 +82,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { adminAPI } from "@/api/admin";
+import { operatorAPI as adminAPI } from "@/api/operator";
 import type { SimpleUser } from "@/api/admin/usage";
 import Icon from "@/components/icons/Icon.vue";
 

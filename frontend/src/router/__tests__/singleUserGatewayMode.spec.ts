@@ -7,40 +7,18 @@ import {
 } from '../singleUserGatewayMode'
 
 describe('single-user gateway mode route restrictions', () => {
-  it('blocks multi-user and payment management routes from the private gateway UI', () => {
-    expect(SINGLE_USER_GATEWAY_RESTRICTED_PREFIXES).toEqual(expect.arrayContaining([
-      '/admin/users',
-      '/admin/groups',
-      '/admin/subscriptions',
-      '/admin/announcements',
-      '/admin/orders',
-      '/admin/affiliates',
-      '/admin/promo-codes',
-      '/subscriptions',
-      '/purchase',
-      '/orders',
-      '/payment',
-      '/affiliate',
-    ]))
-
-    for (const path of [
-      '/admin/users',
-      '/admin/groups/123',
-      '/admin/orders/plans',
-      '/purchase',
-      '/payment/qrcode',
-      '/affiliate',
-    ]) {
-      expect(isSingleUserGatewayRestrictedPath(path)).toBe(true)
-    }
+  it('uses the private route allowlist instead of shipping a customer-route denylist', () => {
+    expect(SINGLE_USER_GATEWAY_RESTRICTED_PREFIXES).toEqual([])
+    expect(isSingleUserGatewayRestrictedPath('/admin/users')).toBe(false)
+    expect(isSingleUserGatewayRestrictedPath('/payment/qrcode')).toBe(false)
   })
 
-  it('uses the backend-injected product mode instead of browser hostname', () => {
+  it('cannot be switched back to the SaaS product from injected browser settings', () => {
     window.__APP_CONFIG__ = { single_user_private_control_plane: true } as any
     expect(isSingleUserPrivateControlPlaneBrowser()).toBe(true)
 
     window.__APP_CONFIG__ = { single_user_private_control_plane: false } as any
-    expect(isSingleUserPrivateControlPlaneBrowser()).toBe(false)
+    expect(isSingleUserPrivateControlPlaneBrowser()).toBe(true)
   })
 
   it('fails closed when injected settings are absent or stale', () => {

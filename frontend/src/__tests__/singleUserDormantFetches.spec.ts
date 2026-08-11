@@ -11,8 +11,6 @@ const adminSettingsSource = readFileSync(resolve(root, 'stores/adminSettings.ts'
 const settingsViewSource = readFileSync(resolve(root, 'views/admin/SettingsView.vue'), 'utf8')
 const proxiesViewSource = readFileSync(resolve(root, 'views/admin/ProxiesView.vue'), 'utf8')
 
-const privateModeHelper = 'isSingleUserPrivateControlPlaneBrowser'
-
 describe('single-user dormant SaaS fetches', () => {
   it('removes global subscription and announcement lifecycle work', () => {
     expect(appSource).not.toContain('fetchSubscriptions')
@@ -20,10 +18,10 @@ describe('single-user dormant SaaS fetches', () => {
     expect(appSource).not.toContain('markAnnouncement')
   })
 
-  it('does not couple operator settings fetches to payment config in private mode', () => {
-    expect(adminSettingsSource).toContain(privateModeHelper)
-    expect(adminSettingsSource).toContain('isSingleUserPrivateControlPlaneBrowser()')
-    expect(adminSettingsSource).toContain('Promise.resolve(null)')
+  it('uses the curated operator facade without payment configuration fetches', () => {
+    expect(adminSettingsSource).toContain("@/api/operator")
+    expect(adminSettingsSource).toContain('adminAPI.settings.getSettings()')
+    expect(adminSettingsSource).not.toContain('adminAPI.payment')
   })
 
   it('excludes commercial settings UI and external proxy assets from private operator surfaces', () => {

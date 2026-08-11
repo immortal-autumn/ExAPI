@@ -172,20 +172,13 @@
     :end-date="endDate"
     @close="cleanupDialogVisible = false"
   />
-  <!-- Balance history modal triggered from usage table user click -->
-  <UserBalanceHistoryModal
-    :show="showBalanceHistoryModal"
-    :user="balanceHistoryUser"
-    :hide-actions="true"
-    @close="showBalanceHistoryModal = false; balanceHistoryUser = null"
-  />
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import { useAppStore } from '@/stores/app'; import { adminAPI } from '@/api/admin'; import { adminUsageAPI } from '@/api/admin/usage'
+import { useAppStore } from '@/stores/app'; import { operatorAPI as adminAPI } from '@/api/operator'; import { adminUsageAPI } from '@/api/admin/usage'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatReasoningEffort } from '@/utils/format'
 import { downloadExcelWorkbook, type ExcelCellValue } from '@/utils/excel'
@@ -195,7 +188,6 @@ import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'; impo
 import UsageTable from '@/components/admin/usage/UsageTable.vue'; import UsageExportProgress from '@/components/admin/usage/UsageExportProgress.vue'
 import UserTokenRanking from '@/components/admin/usage/UserTokenRanking.vue'
 import UsageCleanupDialog from '@/components/admin/usage/UsageCleanupDialog.vue'
-import UserBalanceHistoryModal from '@/components/admin/user/UserBalanceHistoryModal.vue'
 import OpsErrorLogTable from '@/views/admin/ops/components/OpsErrorLogTable.vue'
 import OpsErrorDetailModal from '@/views/admin/ops/components/OpsErrorDetailModal.vue'
 import { listErrorLogs } from '@/api/admin/ops'
@@ -203,7 +195,7 @@ import type { OpsErrorLog } from '@/api/admin/ops'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'; import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'; import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
 import Icon from '@/components/icons/Icon.vue'
-import type { AdminUsageLog, TrendDataPoint, ModelStat, GroupStat, EndpointStat, AdminUser } from '@/types'; import type { AdminUsageStatsResponse, AdminUsageQueryParams } from '@/api/admin/usage'
+import type { AdminUsageLog, TrendDataPoint, ModelStat, GroupStat, EndpointStat } from '@/types'; import type { AdminUsageStatsResponse, AdminUsageQueryParams } from '@/api/admin/usage'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -234,8 +226,6 @@ let modelStatsReqSeq = 0
 const exportProgress = reactive({ show: false, progress: 0, current: 0, total: 0, estimatedTime: '' })
 const cleanupDialogVisible = ref(false)
 // Balance history modal state
-const showBalanceHistoryModal = ref(false)
-const balanceHistoryUser = ref<AdminUser | null>(null)
 
 const breakdownFilters = computed(() => {
   const f: Record<string, any> = {}
@@ -253,13 +243,9 @@ const modelNameOptions = computed(() =>
 )
 
 const handleUserClick = async (userId: number) => {
-  try {
-    const user = await adminAPI.users.getById(userId, true)
-    balanceHistoryUser.value = user
-    showBalanceHistoryModal.value = true
-  } catch {
-    appStore.showError(t('admin.usage.failedToLoadUser'))
-  }
+	filters.value = { ...filters.value, user_id: userId }
+	activeTab.value = 'usage'
+	applyFilters()
 }
 
 // Drill down from the per-user token ranking: scope the whole usage view to
@@ -346,9 +332,8 @@ const loadRouteUserFilterLabel = async () => {
   )
 
   try {
-    const user = await adminAPI.users.getById(requestedUserId, true)
     if (!routeUserFilterIsCurrent()) return
-    usageFiltersRef.value?.setUserKeyword?.(user.email || String(requestedUserId))
+    usageFiltersRef.value?.setUserKeyword?.(String(requestedUserId))
   } catch {
     if (!routeUserFilterIsCurrent()) return
     usageFiltersRef.value?.setUserKeyword?.(String(requestedUserId))

@@ -1,8 +1,3 @@
-import {
-  SINGLE_USER_LEGACY_PREFIXES,
-  isSingleUserLegacyPath,
-} from '@/config/singleUserProduct'
-
 export const SINGLE_USER_PRIVATE_CONTROL_PLANE_HOSTS = [
   'localhost',
   '127.0.0.1',
@@ -10,10 +5,12 @@ export const SINGLE_USER_PRIVATE_CONTROL_PLANE_HOSTS = [
   '100.97.17.1',
 ] as const
 
-export const SINGLE_USER_GATEWAY_RESTRICTED_PREFIXES = SINGLE_USER_LEGACY_PREFIXES
+export const SINGLE_USER_GATEWAY_RESTRICTED_PREFIXES: readonly string[] = []
 
-export function isSingleUserGatewayRestrictedPath(path: string): boolean {
-  return isSingleUserLegacyPath(path)
+export function isSingleUserGatewayRestrictedPath(_path: string): boolean {
+  // The private router is an allowlist, so shared navigation has no second
+  // customer-route denylist to ship to the browser.
+  return false
 }
 
 export function isSingleUserPrivateControlPlaneHost(hostname: string): boolean {
@@ -27,6 +24,6 @@ export function isSingleUserPrivateControlPlaneBrowser(): boolean {
   return true
 }
 
-export function singleUserGatewayRedirectPath(isAdmin: boolean): string {
-  return isAdmin ? '/admin/dashboard' : '/dashboard'
+export function singleUserGatewayRedirectPath(_isAdmin: boolean): string {
+  return '/admin/dashboard'
 }

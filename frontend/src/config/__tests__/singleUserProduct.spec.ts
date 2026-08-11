@@ -12,6 +12,7 @@ describe('single-user product surface', () => {
       '/admin/dashboard',
       '/admin/ops',
       '/admin/accounts',
+      '/admin/groups',
       '/admin/api-keys',
       '/admin/channels/pricing',
       '/admin/channels/monitor',
@@ -19,13 +20,14 @@ describe('single-user product surface', () => {
       '/admin/risk-control',
       '/admin/usage',
       '/admin/settings',
+      '/admin/audit-logs',
+      '/admin/prompt-audit',
     ])
   })
 
   it('keeps only operator-oriented settings tabs', () => {
     expect(SINGLE_USER_SETTINGS_TABS).toEqual([
       'general',
-      'security',
       'gateway',
       'email',
       'backup',
