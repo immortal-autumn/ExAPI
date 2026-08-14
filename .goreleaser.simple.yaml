@@ -27,6 +27,19 @@ builds:
       - -X main.Date={{.Date}}
       - -X main.BuildType=release
 
+  - id: migrate-private-only
+    dir: backend
+    main: ./cmd/migrate-private-only
+    binary: migrate-private-only
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+    ldflags:
+      - -s -w
+
 # 跳过 archives
 archives: []
 
@@ -40,6 +53,9 @@ changelog:
 # 仅 GHCR x86_64 镜像
 dockers:
   - id: ghcr-amd64
+    ids:
+      - sub2api
+      - migrate-private-only
     goos: linux
     goarch: amd64
     image_templates:
@@ -49,6 +65,7 @@ dockers:
     use: buildx
     extra_files:
       - deploy/docker-entrypoint.sh
+      - deploy/ops/with-migration-report-key.sh
       - backend/resources
     build_flag_templates:
       - "--platform=linux/amd64"

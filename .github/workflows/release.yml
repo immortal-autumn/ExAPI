@@ -296,6 +296,8 @@ jobs:
           test "$(docker image inspect "$IMAGE_REFERENCE" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$EXPECTED_COMMIT"
           test "$(docker image inspect "$IMAGE_REFERENCE" --format '{{ index .Config.Labels "org.opencontainers.image.source" }}')" = 'https://github.com/immortal-autumn/Sub2API2Personal'
           test "$(docker image inspect "$IMAGE_REFERENCE" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')" = "$VERSION"
+          docker run --rm --network none --entrypoint /bin/sh "$IMAGE_REFERENCE" -ec \
+            'test -x /app/migrate-private-only && test -x /app/with-migration-report-key.sh'
           docker run --rm --network none "$IMAGE_REFERENCE" --version 2>&1 | grep -F "ExAPI $VERSION (commit: $EXPECTED_COMMIT,"
 
       - name: Attest SLSA build provenance

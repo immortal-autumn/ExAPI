@@ -58,6 +58,8 @@ for path in ("Dockerfile", "deploy/Dockerfile", "Dockerfile.goreleaser"):
     require(path, "org.opencontainers.image.title=\"ExAPI\"")
     require(path, "org.opencontainers.image.source=\"https://github.com/immortal-autumn/Sub2API2Personal\"")
     require(path, "http://localhost:${SERVER_PORT:-8080}/ready")
+    require(path, "/app/migrate-private-only")
+    require(path, "/app/with-migration-report-key.sh")
     forbid(path, "http://localhost:${SERVER_PORT:-8080}/health")
     forbid(path, "github.com/Wei-Shaw/sub2api")
 
@@ -84,6 +86,16 @@ require(".github/workflows/release.yml", "resolve-ref:")
 require(".github/workflows/release.yml", "needs: [resolve-ref, update-version, quality-gate]")
 require(".github/workflows/release.yml", "ref: ${{ needs.resolve-ref.outputs.sha }}")
 require(".github/workflows/release.yml", "python3 tools/check_release_contract.py")
+require(".github/workflows/release.yml", "test -x /app/migrate-private-only")
+require(".github/workflows/release.yml", "test -x /app/with-migration-report-key.sh")
+require(".goreleaser.yaml", "id: migrate-private-only")
+require(".goreleaser.simple.yaml", "id: migrate-private-only")
+require("Dockerfile.goreleaser", "COPY migrate-private-only /app/migrate-private-only")
+require("Dockerfile.goreleaser", "deploy/ops/with-migration-report-key.sh /app/with-migration-report-key.sh")
+if (ROOT / ".goreleaser.yaml").read_text(encoding="utf-8").count("      - migrate-private-only") != 4:
+    raise SystemExit(".goreleaser.yaml: every production Docker target must include the offline cutover build")
+if (ROOT / ".goreleaser.simple.yaml").read_text(encoding="utf-8").count("      - migrate-private-only") != 1:
+    raise SystemExit(".goreleaser.simple.yaml: simple Docker target must include the offline cutover build")
 release_lines = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8").splitlines()
 backend_gate_index = release_lines.index("      - name: Backend unit and integration tests")
 if release_lines[backend_gate_index + 1].strip() != "working-directory: backend":

@@ -16,16 +16,53 @@ control port must not be published through the public reverse proxy.
 Before starting a migrated database, run the offline command below from the
 release image (never from the online server process):
 
-```text
-/app/migrate-private-only \
+```sh
+test -d /app/data/backups
+/app/with-migration-report-key.sh /protected/exapi-migration-report.key \
+  /app/migrate-private-only \
   --confirm DROP-SAAS-DATA-KEEP-USER-<lowest-active-admin-id> \
+  --backup-dir /app/data/backups \
+  --report-file /app/data/private-migration-report.json
+```
+
+Generate `/protected/exapi-migration-report.key` exactly once on the protected
+host with the no-clobber sequence below. It fails if the destination exists:
+
+```sh
+key_file=/protected/exapi-migration-report.key
+test ! -e "$key_file"
+(umask 077; set -C; openssl rand -hex 32 >"$key_file")
+```
+
+Keep it as exactly one printable 64-hex-character line, retain an encrypted
+off-host copy with the signed report, and do not regenerate it when retrying or
+verifying a cutover. The release-image wrapper requires mode `0600`, ownership
+by the offline command user, exact length, and lowercase hexadecimal encoding;
+it injects the key only into the offline migration process. The running
+application does not need this key.
+Replace `/app/data/backups` with the application-managed backup directory if it
+differs.
+
+If the installation never configured managed backups, first verify that the
+`backup_records` setting is absent or an empty JSON array, then use this complete
+alternative (without the backup-directory preflight):
+
+```sh
+/app/with-migration-report-key.sh /protected/exapi-migration-report.key \
+  /app/migrate-private-only \
+  --confirm DROP-SAAS-DATA-KEEP-USER-<lowest-active-admin-id> \
+  --no-managed-backups \
   --report-file /app/data/private-migration-report.json
 ```
 
 The command takes a serializable transaction/advisory lock, retains the
 lowest-ID active admin, drops customer/commercial tables, records
 `private_schema_version=1`, purges pre-cutover backups, and emits a signed
-report. Do not run it until the verified pre-cutover recovery set exists.
+report. Before opening the destructive cutover transaction, database
+initialization applies the release image's embedded forward migrations under
+the normal migration lock; this is required for upgraded installations with
+pending release migrations.
+Do not run it until the verified pre-cutover recovery set exists.
 
 ## External prerequisites
 

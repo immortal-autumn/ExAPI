@@ -7,6 +7,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -23,10 +24,12 @@ import (
 )
 
 const (
-	ConfirmationPrefix    = "DROP-SAAS-DATA-KEEP-USER-"
-	privateSchemaVersion  = 1
-	advisoryLockKey       = "exapi:migrate-private-only:v1"
-	privateStateUpsertSQL = `INSERT INTO exapi_private_state (id, private_schema_version, operator_id, cutover_at)
+	ConfirmationPrefix      = "DROP-SAAS-DATA-KEEP-USER-"
+	privateSchemaVersion    = 1
+	advisoryLockKey         = "exapi:migrate-private-only:v1"
+	commandAdvisoryLockKey  = "exapi:migrate-private-only:command:v1"
+	commandLockReleaseLimit = 5 * time.Second
+	privateStateUpsertSQL   = `INSERT INTO exapi_private_state (id, private_schema_version, operator_id, cutover_at)
 		VALUES (true, $1, $2, $3)
 		ON CONFLICT (id) DO UPDATE SET
 			private_schema_version = EXCLUDED.private_schema_version,
@@ -220,9 +223,14 @@ func RunWithOptions(ctx context.Context, db *sql.DB, confirmation string, report
 	if now == nil {
 		now = time.Now
 	}
-	cutoverAt := now().UTC()
+	return withCommandLock(ctx, db, func(commandConn *sql.Conn) (MigrationReport, error) {
+		cutoverAt := now().UTC()
+		return runWithOptionsLocked(ctx, commandConn, confirmation, reportKey, options, operatorID, cutoverAt)
+	})
+}
 
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+func runWithOptionsLocked(ctx context.Context, commandConn *sql.Conn, confirmation string, reportKey []byte, options CutoverOptions, operatorID int64, cutoverAt time.Time) (MigrationReport, error) {
+	tx, err := commandConn.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return MigrationReport{}, fmt.Errorf("begin serializable cutover: %w", err)
 	}
@@ -328,14 +336,70 @@ func RunWithOptions(ctx context.Context, db *sql.DB, confirmation string, report
 	if err := writeDurableReport(options.ReportPath, options.Output, signed); err != nil {
 		return MigrationReport{}, err
 	}
-	if err := recordReportDigest(ctx, db, report.ReportSHA256); err != nil {
+	if err := recordReportDigest(ctx, commandConn, report.ReportSHA256); err != nil {
 		return MigrationReport{}, err
 	}
 	return report, nil
 }
 
+func withCommandLock(ctx context.Context, db *sql.DB, operation func(*sql.Conn) (MigrationReport, error)) (result MigrationReport, retErr error) {
+	commandConn, releaseCommandLock, err := acquireCommandLock(ctx, db)
+	if err != nil {
+		return MigrationReport{}, err
+	}
+	// Keep separate invocations serialized through the post-commit report
+	// install and digest update. The transaction-scoped lock below is released
+	// too early to protect those filesystem/database operations by itself.
+	defer func() {
+		if err := releaseCommandLock(); err != nil {
+			result = MigrationReport{}
+			retErr = errors.Join(retErr, err)
+		}
+	}()
+	return operation(commandConn)
+}
+
+func acquireCommandLock(ctx context.Context, db *sql.DB) (*sql.Conn, func() error, error) {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("acquire cutover command lock connection: %w", err)
+	}
+	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock(hashtext($1))`, commandAdvisoryLockKey); err != nil {
+		discardSQLConn(conn)
+		return nil, nil, fmt.Errorf("acquire cutover command lock: %w", err)
+	}
+	return conn, func() error {
+		unlockCtx, cancel := context.WithTimeout(context.Background(), commandLockReleaseLimit)
+		defer cancel()
+		var unlocked bool
+		if err := conn.QueryRowContext(unlockCtx, `SELECT pg_advisory_unlock(hashtext($1))`, commandAdvisoryLockKey).Scan(&unlocked); err != nil {
+			discardSQLConn(conn)
+			return fmt.Errorf("release cutover command lock: %w", err)
+		}
+		if !unlocked {
+			discardSQLConn(conn)
+			return errors.New("release cutover command lock: PostgreSQL reported that this session did not hold the lock")
+		}
+		if err := conn.Close(); err != nil {
+			return fmt.Errorf("release cutover command lock connection: %w", err)
+		}
+		return nil
+	}, nil
+}
+
+func discardSQLConn(conn *sql.Conn) {
+	// Returning driver.ErrBadConn from Raw tells database/sql not to put this
+	// physical PostgreSQL session back into the pool. That is essential when an
+	// advisory-lock operation has an ambiguous outcome.
+	_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+	_ = conn.Close()
+}
+
 func validateBackupOptions(options CutoverOptions) error {
 	directory := strings.TrimSpace(options.BackupDir)
+	if directory != "" && options.AssertNoManagedBackups {
+		return errors.New("--backup-dir and --no-managed-backups are mutually exclusive")
+	}
 	if directory == "" && !options.AssertNoManagedBackups {
 		return errors.New("an explicit --backup-dir is required; use --no-managed-backups only after verifying no application-managed backups exist")
 	}
@@ -545,7 +609,11 @@ func VerifyRuntimeState(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-func recordReportDigest(ctx context.Context, db *sql.DB, digest string) error {
+type contextExecer interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
+func recordReportDigest(ctx context.Context, db contextExecer, digest string) error {
 	if strings.TrimSpace(digest) == "" {
 		return errors.New("migration report digest is required")
 	}

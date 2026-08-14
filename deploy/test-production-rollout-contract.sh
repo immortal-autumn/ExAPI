@@ -15,6 +15,56 @@ for script in \
   bash -n "$script" || fail "$script has invalid shell syntax"
 done
 bash -n deploy/ops/validate-immutable-compose.sh || fail 'immutable Compose validator has invalid shell syntax'
+sh -n deploy/ops/with-migration-report-key.sh || fail 'migration report key wrapper has invalid POSIX shell syntax'
+
+grep -Fq '/app/with-migration-report-key.sh /protected/exapi-migration-report.key' deploy/PRODUCTION_ROLLOUT.md || \
+  fail 'offline cutover does not use the protected report-key wrapper'
+! grep -Fq 'export EXAPI_MIGRATION_REPORT_KEY=' deploy/PRODUCTION_ROLLOUT.md || \
+  fail 'offline cutover exports its report key into the operator shell'
+grep -Fq -- '--backup-dir /app/data/backups' deploy/PRODUCTION_ROLLOUT.md || \
+  fail 'offline cutover example omits its mandatory managed-backup choice'
+grep -Fq -- '--no-managed-backups' deploy/PRODUCTION_ROLLOUT.md || \
+  fail 'offline cutover omits the verified no-managed-backups alternative'
+grep -Fq '(umask 077; set -C; openssl rand -hex 32 >"$key_file")' deploy/PRODUCTION_ROLLOUT.md || \
+  fail 'offline cutover does not use no-clobber report-key generation'
+
+mkdir -p "$ROOT_DIR/tmp"
+secure_tmp=
+if [[ -n "${EXAPI_CONTRACT_SECURE_TMP_DIR:-}" ]]; then
+  mkdir -p "$EXAPI_CONTRACT_SECURE_TMP_DIR"
+  secure_tmp=$EXAPI_CONTRACT_SECURE_TMP_DIR
+else
+  for candidate in "$ROOT_DIR/tmp" /dev/shm "${TMPDIR:-/tmp}" /tmp; do
+    [[ -d "$candidate" && -w "$candidate" ]] || continue
+    mode_probe=$(mktemp "$candidate/report-key-mode-probe.XXXXXX") || continue
+    chmod 0600 "$mode_probe"
+    mode=$(stat -c '%a' "$mode_probe" 2>/dev/null || stat -f '%Lp' "$mode_probe" 2>/dev/null || true)
+    unlink "$mode_probe"
+    if [[ "$mode" == 600 ]]; then
+      secure_tmp=$candidate
+      break
+    fi
+  done
+fi
+[[ -n "$secure_tmp" ]] || fail 'no permission-capable temporary directory; set EXAPI_CONTRACT_SECURE_TMP_DIR'
+valid_report_key=$(mktemp "$secure_tmp/report-key-valid.XXXXXX")
+malformed_report_key=$(mktemp "$secure_tmp/report-key-malformed.XXXXXX")
+permissive_report_key=$(mktemp "$secure_tmp/report-key-permissive.XXXXXX")
+trap 'unlink "$valid_report_key" 2>/dev/null || true; unlink "$malformed_report_key" 2>/dev/null || true; unlink "$permissive_report_key" 2>/dev/null || true' EXIT
+printf '%064d\n' 0 >"$valid_report_key"
+chmod 0600 "$valid_report_key"
+sh deploy/ops/with-migration-report-key.sh "$valid_report_key" sh -c \
+  'test "${#EXAPI_MIGRATION_REPORT_KEY}" -eq 64' || fail 'valid migration report key was rejected'
+printf '%064d\ntrailing' 0 >"$malformed_report_key"
+chmod 0600 "$malformed_report_key"
+if sh deploy/ops/with-migration-report-key.sh "$malformed_report_key" true >/dev/null 2>&1; then
+  fail 'migration report key wrapper accepted trailing data'
+fi
+printf '%064d\n' 0 >"$permissive_report_key"
+chmod 0644 "$permissive_report_key"
+if sh deploy/ops/with-migration-report-key.sh "$permissive_report_key" true >/dev/null 2>&1; then
+  fail 'migration report key wrapper accepted permissive mode'
+fi
 
 for compose in deploy/docker-compose.yml deploy/docker-compose.local.yml; do
   grep -Fq '${POSTGRES_IMAGE:?Set POSTGRES_IMAGE to an immutable postgres@sha256:<digest> reference}' "$compose" || fail "$compose does not require a PostgreSQL digest"
@@ -42,7 +92,7 @@ grep -Fq 'format: spdx-json' .github/workflows/release.yml || fail 'SPDX JSON ge
 mkdir -p tmp
 hash_file=$(mktemp "$ROOT_DIR/tmp/stream-hash.XXXXXX")
 stream_file=$(mktemp "$ROOT_DIR/tmp/stream-copy.XXXXXX")
-trap 'unlink "$hash_file" 2>/dev/null || true; unlink "$stream_file" 2>/dev/null || true' EXIT
+trap 'unlink "$valid_report_key" 2>/dev/null || true; unlink "$malformed_report_key" 2>/dev/null || true; unlink "$permissive_report_key" 2>/dev/null || true; unlink "$hash_file" 2>/dev/null || true; unlink "$stream_file" 2>/dev/null || true' EXIT
 printf abc | python3 deploy/ops/stream_hash.py "$hash_file" >"$stream_file"
 [[ "$(<"$stream_file")" == abc ]] || fail 'stream hashing changed backup bytes'
 [[ "$(<"$hash_file")" == sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad ]] || fail 'stream hashing returned the wrong digest'
@@ -196,5 +246,8 @@ PY
 
 unlink "$hash_file"
 unlink "$stream_file"
+unlink "$valid_report_key"
+unlink "$malformed_report_key"
+unlink "$permissive_report_key"
 trap - EXIT
 printf 'production rollout contracts: pass\n'

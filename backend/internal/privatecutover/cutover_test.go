@@ -3,11 +3,13 @@ package privatecutover
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/require"
@@ -89,6 +91,77 @@ func TestRecordReportDigestRejectsMissingStateRow(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestCutoverCommandLockSpansCallerWorkAndReleases(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	mock.ExpectExec(`SELECT pg_advisory_lock\(hashtext\(\$1\)\)`).
+		WithArgs(commandAdvisoryLockKey).
+		WillDelayFor(25 * time.Millisecond).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`UPDATE report_and_digest_work`).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(`SELECT pg_advisory_unlock\(hashtext\(\$1\)\)`).
+		WithArgs(commandAdvisoryLockKey).
+		WillReturnRows(sqlmock.NewRows([]string{"unlocked"}).AddRow(true))
+
+	workCalled := false
+	startedAt := time.Now()
+	var sampledAt time.Time
+	report, err := withCommandLock(context.Background(), db, func(conn *sql.Conn) (MigrationReport, error) {
+		workCalled = true
+		sampledAt = time.Now()
+		_, err := conn.ExecContext(context.Background(), `UPDATE report_and_digest_work`)
+		return MigrationReport{OperatorID: 42}, err
+	})
+	require.NoError(t, err)
+	require.True(t, workCalled)
+	require.GreaterOrEqual(t, sampledAt.Sub(startedAt), 20*time.Millisecond, "locked work must sample time after acquisition")
+	require.Equal(t, int64(42), report.OperatorID)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCutoverCommandLockDiscardsSessionWhenUnlockIsUncertain(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	mock.ExpectExec(`SELECT pg_advisory_lock\(hashtext\(\$1\)\)`).
+		WithArgs(commandAdvisoryLockKey).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(`SELECT pg_advisory_unlock\(hashtext\(\$1\)\)`).
+		WithArgs(commandAdvisoryLockKey).
+		WillReturnError(errors.New("connection lost"))
+
+	report, err := withCommandLock(context.Background(), db, func(*sql.Conn) (MigrationReport, error) {
+		return MigrationReport{OperatorID: 42}, nil
+	})
+	require.Empty(t, report)
+	require.ErrorContains(t, err, "release cutover command lock")
+	require.Zero(t, db.Stats().OpenConnections, "uncertain lock session must not return to the pool")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCutoverCommandLockFailsClosed(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	mock.ExpectExec(`SELECT pg_advisory_lock\(hashtext\(\$1\)\)`).
+		WithArgs(commandAdvisoryLockKey).
+		WillReturnError(errors.New("lock unavailable"))
+
+	workCalled := false
+	_, err = withCommandLock(context.Background(), db, func(*sql.Conn) (MigrationReport, error) {
+		workCalled = true
+		return MigrationReport{}, nil
+	})
+	require.False(t, workCalled)
+	require.ErrorContains(t, err, "acquire cutover command lock")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestPrivateStateUpsertClearsStaleReportDigest(t *testing.T) {
 	sql := strings.Join(strings.Fields(privateStateUpsertSQL), " ")
 	require.Contains(t, sql, "ON CONFLICT (id) DO UPDATE")
@@ -146,6 +219,21 @@ func TestValidateReportOptionsRejectsUnwritableDestination(t *testing.T) {
 		t.Skip("current user can write through directory permissions")
 	}
 	require.ErrorContains(t, err, "probe migration report destination")
+}
+
+func TestValidateBackupOptionsRequiresExactlyOneOperatorChoice(t *testing.T) {
+	directory := t.TempDir()
+
+	require.NoError(t, validateBackupOptions(CutoverOptions{BackupDir: directory}))
+	require.NoError(t, validateBackupOptions(CutoverOptions{AssertNoManagedBackups: true}))
+	require.ErrorContains(t, validateBackupOptions(CutoverOptions{}), "explicit --backup-dir is required")
+	require.ErrorContains(t, validateBackupOptions(CutoverOptions{
+		BackupDir:              directory,
+		AssertNoManagedBackups: true,
+	}), "mutually exclusive")
+	require.ErrorContains(t, validateBackupOptions(CutoverOptions{
+		BackupDir: filepath.Join(directory, "missing"),
+	}), "validate backup directory")
 }
 
 func TestParseConfirmationRejectsNearMisses(t *testing.T) {

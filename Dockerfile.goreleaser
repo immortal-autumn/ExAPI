@@ -46,16 +46,19 @@ RUN addgroup -g 1000 sub2api && \
 
 WORKDIR /app
 
-# Copy the pre-built binary and runtime fallback resources from GoReleaser
+# Copy the pre-built runtime and offline cutover binaries plus fallback
+# resources from GoReleaser.
 COPY sub2api /app/sub2api
+COPY migrate-private-only /app/migrate-private-only
 COPY --chown=sub2api:sub2api backend/resources /app/resources
+COPY --chown=sub2api:sub2api deploy/ops/with-migration-report-key.sh /app/with-migration-report-key.sh
 
 # Create data directory
 RUN mkdir -p /app/data && chown -R sub2api:sub2api /app
 
 # Copy entrypoint script (fixes volume permissions then drops to sub2api)
 COPY deploy/docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN chmod +x /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh /app/with-migration-report-key.sh
 
 EXPOSE 8080
 
