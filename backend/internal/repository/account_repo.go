@@ -541,7 +541,7 @@ func (r *accountRepository) updateLockedAccount(ctx context.Context, client *dbe
 	if err != nil {
 		return nil, err
 	}
-	if explicitRateSyncEnabled != nil {
+	if explicitRateSyncEnabled != nil && service.IsUpstreamBillingProbeIdentity(account.Platform, account.Type) {
 		extra[service.UpstreamBillingRateSyncEnabledExtraKey] = *explicitRateSyncEnabled
 	}
 	account.Extra = extra
@@ -649,6 +649,7 @@ func (r *accountRepository) lockAndMergeAccountProbeExtra(ctx context.Context, c
 			AND proxy_id IS NOT DISTINCT FROM $4,
 			credentials,
 			extra -> 'upstream_billing_probe_enabled',
+			extra -> 'upstream_billing_rate_sync_enabled',
 			extra -> 'upstream_billing_probe'
 		FROM accounts
 		WHERE id = $1 AND deleted_at IS NULL
@@ -669,9 +670,10 @@ func (r *accountRepository) lockAndMergeAccountProbeExtra(ctx context.Context, c
 		metadataUnchanged bool
 		storedCredentials []byte
 		currentEnabled    []byte
+		currentRateSync   []byte
 		currentSnapshot   []byte
 	)
-	if err := rows.Scan(&metadataUnchanged, &storedCredentials, &currentEnabled, &currentSnapshot); err != nil {
+	if err := rows.Scan(&metadataUnchanged, &storedCredentials, &currentEnabled, &currentRateSync, &currentSnapshot); err != nil {
 		return nil, err
 	}
 	if err := rows.Err(); err != nil {
@@ -694,7 +696,15 @@ func (r *accountRepository) lockAndMergeAccountProbeExtra(ctx context.Context, c
 
 	extra := copyJSONMap(normalizeJSONMap(account.Extra))
 	delete(extra, service.UpstreamBillingProbeEnabledExtraKey)
+	delete(extra, service.UpstreamBillingRateSyncEnabledExtraKey)
 	delete(extra, service.UpstreamBillingProbeExtraKey)
+	if service.IsUpstreamBillingProbeIdentity(account.Platform, account.Type) && len(currentRateSync) > 0 && string(currentRateSync) != "null" {
+		var rateSyncEnabled any
+		if err := json.Unmarshal(currentRateSync, &rateSyncEnabled); err != nil {
+			return nil, err
+		}
+		extra[service.UpstreamBillingRateSyncEnabledExtraKey] = rateSyncEnabled
+	}
 	probeExplicitlyDisabled := false
 	probeAccount := account.Platform == service.PlatformOpenAI && account.Type == service.AccountTypeAPIKey
 	if probeAccount && explicitProbeEnabled != nil {

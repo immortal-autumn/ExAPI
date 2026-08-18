@@ -182,6 +182,47 @@ func TestAccountUpdatePreservesConcurrentProbeEnableFlag(t *testing.T) {
 	require.NotContains(t, got.Extra, service.UpstreamBillingProbeExtraKey)
 }
 
+func TestAccountUpdatePreservesConcurrentRateSyncFlag(t *testing.T) {
+	ctx := context.Background()
+	tx := testEntTx(t)
+	repo := integrationAccountRepository(t, tx.Client(), tx, nil)
+	for _, tt := range []struct {
+		name       string
+		platform   string
+		staleValue bool
+		liveValue  bool
+	}{
+		{name: "does not reenable sync after operator disables it", platform: service.PlatformOpenAI, staleValue: true},
+		{name: "does not disable sync after operator enables it", platform: service.PlatformGemini, liveValue: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			account := mustCreateAccount(t, tx.Client(), &service.Account{
+				Name:        "probe-rate-sync-stale-edit-" + tt.platform,
+				Platform:    tt.platform,
+				Type:        service.AccountTypeAPIKey,
+				Credentials: map[string]any{"api_key": "sk-test-" + tt.platform},
+				Extra: map[string]any{
+					service.UpstreamBillingProbeEnabledExtraKey:    true,
+					service.UpstreamBillingRateSyncEnabledExtraKey: tt.staleValue,
+				},
+			})
+
+			stale, err := repo.GetByID(ctx, account.ID)
+			require.NoError(t, err)
+			require.NoError(t, repo.UpdateExtra(ctx, account.ID, map[string]any{
+				service.UpstreamBillingRateSyncEnabledExtraKey: tt.liveValue,
+			}))
+
+			stale.Name += "-ordinary-edit"
+			require.NoError(t, repo.UpdateWithAccountBillingSettings(ctx, stale, nil, nil, nil))
+
+			got, err := repo.GetByID(ctx, account.ID)
+			require.NoError(t, err)
+			require.Equal(t, tt.liveValue, got.Extra[service.UpstreamBillingRateSyncEnabledExtraKey])
+		})
+	}
+}
+
 func TestAccountUpdateClearsProbeSnapshotWhenIdentityChanges(t *testing.T) {
 	ctx := context.Background()
 	tx := testEntTx(t)

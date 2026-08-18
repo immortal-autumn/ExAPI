@@ -87,8 +87,8 @@ func TestLockAndMergeAccountProbeExtraUsesCurrentDatabaseSnapshot(t *testing.T) 
 
 			mock.ExpectQuery(`(?s)`+regexp.QuoteMeta("SELECT")+`.*`+regexp.QuoteMeta("FOR NO KEY UPDATE")).
 				WithArgs(int64(27), service.PlatformOpenAI, service.AccountTypeAPIKey, nil).
-				WillReturnRows(sqlmock.NewRows([]string{"metadata_unchanged", "credentials", "enabled", "snapshot"}).
-					AddRow(tt.identityUnchanged, storedJSON, tt.databaseEnabled, tt.databaseSnapshot))
+				WillReturnRows(sqlmock.NewRows([]string{"metadata_unchanged", "credentials", "enabled", "rate_sync_enabled", "snapshot"}).
+					AddRow(tt.identityUnchanged, storedJSON, tt.databaseEnabled, []byte(`true`), tt.databaseSnapshot))
 
 			account := &service.Account{
 				ID:          27,
@@ -106,6 +106,7 @@ func TestLockAndMergeAccountProbeExtraUsesCurrentDatabaseSnapshot(t *testing.T) 
 				require.Equal(t, tt.wantSnapshot, got[service.UpstreamBillingProbeExtraKey])
 			}
 			require.Equal(t, tt.wantEnabled, got[service.UpstreamBillingProbeEnabledExtraKey])
+			require.Equal(t, true, got[service.UpstreamBillingRateSyncEnabledExtraKey])
 			require.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
@@ -259,8 +260,8 @@ func TestUpdateWithUpstreamBillingProbeEnabledRollsBackWhenOutboxFails(t *testin
 	mock.ExpectBegin()
 	mock.ExpectQuery(`(?s)`+regexp.QuoteMeta("SELECT")+`.*`+regexp.QuoteMeta("FOR NO KEY UPDATE")).
 		WithArgs(int64(27), service.PlatformOpenAI, service.AccountTypeAPIKey, nil).
-		WillReturnRows(sqlmock.NewRows([]string{"metadata_unchanged", "credentials", "enabled", "snapshot"}).
-			AddRow(true, storedJSON, []byte(`true`), []byte(`{"status":"ok"}`)))
+		WillReturnRows(sqlmock.NewRows([]string{"metadata_unchanged", "credentials", "enabled", "rate_sync_enabled", "snapshot"}).
+			AddRow(true, storedJSON, []byte(`true`), []byte(`true`), []byte(`{"status":"ok"}`)))
 	mock.ExpectExec(`(?s)UPDATE .*accounts.*SET.*WHERE .*id.*`).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery(`(?s)SELECT .* FROM "accounts" WHERE "id" = \$1`).
