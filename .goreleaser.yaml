@@ -62,6 +62,11 @@ builds:
 
 archives:
   - id: default
+    # The offline cutover helpers are image-internal Linux binaries. Keeping
+    # them out of end-user archives gives every supported platform the same
+    # public binary set and satisfies GoReleaser's archive consistency gate.
+    ids:
+      - sub2api
     format: tar.gz
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}

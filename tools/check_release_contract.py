@@ -96,6 +96,19 @@ require(".goreleaser.yaml", "id: migrate-private-only")
 require("Dockerfile.goreleaser", "COPY migrate-private-only /app/migrate-private-only")
 require("Dockerfile.goreleaser", "COPY verify-private-cutover-report /app/verify-private-cutover-report")
 require("Dockerfile.goreleaser", "deploy/ops/with-migration-report-key.sh /app/with-migration-report-key.sh")
+goreleaser_lines = (ROOT / ".goreleaser.yaml").read_text(encoding="utf-8").splitlines()
+archives_start = goreleaser_lines.index("archives:")
+archives_end = next(
+    index
+    for index in range(archives_start + 1, len(goreleaser_lines))
+    if goreleaser_lines[index] and not goreleaser_lines[index][0].isspace()
+)
+archives_contract = "\n".join(goreleaser_lines[archives_start:archives_end])
+if "    ids:\n      - sub2api" not in archives_contract:
+    raise SystemExit(".goreleaser.yaml: public archives must contain only the cross-platform server build")
+for private_binary in ("migrate-private-only", "verify-private-cutover-report"):
+    if private_binary in archives_contract:
+        raise SystemExit(f".goreleaser.yaml: {private_binary} must remain image-internal")
 if (ROOT / ".goreleaser.yaml").read_text(encoding="utf-8").count("      - migrate-private-only") != 2:
     raise SystemExit(".goreleaser.yaml: every production Docker target must include the offline cutover build")
 if (ROOT / ".goreleaser.yaml").read_text(encoding="utf-8").count("      - verify-private-cutover-report") != 2:
