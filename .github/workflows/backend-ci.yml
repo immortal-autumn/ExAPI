@@ -51,7 +51,7 @@ jobs:
           cache-dependency-path: backend/go.sum
       - name: Verify Go version
         run: |
-          go version | grep -q 'go1.26.5'
+          go version | grep -q 'go1.26.6'
       - name: Verify Go module metadata is tidy
         working-directory: backend
         run: GOTOOLCHAIN=auto go mod tidy -diff
@@ -97,7 +97,7 @@ jobs:
           cache-dependency-path: backend/go.sum
       - name: Verify Go version
         run: |
-          go version | grep -q 'go1.26.5'
+          go version | grep -q 'go1.26.6'
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
