@@ -45,7 +45,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("initialize database: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			log.Printf("close database client: %v", err)
+		}
+	}()
 
 	if _, err := privatecutover.RunWithOptions(context.Background(), db, *confirmation, reportKey, privatecutover.CutoverOptions{
 		LocalBackupDir:       *localBackupDir,

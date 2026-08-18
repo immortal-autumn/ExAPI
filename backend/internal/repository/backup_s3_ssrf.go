@@ -75,7 +75,11 @@ func validateBackupHostLiteral(host string) error {
 }
 
 func newBackupHTTPClient() *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		defaultTransport = &http.Transport{}
+	}
+	transport := defaultTransport.Clone()
 	// Backup destinations must always pass through the SSRF-safe dialer. An
 	// environment proxy would move the real network hop outside this policy.
 	transport.Proxy = nil

@@ -72,7 +72,7 @@ func (s *CockpitService) GetSummary(ctx context.Context) (*CockpitSummary, error
 	if err != nil {
 		return nil, fmt.Errorf("query cockpit counts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	summary := &CockpitSummary{GeneratedAt: time.Now().UTC(), Platforms: []CockpitPlatformCounts{}, QuotaWarnings: []CockpitQuotaWarning{}}
 	for rows.Next() {
 		var item CockpitPlatformCounts
@@ -141,7 +141,7 @@ func (s *CockpitService) quotaWarnings(ctx context.Context) ([]CockpitQuotaWarni
 	if err != nil {
 		return nil, 0, fmt.Errorf("query cockpit quota warnings: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	warnings := make([]CockpitQuotaWarning, 0, cockpitWarningLimit)
 	var total int64
 	for rows.Next() {

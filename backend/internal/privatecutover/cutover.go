@@ -566,7 +566,7 @@ func readAndVerifyRetainedV1Report(path string, key []byte, state privateCutover
 	if err != nil {
 		return migrationReportV1{}, fmt.Errorf("open retained schema v1 report: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	opened, err := file.Stat()
 	if err != nil || !os.SameFile(before, opened) {
 		return migrationReportV1{}, errors.New("retained schema v1 report changed while it was opened")
@@ -1102,7 +1102,7 @@ func validateReportOptions(options CutoverOptions) error {
 	if err != nil {
 		return fmt.Errorf("open migration report directory preflight: %w", err)
 	}
-	defer directoryHandle.Close()
+	defer func() { _ = directoryHandle.Close() }()
 	if err := directoryHandle.Sync(); err != nil {
 		return fmt.Errorf("sync migration report directory preflight: %w", err)
 	}
@@ -1224,7 +1224,7 @@ func writeDurableReport(path string, fallback io.Writer, report []byte) error {
 	if err != nil {
 		return fmt.Errorf("open migration report directory: %w", err)
 	}
-	defer directoryHandle.Close()
+	defer func() { _ = directoryHandle.Close() }()
 	if err := directoryHandle.Sync(); err != nil {
 		return fmt.Errorf("sync migration report directory: %w", err)
 	}
@@ -1242,7 +1242,7 @@ func purgeSettingRows(ctx context.Context, tx *sql.Tx, table string) ([]string, 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var keys []string
 	for rows.Next() {
 		var key string

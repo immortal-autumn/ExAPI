@@ -70,6 +70,7 @@ func NewOpsRepository(db *sql.DB) (service.OpsRepository, error) {
 	return &opsRepository{db: db, digester: digester}, nil
 }
 
+//nolint:unused // Used by integration-tag repository tests.
 func newOpsRepositoryWithDigester(db *sql.DB, digester *gatewayAPIKeyDigester) *opsRepository {
 	return &opsRepository{db: db, digester: digester}
 }

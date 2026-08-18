@@ -6,6 +6,7 @@ import (
 	"fmt"
 )
 
+//nolint:unused // Used by integration-tag migration tests.
 type legacyGatewayKeyMigrationStats struct {
 	APIKeysMigrated       int64
 	DeletedAuditsMigrated int64
@@ -13,6 +14,8 @@ type legacyGatewayKeyMigrationStats struct {
 
 // inspectLegacyGatewayKeyMaterialInTx validates legacy rows and reports the
 // number that require migration without locking or mutating them.
+//
+//nolint:unused // Used by integration-tag migration tests.
 func inspectLegacyGatewayKeyMaterialInTx(ctx context.Context, tx *sql.Tx, digester *gatewayAPIKeyDigester) (legacyGatewayKeyMigrationStats, error) {
 	var stats legacyGatewayKeyMigrationStats
 	if tx == nil {
@@ -28,11 +31,11 @@ func inspectLegacyGatewayKeyMaterialInTx(ctx context.Context, tx *sql.Tx, digest
 	for rows.Next() {
 		var raw string
 		if err := rows.Scan(&raw); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return stats, err
 		}
 		if _, err := digester.Digest(raw); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return stats, fmt.Errorf("validate legacy API key: %w", err)
 		}
 		stats.APIKeysMigrated++
@@ -50,11 +53,11 @@ func inspectLegacyGatewayKeyMaterialInTx(ctx context.Context, tx *sql.Tx, digest
 	for auditRows.Next() {
 		var raw string
 		if err := auditRows.Scan(&raw); err != nil {
-			auditRows.Close()
+			_ = auditRows.Close()
 			return stats, err
 		}
 		if _, err := digester.Digest(raw); err != nil {
-			auditRows.Close()
+			_ = auditRows.Close()
 			return stats, fmt.Errorf("validate legacy deleted-key audit: %w", err)
 		}
 		stats.DeletedAuditsMigrated++
@@ -72,6 +75,8 @@ func inspectLegacyGatewayKeyMaterialInTx(ctx context.Context, tx *sql.Tx, digest
 // savepoint. Any malformed row or conflict rolls back all rewrites made by this
 // invocation while leaving the caller able to inspect or continue the outer
 // disposable transaction.
+//
+//nolint:unused // Used by integration-tag migration tests.
 func migrateLegacyGatewayKeyMaterial(ctx context.Context, tx *sql.Tx, digester *gatewayAPIKeyDigester) error {
 	if tx == nil {
 		return fmt.Errorf("nil migration transaction")
@@ -91,6 +96,7 @@ func migrateLegacyGatewayKeyMaterial(ctx context.Context, tx *sql.Tx, digester *
 	return err
 }
 
+//nolint:unused // Used by integration-tag migration tests.
 func migrateLegacyGatewayKeyMaterialInTx(ctx context.Context, tx *sql.Tx, digester *gatewayAPIKeyDigester) (legacyGatewayKeyMigrationStats, error) {
 	var stats legacyGatewayKeyMigrationStats
 	if tx == nil {
@@ -117,13 +123,13 @@ func migrateLegacyGatewayKeyMaterialInTx(ctx context.Context, tx *sql.Tx, digest
 	for rows.Next() {
 		var row legacyRow
 		if err := rows.Scan(&row.id, &row.raw); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return stats, err
 		}
 		apiKeys = append(apiKeys, row)
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
+		_ = rows.Close()
 		return stats, fmt.Errorf("iterate legacy API keys: %w", err)
 	}
 	if err := rows.Close(); err != nil {
@@ -166,13 +172,13 @@ func migrateLegacyGatewayKeyMaterialInTx(ctx context.Context, tx *sql.Tx, digest
 	for auditRows.Next() {
 		var row legacyRow
 		if err := auditRows.Scan(&row.id, &row.raw); err != nil {
-			auditRows.Close()
+			_ = auditRows.Close()
 			return stats, err
 		}
 		audits = append(audits, row)
 	}
 	if err := auditRows.Err(); err != nil {
-		auditRows.Close()
+		_ = auditRows.Close()
 		return stats, fmt.Errorf("iterate legacy deleted-key audits: %w", err)
 	}
 	if err := auditRows.Close(); err != nil {

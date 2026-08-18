@@ -24,7 +24,7 @@ func secureSnapshotBackupTree(root backupRootIdentity, _ time.Time) ([]backupCan
 	if err != nil {
 		return nil, err
 	}
-	defer rootDirectory.Close()
+	defer func() { _ = rootDirectory.Close() }()
 
 	var candidates []backupCandidateIdentity
 	if err := walkSecureBackupDirectory(root, rootDirectory, "", &candidates); err != nil {
@@ -109,7 +109,7 @@ func secureAssertBackupTreeHasNoFiles(root backupRootIdentity) error {
 	if err != nil {
 		return err
 	}
-	defer rootDirectory.Close()
+	defer func() { _ = rootDirectory.Close() }()
 	return assertSecureBackupDirectoryHasNoFiles(root, rootDirectory, "")
 }
 
@@ -235,7 +235,7 @@ func secureBackupPathExists(root backupRootIdentity, relativePath string) (bool,
 	if err != nil {
 		return false, err
 	}
-	defer rootDirectory.Close()
+	defer func() { _ = rootDirectory.Close() }()
 	parent, base, err := openSecureBackupParent(rootDirectory, relativePath)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
@@ -243,7 +243,7 @@ func secureBackupPathExists(root backupRootIdentity, relativePath string) (bool,
 	if err != nil {
 		return false, err
 	}
-	defer parent.Close()
+	defer func() { _ = parent.Close() }()
 	var stat unix.Stat_t
 	if err := unix.Fstatat(int(parent.Fd()), base, &stat, unix.AT_SYMLINK_NOFOLLOW); errors.Is(err, unix.ENOENT) {
 		return false, nil
@@ -261,12 +261,12 @@ func secureValidateBackupCandidate(root backupRootIdentity, candidate backupCand
 	if err != nil {
 		return err
 	}
-	defer rootDirectory.Close()
+	defer func() { _ = rootDirectory.Close() }()
 	file, err := openSecureBackupCandidate(rootDirectory, candidate.RelativePath)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	return validateOpenedBackupCandidate(file, candidate)
 }
 
@@ -275,12 +275,12 @@ func secureConfirmBackupCandidateAbsent(root backupRootIdentity, relativePath st
 	if err != nil {
 		return err
 	}
-	defer rootDirectory.Close()
+	defer func() { _ = rootDirectory.Close() }()
 	parent, base, err := openSecureBackupParent(rootDirectory, relativePath)
 	if err != nil {
 		return err
 	}
-	defer parent.Close()
+	defer func() { _ = parent.Close() }()
 	var stat unix.Stat_t
 	if err := unix.Fstatat(int(parent.Fd()), base, &stat, unix.AT_SYMLINK_NOFOLLOW); err == nil {
 		return fmt.Errorf("backup candidate reappeared while confirming deletion: %s", filepath.Join(root.Path, relativePath))
@@ -298,17 +298,17 @@ func secureRemoveBackupCandidate(root backupRootIdentity, candidate backupCandid
 	if err != nil {
 		return err
 	}
-	defer rootDirectory.Close()
+	defer func() { _ = rootDirectory.Close() }()
 	parent, base, err := openSecureBackupParent(rootDirectory, candidate.RelativePath)
 	if err != nil {
 		return err
 	}
-	defer parent.Close()
+	defer func() { _ = parent.Close() }()
 	file, err := openSecureBackupChild(parent, base, candidate.Path)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	if err := validateOpenedBackupCandidate(file, candidate); err != nil {
 		return err
 	}
@@ -431,7 +431,7 @@ func openSecureBackupCandidate(root *os.File, relativePath string) (*os.File, er
 	if err != nil {
 		return nil, err
 	}
-	defer parent.Close()
+	defer func() { _ = parent.Close() }()
 	return openSecureBackupChild(parent, base, relativePath)
 }
 

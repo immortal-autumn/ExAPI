@@ -84,7 +84,7 @@ func loadLockedAccountCredentials(ctx context.Context, exec sqlExecutor, id int6
 	if err != nil {
 		return nil, false, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
 			return nil, false, err

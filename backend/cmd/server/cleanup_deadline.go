@@ -15,14 +15,6 @@ type cleanupResult struct {
 	err  error
 }
 
-func runCleanupSequential(steps []cleanupStep) []cleanupResult {
-	results := make([]cleanupResult, 0, len(steps))
-	for _, step := range steps {
-		results = append(results, cleanupResult{name: step.name, err: step.fn()})
-	}
-	return results
-}
-
 // runCleanupParallel starts all application cleanup steps and waits only until
 // they finish or the caller-owned deadline expires. Step goroutines may outlive
 // the wait when a legacy Stop method is uncooperative; callers must therefore

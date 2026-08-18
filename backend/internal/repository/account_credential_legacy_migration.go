@@ -8,6 +8,7 @@ import (
 	"fmt"
 )
 
+//nolint:unused // Used by integration-tag migration tests.
 type legacyAccountCredentialMigrationStats struct {
 	AccountsMigrated int64
 }
@@ -15,6 +16,8 @@ type legacyAccountCredentialMigrationStats struct {
 // inspectLegacyAccountCredentialsInTx validates every active credential row and
 // reports how many plaintext rows require migration without taking write locks
 // or mutating data. Protected envelopes are authenticated as part of preflight.
+//
+//nolint:unused // Used by integration-tag migration tests.
 func inspectLegacyAccountCredentialsInTx(ctx context.Context, tx *sql.Tx, protector *accountCredentialProtector) (stats legacyAccountCredentialMigrationStats, err error) {
 	if tx == nil {
 		return stats, errors.New("account credential migration transaction is required")
@@ -30,7 +33,7 @@ func inspectLegacyAccountCredentialsInTx(ctx context.Context, tx *sql.Tx, protec
 	if err != nil {
 		return stats, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id int64
 		var raw []byte
@@ -58,6 +61,8 @@ func inspectLegacyAccountCredentialsInTx(ctx context.Context, tx *sql.Tx, protec
 // migrateLegacyAccountCredentialsInTx rewrites plaintext account credential
 // JSON into row-bound AEAD envelopes. A savepoint makes the invocation atomic
 // while preserving the caller-owned transaction for disposable verification.
+//
+//nolint:unused // Used by integration-tag migration tests.
 func migrateLegacyAccountCredentialsInTx(ctx context.Context, tx *sql.Tx, protector *accountCredentialProtector) (stats legacyAccountCredentialMigrationStats, err error) {
 	if tx == nil {
 		return stats, errors.New("account credential migration transaction is required")

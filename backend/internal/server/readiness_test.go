@@ -19,7 +19,7 @@ func TestProbeReadiness(t *testing.T) {
 	t.Run("ready", func(t *testing.T) {
 		db, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
 		require.NoError(t, err)
-		defer db.Close()
+		t.Cleanup(func() { _ = db.Close() })
 		mock.ExpectPing()
 		mock.ExpectQuery("SELECT EXISTS").
 			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
@@ -27,7 +27,7 @@ func TestProbeReadiness(t *testing.T) {
 
 		redisServer := miniredis.RunT(t)
 		redisClient := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
-		defer redisClient.Close()
+		t.Cleanup(func() { require.NoError(t, redisClient.Close()) })
 
 		require.NoError(t, probeReadiness(context.Background(), db, redisClient))
 		require.NoError(t, mock.ExpectationsWereMet())
@@ -40,7 +40,7 @@ func TestProbeReadiness(t *testing.T) {
 	t.Run("database_ping_fails", func(t *testing.T) {
 		db, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
 		require.NoError(t, err)
-		defer db.Close()
+		t.Cleanup(func() { _ = db.Close() })
 		mock.ExpectPing().WillReturnError(errors.New("postgres unavailable"))
 
 		require.ErrorContains(t, probeReadiness(context.Background(), db, nil), "database ping")
@@ -50,7 +50,7 @@ func TestProbeReadiness(t *testing.T) {
 	t.Run("migration_table_missing", func(t *testing.T) {
 		db, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
 		require.NoError(t, err)
-		defer db.Close()
+		t.Cleanup(func() { _ = db.Close() })
 		mock.ExpectPing()
 		mock.ExpectQuery("SELECT EXISTS").WillReturnError(errors.New("relation does not exist"))
 
@@ -61,7 +61,7 @@ func TestProbeReadiness(t *testing.T) {
 	t.Run("no_migration_applied", func(t *testing.T) {
 		db, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
 		require.NoError(t, err)
-		defer db.Close()
+		t.Cleanup(func() { _ = db.Close() })
 		mock.ExpectPing()
 		mock.ExpectQuery("SELECT EXISTS").
 			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
@@ -73,7 +73,7 @@ func TestProbeReadiness(t *testing.T) {
 	t.Run("redis_unavailable", func(t *testing.T) {
 		db, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
 		require.NoError(t, err)
-		defer db.Close()
+		t.Cleanup(func() { _ = db.Close() })
 		mock.ExpectPing()
 		mock.ExpectQuery("SELECT EXISTS").
 			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
@@ -86,7 +86,7 @@ func TestProbeReadiness(t *testing.T) {
 	t.Run("private_cutover_incomplete", func(t *testing.T) {
 		db, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
 		require.NoError(t, err)
-		defer db.Close()
+		t.Cleanup(func() { _ = db.Close() })
 		mock.ExpectPing()
 		mock.ExpectQuery("SELECT EXISTS").
 			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))

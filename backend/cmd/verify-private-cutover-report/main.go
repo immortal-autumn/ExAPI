@@ -52,7 +52,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("open migration report: %v", err)
 	}
-	defer reportFile.Close()
+	defer func() { _ = reportFile.Close() }()
 	info, err := reportFile.Stat()
 	if err != nil {
 		log.Fatalf("stat migration report: %v", err)
@@ -76,7 +76,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("initialize database: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			log.Printf("close database client: %v", err)
+		}
+	}()
 
 	report, err := privatecutover.VerifyMigrationReport(context.Background(), db, signed, reportKey)
 	if err != nil {

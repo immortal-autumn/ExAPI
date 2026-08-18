@@ -62,7 +62,7 @@ func ReadBatchCleanupEvidence(path string) (BatchCleanupEvidence, error) {
 	if err != nil {
 		return BatchCleanupEvidence{}, fmt.Errorf("open batch cleanup evidence: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	after, err := file.Stat()
 	if err != nil {
 		return BatchCleanupEvidence{}, fmt.Errorf("stat batch cleanup evidence: %w", err)
