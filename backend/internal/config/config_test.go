@@ -21,6 +21,29 @@ func resetViperWithJWTSecret(t *testing.T) {
 	t.Setenv("REDIS_PASSWORD", "test-only-redis-password")
 }
 
+func TestLoadPrivateModePreservesConfiguredOperationalEncryptionKey(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	key := strings.Repeat("ab", 32)
+	t.Setenv("TOTP_ENCRYPTION_KEY", key)
+	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "true")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, key, cfg.Totp.EncryptionKey)
+	require.True(t, cfg.Totp.EncryptionKeyConfigured)
+}
+
+func TestLoadPrivateModeGeneratesOperationalEncryptionKeyWhenUnset(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("TOTP_ENCRYPTION_KEY", "")
+	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "true")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Regexp(t, `^[0-9a-f]{64}$`, cfg.Totp.EncryptionKey)
+	require.False(t, cfg.Totp.EncryptionKeyConfigured)
+}
+
 func TestLoadServerTimingConfig(t *testing.T) {
 	t.Run("disabled by default", func(t *testing.T) {
 		resetViperWithJWTSecret(t)

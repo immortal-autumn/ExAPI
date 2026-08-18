@@ -129,7 +129,7 @@ server {
 ```
 
 If Nginx gzip is enabled in the `http` block, keep `text/event-stream` out of
-`gzip_types` and do not use `gzip_types *` for Sub2API. The
+`gzip_types` and do not use `gzip_types *` for ExAPI. The
 `proxy_buffering off` setting above prevents proxy buffering, but it does not
 disable the gzip response filter. Use an explicit list for ordinary responses:
 

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -46,6 +47,25 @@ func TestNewAESEncryptor_ValidKey32Bytes(t *testing.T) {
 	enc, err := NewAESEncryptor(aesTestCfg(aesHexKey(32, 0x01)))
 	require.NoError(t, err)
 	require.NotNil(t, enc)
+}
+
+func TestNewAESEncryptor_PrivateLoadedConfigPreservesConfiguredKey(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	key := aesHexKey(32, 0x7a)
+	t.Setenv("JWT_SECRET", strings.Repeat("x", 32))
+	t.Setenv("REDIS_PASSWORD", "test-only-redis-password")
+	t.Setenv("TOTP_ENCRYPTION_KEY", key)
+	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "true")
+
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	require.Equal(t, key, cfg.Totp.EncryptionKey)
+	require.True(t, cfg.Totp.EncryptionKeyConfigured)
+
+	encryptor, err := NewAESEncryptor(cfg)
+	require.NoError(t, err)
+	require.NotNil(t, encryptor)
 }
 
 // 16 / 24 字节密钥在 AES 体系内合法，但本实现仅接受 AES-256（32 字节）。

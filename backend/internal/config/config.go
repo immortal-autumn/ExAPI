@@ -1837,12 +1837,15 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 		cfg.Gateway.UserMessageQueue.Mode = ""
 	}
 
-	// Auto-generate TOTP encryption key if not set (32 bytes = 64 hex chars for AES-256)
+	// The fixed TOTP key also protects retained operational settings consumed by
+	// services that remain in the private build. Private mode removes the user
+	// TOTP routes and clears operator TOTP state during cutover, but it must not
+	// blank configured key material before those services are constructed.
+	// Auto-generate a process-local key only when no fixed key was supplied; the
+	// existing persistence guards continue to reject storing restart-sensitive
+	// secrets behind an auto-generated key.
 	cfg.Totp.EncryptionKey = strings.TrimSpace(cfg.Totp.EncryptionKey)
-	if SingleUserPrivateControlPlaneEnabled() {
-		cfg.Totp.EncryptionKey = ""
-		cfg.Totp.EncryptionKeyConfigured = false
-	} else if cfg.Totp.EncryptionKey == "" {
+	if cfg.Totp.EncryptionKey == "" {
 		key, err := generateJWTSecret(32) // Reuse the same random generation function
 		if err != nil {
 			return nil, fmt.Errorf("generate totp encryption key error: %w", err)
@@ -1955,7 +1958,7 @@ func setDefaults() {
 	// WebAuthn / Passkeys are opt-in because every deployment must explicitly
 	// declare its relying-party domain and trusted browser origins.
 	viper.SetDefault("webauthn.enabled", false)
-	viper.SetDefault("webauthn.rp_display_name", "Sub2API")
+	viper.SetDefault("webauthn.rp_display_name", "ExAPI")
 	viper.SetDefault("webauthn.rp_id", "")
 	viper.SetDefault("webauthn.rp_origins", []string{})
 
