@@ -8,7 +8,7 @@ import (
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-	"github.com/lib/pq"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/postgres"
 )
 
 // clientFromContext 从 context 中获取事务 client，如果不存在则返回默认 client。
@@ -83,9 +83,8 @@ func isUniqueConstraintViolation(err error) bool {
 	// 优先检测 PostgreSQL 特定错误码（最精确）。
 	// 错误码 23505 对应 unique_violation。
 	// 参考：https://www.postgresql.org/docs/current/errcodes-appendix.html
-	var pgErr *pq.Error
-	if errors.As(err, &pgErr) {
-		return pgErr.Code == "23505"
+	if state := postgres.SQLState(err); state != "" {
+		return state == "23505"
 	}
 
 	// 回退到错误消息检测（兼容其他场景）。

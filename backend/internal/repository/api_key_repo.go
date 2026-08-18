@@ -13,8 +13,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	"github.com/Wei-Shaw/sub2api/ent/user"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/postgres"
 	"github.com/Wei-Shaw/sub2api/internal/service"
-	"github.com/lib/pq"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 
@@ -596,7 +596,7 @@ func latestUsageLogIPsQuery(apiKeyIDs []int64, dialectName string) (string, []an
 				AND ul.ip_address <> ''
 			ORDER BY ul.created_at DESC, ul.id DESC
 			LIMIT 1
-		) AS latest`, []any{pq.Array(apiKeyIDs)}
+		) AS latest`, []any{postgres.Array(apiKeyIDs)}
 	}
 
 	placeholders := make([]string, len(apiKeyIDs))

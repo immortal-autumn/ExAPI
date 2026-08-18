@@ -15,8 +15,8 @@ import (
 
 	_ "github.com/Wei-Shaw/sub2api/ent/runtime"
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/postgres"
 	"github.com/Wei-Shaw/sub2api/internal/repository"
-	"github.com/lib/pq"
 )
 
 const classifierVersion = "ingress-reject-v1"
@@ -131,7 +131,7 @@ func cleanup(ctx context.Context, db *sql.DB, before time.Time, batchSize int, e
 		}
 		if execute && len(ids) > 0 {
 			result, err := db.ExecContext(ctx,
-				`DELETE FROM ops_error_logs WHERE id = ANY($1) AND created_at < $2`, pq.Array(ids), before)
+				`DELETE FROM ops_error_logs WHERE id = ANY($1) AND created_at < $2`, postgres.Array(ids), before)
 			if err != nil {
 				return nil, scanned, matched, deleted, err
 			}

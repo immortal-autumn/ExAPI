@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lib/pq"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/postgres"
 )
 
 type EventFilter struct {
@@ -127,7 +127,7 @@ func (r *PostgreSQLRepository) DeleteEventsByIDs(ctx context.Context, ids []int6
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	rows, err := tx.QueryContext(ctx, `DELETE FROM prompt_audit_events WHERE id=ANY($1) RETURNING job_id`, pq.Array(ids))
+	rows, err := tx.QueryContext(ctx, `DELETE FROM prompt_audit_events WHERE id=ANY($1) RETURNING job_id`, postgres.Array(ids))
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +379,7 @@ func deleteOrphanJobs(ctx context.Context, tx *sql.Tx, jobIDs []int64) (int64, e
 	}
 	result, err := tx.ExecContext(ctx, `DELETE FROM prompt_audit_jobs j
 		WHERE j.id=ANY($1) AND j.status <> 'processing'
-		AND NOT EXISTS (SELECT 1 FROM prompt_audit_events e WHERE e.job_id=j.id)`, pq.Array(jobIDs))
+		AND NOT EXISTS (SELECT 1 FROM prompt_audit_events e WHERE e.job_id=j.id)`, postgres.Array(jobIDs))
 	if err != nil {
 		return 0, err
 	}

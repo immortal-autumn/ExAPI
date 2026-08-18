@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lib/pq"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/postgres"
 )
 
 const (
@@ -1238,7 +1238,7 @@ func WriteDurableFile(path string, contents []byte) error {
 }
 
 func purgeSettingRows(ctx context.Context, tx *sql.Tx, table string) ([]string, error) {
-	rows, err := tx.QueryContext(ctx, `DELETE FROM `+quoteIdentifier(table)+` WHERE key = ANY($1) OR EXISTS (SELECT 1 FROM unnest($2::text[]) AS prefix WHERE key LIKE prefix || '%') RETURNING key`, pq.Array(SaaSSettingKeys), pq.Array(SaaSSettingPrefixes))
+	rows, err := tx.QueryContext(ctx, `DELETE FROM `+quoteIdentifier(table)+` WHERE key = ANY($1) OR EXISTS (SELECT 1 FROM unnest($2::text[]) AS prefix WHERE key LIKE prefix || '%') RETURNING key`, postgres.Array(SaaSSettingKeys), postgres.Array(SaaSSettingPrefixes))
 	if err != nil {
 		return nil, err
 	}

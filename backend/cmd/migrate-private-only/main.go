@@ -11,8 +11,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/privatecutover"
 	"github.com/Wei-Shaw/sub2api/internal/repository"
-
-	_ "github.com/lib/pq"
 )
 
 func main() {

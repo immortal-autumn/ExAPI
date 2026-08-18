@@ -11,8 +11,8 @@ import (
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/user"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/postgres"
 	"github.com/Wei-Shaw/sub2api/internal/service"
-	"github.com/lib/pq"
 )
 
 const (
@@ -970,11 +970,7 @@ func generateAffiliateCode() (string, error) {
 }
 
 func isAffiliateUniqueViolation(err error) bool {
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		return string(pqErr.Code) == "23505"
-	}
-	return false
+	return postgres.IsSQLState(err, "23505")
 }
 
 // UpdateUserAffCode 改写用户的邀请码（自定义专属邀请码）。
@@ -1099,7 +1095,7 @@ func (r *affiliateRepository) BatchSetUserRebateRate(ctx context.Context, userID
 UPDATE user_affiliates
 SET aff_rebate_rate_percent = $1,
     updated_at = NOW()
-WHERE user_id = ANY($2)`, nullableArg(ratePercent), pq.Array(userIDs))
+WHERE user_id = ANY($2)`, nullableArg(ratePercent), postgres.Array(userIDs))
 		if err != nil {
 			return fmt.Errorf("batch set aff_rebate_rate_percent: %w", err)
 		}

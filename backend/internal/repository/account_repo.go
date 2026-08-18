@@ -31,8 +31,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/postgres"
 	"github.com/Wei-Shaw/sub2api/internal/service"
-	"github.com/lib/pq"
 
 	entsql "entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqljson"
@@ -1199,7 +1199,7 @@ func (r *accountRepository) ListOAuthRefreshCandidatePage(ctx context.Context, o
 		ORDER BY id ASC
 		LIMIT $3`
 
-	rows, err := r.sql.QueryContext(ctx, query, pq.Array(options.Platforms), options.AfterID, options.Limit)
+	rows, err := r.sql.QueryContext(ctx, query, postgres.Array(options.Platforms), options.AfterID, options.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1302,7 +1302,7 @@ func (r *accountRepository) BatchUpdateLastUsed(ctx context.Context, updates map
 	}
 
 	caseSQL += " END, updated_at = NOW() WHERE id = ANY($" + itoa(idx) + ") AND deleted_at IS NULL"
-	args = append(args, pq.Array(ids))
+	args = append(args, postgres.Array(ids))
 
 	_, err := r.sql.ExecContext(ctx, caseSQL, args...)
 	if err != nil {
@@ -1866,7 +1866,7 @@ func (r *accountRepository) ListSchedulableCapacityByGroupIDs(ctx context.Contex
 			AND (a.overload_until IS NULL OR a.overload_until <= $3)
 			AND (a.rate_limit_reset_at IS NULL OR a.rate_limit_reset_at <= $3)
 		ORDER BY ag.group_id ASC, ag.priority ASC, a.priority ASC, a.id ASC
-	`, pq.Array(groupIDs), service.StatusActive, time.Now())
+	`, postgres.Array(groupIDs), service.StatusActive, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -2904,7 +2904,7 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 		groupIdentityChanged := ""
 		if len(ollamaGroupIdentityChangedIDs) > 0 {
 			groupIdentityChanged = "(" + eligibleAccount + " AND id = ANY($" + itoa(idx) + "))"
-			args = append(args, pq.Array(ollamaGroupIdentityChangedIDs))
+			args = append(args, postgres.Array(ollamaGroupIdentityChangedIDs))
 			idx++
 		}
 		snapshotIdentityChanged := groupIdentityChanged
@@ -2934,7 +2934,7 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 	setClauses = append(setClauses, "updated_at = NOW()")
 
 	whereClause := " WHERE id = ANY($" + itoa(idx) + ") AND deleted_at IS NULL"
-	args = append(args, pq.Array(ids))
+	args = append(args, postgres.Array(ids))
 	idx++
 	if updates.ProbeEnabled != nil {
 		whereClause += " AND platform = $" + itoa(idx) + " AND type = $" + itoa(idx+1)

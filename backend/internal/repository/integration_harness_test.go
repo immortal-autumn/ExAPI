@@ -24,10 +24,11 @@ import (
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
-	_ "github.com/lib/pq"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/postgres"
 	redisclient "github.com/redis/go-redis/v9"
-	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/testcontainers/testcontainers-go"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 const (
@@ -77,13 +78,19 @@ func TestMain(m *testing.M) {
 	}
 
 	postgresImage := selectDockerImage(ctx, postgresImageTag)
-	pgContainer, err := tcpostgres.Run(
+	pgContainer, err := testcontainers.Run(
 		ctx,
 		postgresImage,
-		tcpostgres.WithDatabase("sub2api_test"),
-		tcpostgres.WithUsername("postgres"),
-		tcpostgres.WithPassword("postgres"),
-		tcpostgres.BasicWaitStrategies(),
+		testcontainers.WithEnv(map[string]string{
+			"POSTGRES_DB":       "sub2api_test",
+			"POSTGRES_USER":     "postgres",
+			"POSTGRES_PASSWORD": "postgres",
+		}),
+		testcontainers.WithExposedPorts("5432/tcp"),
+		testcontainers.WithAdditionalWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
+			wait.ForListeningPort("5432/tcp"),
+		),
 	)
 	if err != nil {
 		log.Printf("failed to start postgres container: %v", err)
@@ -101,11 +108,12 @@ func TestMain(m *testing.M) {
 	}
 	defer func() { _ = redisContainer.Terminate(ctx) }()
 
-	dsn, err := pgContainer.ConnectionString(ctx, "sslmode=disable", "TimeZone=UTC")
+	postgresEndpoint, err := pgContainer.PortEndpoint(ctx, "5432/tcp", "")
 	if err != nil {
-		log.Printf("failed to get postgres dsn: %v", err)
+		log.Printf("failed to get postgres endpoint: %v", err)
 		os.Exit(1)
 	}
+	dsn := fmt.Sprintf("postgres://postgres:postgres@%s/sub2api_test?sslmode=disable&TimeZone=UTC", postgresEndpoint)
 
 	integrationDB, err = openSQLWithRetry(ctx, dsn, 30*time.Second)
 	if err != nil {
@@ -190,7 +198,7 @@ func openSQLWithRetry(ctx context.Context, dsn string, timeout time.Duration) (*
 	var lastErr error
 
 	for time.Now().Before(deadline) {
-		db, err := sql.Open("postgres", dsn)
+		db, err := sql.Open(postgres.DriverName, dsn)
 		if err != nil {
 			lastErr = err
 			time.Sleep(250 * time.Millisecond)

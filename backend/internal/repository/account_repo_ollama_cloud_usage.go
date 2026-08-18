@@ -9,8 +9,8 @@ import (
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/postgres"
 	"github.com/Wei-Shaw/sub2api/internal/service"
-	"github.com/lib/pq"
 )
 
 const (
@@ -65,7 +65,7 @@ func (r *accountRepository) ListOllamaCloudUsageGroupAccounts(ctx context.Contex
 			AND `+ollamaCloudUsageEligibleSQL+`
 			AND credentials ->> 'api_key' = ANY($1)
 		ORDER BY id
-	`, pq.Array(keys))
+	`, postgres.Array(keys))
 	if err != nil {
 		return nil, err
 	}
@@ -311,13 +311,13 @@ func (r *accountRepository) updateOllamaCloudUsageGroup(
 		args := []any{string(encoded)}
 		if r.protector != nil {
 			query += ` AND id = ANY($2)`
-			args = append(args, pq.Array(memberIDs))
+			args = append(args, postgres.Array(memberIDs))
 		} else {
 			query += `
 				AND ` + ollamaCloudUsageEligibleSQL + `
 				AND credentials ->> 'api_key' = $2
 				AND id = ANY($3)`
-			args = append(args, apiKey, pq.Array(memberIDs))
+			args = append(args, apiKey, postgres.Array(memberIDs))
 		}
 		result, err := client.ExecContext(txCtx, query, args...)
 		if err != nil {

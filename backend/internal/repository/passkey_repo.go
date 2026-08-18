@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/postgres"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/go-webauthn/webauthn/webauthn"
-	"github.com/lib/pq"
 )
 
 type passkeyRepository struct {
@@ -137,8 +137,7 @@ func (r *passkeyRepository) Create(
 	`, record.UserID, record.Credential.ID, name, string(credentialJSON)).
 		Scan(&created.ID, &created.Name, &created.CreatedAt, &created.UpdatedAt)
 	if err != nil {
-		var pqErr *pq.Error
-		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+		if postgres.IsSQLState(err, "23505") {
 			return nil, service.ErrPasskeyExists
 		}
 		return nil, fmt.Errorf("create passkey credential: %w", err)
