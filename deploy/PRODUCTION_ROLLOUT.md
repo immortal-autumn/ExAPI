@@ -9,21 +9,80 @@ off-host.
 
 ExAPI v0.2.0 runs two independent listeners. Set
 `EXAPI_PUBLIC_LISTEN_ADDR` for the API-key gateway and
-`EXAPI_CONTROL_LISTEN_ADDR`, `EXAPI_CONTROL_HOSTS`, and
-`EXAPI_OPERATOR_PEER_IPS` for the direct WireGuard operator listener. The
-control port must not be published through the public reverse proxy.
+`EXAPI_CONTROL_LISTEN_ADDR`, `EXAPI_ALLOW_CONTAINER_WILDCARD_CONTROL_BIND`, `EXAPI_CONTROL_BIND_HOST`,
+`EXAPI_CONTROL_HOSTS`, and `EXAPI_OPERATOR_PEER_IPS` for the direct WireGuard
+operator listener. In bridge-mode Compose, the listen address is a wildcard
+inside the isolated container namespace and
+`EXAPI_ALLOW_CONTAINER_WILDCARD_CONTROL_BIND=true` is required explicitly.
+`EXAPI_CONTROL_BIND_HOST` must be the server's WireGuard
+address, not `127.0.0.1` or a wildcard; the control port must not be published
+through the public reverse proxy. Confirm the address is assigned to the
+WireGuard interface and that the firewall permits only the listed operator
+peer addresses before promotion.
 
-Before starting a migrated database, run the offline command below from the
-release image (never from the online server process):
+After the final recovery set and canary evidence are complete, run the checked-in
+host-side orchestrator below. It stops and verifies the application container,
+keeps PostgreSQL running, runs the release-image migration and report verifier
+as one-shot containers, archives the signed report/key/evidence through the
+required encrypted adapter, and leaves the application stopped for inspection:
 
-```sh
-test -d /app/data/backups
-/app/with-migration-report-key.sh /protected/exapi-migration-report.key \
-  /app/migrate-private-only \
-  --confirm DROP-SAAS-DATA-KEEP-USER-<lowest-active-admin-id> \
-  --backup-dir /app/data/backups \
-  --report-file /app/data/private-migration-report.json
+```bash
+export EXAPI_IMAGE=ghcr.io/immortal-autumn/sub2api2personal@sha256:RELEASE_DIGEST
+export EXAPI_REVIEWED_COMMIT=<40-character-tagged-commit>
+export COMPOSE_ENV_FILE=/protected/exapi-production.env
+export COMPOSE_PROJECT_NAME=exapi-production
+export EXAPI_ROLLOUT_ID=exapi-v0.2.0-<change-ticket>
+export EXAPI_MIGRATION_REPORT_KEY_FILE=/protected/exapi-migration-report.key
+export EXAPI_CONFIRMATION=DROP-SAAS-DATA-KEEP-USER-<lowest-active-admin-id>
+export EXAPI_CONTROL_BIND_HOST=<server-wireguard-address>
+export EXAPI_CONTROL_LISTEN_ADDR=0.0.0.0:8027
+export EXAPI_ALLOW_CONTAINER_WILDCARD_CONTROL_BIND=true
+export EXAPI_CONTROL_HOSTS=<server-wireguard-address>
+export EXAPI_OPERATOR_PEER_IPS=<operator-wireguard-addresses>
+export EXAPI_WIREGUARD_INTERFACE=wg0
+export EXAPI_REPORT_ARCHIVE_COMMAND=/protected/adapters/archive-private-cutover-evidence
+export EXAPI_REPORT_ARCHIVE_VERIFY_COMMAND=/protected/adapters/verify-private-cutover-archive
+export EXAPI_MAINTENANCE_VERIFY_COMMAND=/protected/adapters/verify-exapi-maintenance
+export EXAPI_BATCH_CLEANUP_VERIFY_COMMAND=/protected/adapters/verify-batch-cleanup
+# Use exactly one of these two policies:
+export EXAPI_LEGACY_LOCAL_BACKUP_DIR=/app/data/legacy-backups
+# export EXAPI_NO_LOCAL_BACKUPS=true
+deploy/ops/run-private-cutover.sh
 ```
+
+The script must be run while the normal application container process is
+running (its `/ready` healthcheck may be intentionally false before cutover)
+and the PostgreSQL service is healthy. It uses the same Compose project, protected
+environment, reviewed image digest, data volume, and database network; do not
+invoke `/app/migrate-private-only` from the online container or a different
+database. It intentionally does not restart the application if migration,
+verification, or evidence archival fails.
+
+Before downtime, the orchestrator pulls the digest, checks its revision label,
+opens the protected source key exactly once without following any path
+symlinks, rejects hardlink aliases, and copies those bytes into a protected
+single-link `0600` staging file under this checkout's `tmp/` directory. It then
+copies only that staged file into an ephemeral Docker volume as UID 1000/mode
+0600 and uses the same staged bytes for archival; it never rereads the mutable
+operator-supplied path. It also exercises the real entrypoint, key wrapper,
+binaries, production data volume, backup path, and database network. The
+maintenance adapter must prove public ingress is closed and the expected
+running-replica count both before and after the stop. The post-stop gate also
+requires zero unexpected PostgreSQL client sessions.
+The batch-cleanup adapter runs before downtime and must inspect every configured
+provider, archive its detailed manifest to immutable/versioned S3 storage, and
+return exactly one JSON object with `schema_version=1`, `verified=true`, a fresh
+RFC3339 UTC `verified_at`, and zero values for `sql_rows_remaining`,
+`provider_jobs_remaining`, `provider_inputs_remaining`, and
+`provider_outputs_remaining`. It must also return the off-host `s3://`
+`evidence_uri`, its nonempty `evidence_version_id`, and the lowercase
+`evidence_sha256` of that exact version. These fields are embedded in the signed
+migration report. The database preflight independently requires
+`batch_image_jobs` to contain zero rows. If either check fails, stop: cancel
+every provider-side job, delete provider-managed inputs and outputs using the
+retained account credentials, preserve cleanup evidence, and remove the
+corresponding SQL rows before retrying. The cutover deliberately refuses to
+erase those references itself.
 
 Generate `/protected/exapi-migration-report.key` exactly once on the protected
 host with the no-clobber sequence below. It fails if the destination exists:
@@ -36,33 +95,98 @@ test ! -e "$key_file"
 
 Keep it as exactly one printable 64-hex-character line, retain an encrypted
 off-host copy with the signed report, and do not regenerate it when retrying or
-verifying a cutover. The release-image wrapper requires mode `0600`, ownership
-by the offline command user, exact length, and lowercase hexadecimal encoding;
-it injects the key only into the offline migration process. The running
-application does not need this key.
-Replace `/app/data/backups` with the application-managed backup directory if it
-differs.
+verifying a cutover. The host source must be a regular, non-symlink file with
+mode `0600` and exactly one hard link; every parent directory in its absolute
+path must also be non-symlink. The orchestrator snapshots it once, copies the
+snapshot into an ephemeral Docker volume owned by the offline UID, and the
+release-image wrapper then re-enforces owner, mode, link count, exact length,
+and lowercase hexadecimal encoding. It injects the key only into the offline
+migration process. The running application does not need this key.
 
-If the installation never configured managed backups, first verify that the
-`backup_records` setting is absent or an empty JSON array, then use this complete
-alternative (without the backup-directory preflight):
+`EXAPI_LEGACY_LOCAL_BACKUP_DIR` is only for an explicitly identified legacy
+local backup directory whose pre-cutover files may be purged after commit. The
+current S3 backup service is a separate object store: its `backup_records`
+metadata and objects remain preserved and must not be treated as a local path.
+The migration report path must be outside this legacy backup root. The command
+snapshots every file regardless of filesystem mtime and, after the allowlisted
+purge, re-scans the rooted tree; any late or uncommitted entry stops finalization.
+If no legacy local backup directory was ever configured, verify that fact from
+the deployment records and use this complete alternative instead; it does not
+infer the choice from S3 `backup_records`:
 
-```sh
-/app/with-migration-report-key.sh /protected/exapi-migration-report.key \
-  /app/migrate-private-only \
-  --confirm DROP-SAAS-DATA-KEEP-USER-<lowest-active-admin-id> \
-  --no-managed-backups \
-  --report-file /app/data/private-migration-report.json
+```bash
+unset EXAPI_LEGACY_LOCAL_BACKUP_DIR
+export EXAPI_NO_LOCAL_BACKUPS=true
+deploy/ops/run-private-cutover.sh
 ```
 
 The command takes a serializable transaction/advisory lock, retains the
 lowest-ID active admin, drops customer/commercial tables, records
-`private_schema_version=1`, purges pre-cutover backups, and emits a signed
-report. Before opening the destructive cutover transaction, database
-initialization applies the release image's embedded forward migrations under
-the normal migration lock; this is required for upgraded installations with
-pending release migrations.
-Do not run it until the verified pre-cutover recovery set exists.
+`private_schema_version=2`, requires the batch-image job table to be empty,
+purges pre-cutover legacy local backups, and emits a signed
+report. The release image applies pending embedded forward migrations during
+database initialization under the normal migration lock before the destructive
+transaction. The verifier then checks the signed report HMAC, payload digest,
+durable database marker, decoded-key fingerprint, and private runtime readiness.
+
+If the database already contains an unreleased schema-v1 private-state row,
+resume with its original 0600 signed report at the same `--report-file`, its
+original signing key, and the original local-backup policy/root. The command
+verifies the legacy report against the locked database metadata, confirms every
+previously purged path is still absent, requires fresh zero-state batch cleanup
+evidence, and transactionally translates the row to v2. It never reconstructs
+destructive counts from the already-modified database.
+If that historical report was written inside the legacy backup root, first make
+a protected, single-link 0600 byte-for-byte copy outside that root, verify its
+SHA-256 against the durable schema-v1 marker, and use the external copy as
+`--report-file`; the v2 command deliberately rejects all report/root overlap.
+The archive adapter receives the staged report, verifier evidence, and staged
+key paths. It also receives `EXAPI_MIGRATION_REPORT_KEY_FILE_SHA256` (SHA-256 of
+the exact 65-byte lowercase-hex-plus-newline file) and
+`EXAPI_MIGRATION_REPORT_KEY_SHA256` (SHA-256 of the 32 decoded signing-key
+bytes). It must return one JSON object with `encrypted=true`, encrypted
+report/evidence/key URIs, immutable version IDs, a future retention time, and
+these unambiguous digest fields:
+
+- `report_file_sha256`: SHA-256 of the complete signed report file.
+- `evidence_file_sha256`: SHA-256 of the complete verifier evidence file.
+- `key_file_sha256`: SHA-256 of the exact printable key file archived.
+- `report_key_sha256`: SHA-256 of the decoded signing-key bytes.
+
+`report_key_sha256` must match the verifier evidence, which has already matched
+the same decoded key against the durable database cutover evidence. It is not
+interchangeable with `key_file_sha256`. All three URIs must be off-host `s3://`
+objects with a nonempty bucket and object key and without credentials, query, or
+fragment components. A separate archive-verification adapter must independently inspect
+those exact versions and return `verified=true`, `encrypted=true`,
+`immutable=true`, matching URIs, version IDs, all four digest fields, and the
+same retention timestamp. Review both evidence files before starting the
+application.
+
+If migration committed but report verification or archival failed, leave the
+application stopped and resume the same rollout ID. Resume mode requires the
+retained application container to remain stopped and repeats the idempotent
+cutover finalizer, verification, and archive gates:
+
+```bash
+export EXAPI_ROLLOUT_ID=exapi-v0.2.0-<same-change-ticket>
+export EXAPI_RESUME_PRIVATE_CUTOVER=true
+deploy/ops/run-private-cutover.sh
+```
+
+After the archive evidence is copied off-host and independently reviewed, start
+only the reviewed digest explicitly:
+
+```bash
+COMPOSE_PROJECT_NAME=exapi-production \
+COMPOSE_ENV_FILE=/protected/exapi-production.env \
+  EXAPI_IMAGE=ghcr.io/immortal-autumn/sub2api2personal@sha256:RELEASE_DIGEST \
+  docker compose --env-file /protected/exapi-production.env \
+  -f deploy/docker-compose.yml up -d --no-deps sub2api
+```
+
+Then verify `/ready`, the WireGuard-bound control listener, and the external
+monitor before declaring cutover complete.
 
 ## External prerequisites
 

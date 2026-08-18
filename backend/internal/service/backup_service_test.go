@@ -1170,14 +1170,15 @@ func TestBackupServicePrivateProductionDisablesLiveRestore(t *testing.T) {
 	require.ErrorIs(t, err, ErrLiveRestoreDisabled)
 }
 
-func TestBackupServiceNonPrivateProductionKeepsLiveRestoreAvailable(t *testing.T) {
+func TestBackupServiceLegacyEnvCannotEnableLiveRestoreInPrivateProduction(t *testing.T) {
 	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "false")
 	svc := NewBackupService(nil, &config.Config{
 		RunMode: config.RunModeSimple,
 		Log:     config.LogConfig{Environment: "production"},
 	}, nil, nil, nil, nil)
 	t.Cleanup(svc.bgCancel)
-	require.False(t, svc.liveRestoreDisabled)
+	require.True(t, svc.liveRestoreDisabled)
+	require.ErrorIs(t, svc.RestoreBackup(context.Background(), "backup-1"), ErrLiveRestoreDisabled)
 }
 
 func TestBackupServiceRejectsNegativeRetentionValues(t *testing.T) {

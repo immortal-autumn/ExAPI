@@ -4,7 +4,7 @@ import { defineComponent, ref } from 'vue'
 
 import UsageView from '../UsageView.vue'
 
-const { list, getStats, getSnapshotV2, getById, getModelStats, listErrorLogs, routeQuery } = vi.hoisted(() => {
+const { list, getStats, getSnapshotV2, getModelStats, listErrorLogs, routeQuery } = vi.hoisted(() => {
   vi.stubGlobal('localStorage', {
     getItem: vi.fn(() => null),
     setItem: vi.fn(),
@@ -15,7 +15,6 @@ const { list, getStats, getSnapshotV2, getById, getModelStats, listErrorLogs, ro
     list: vi.fn(),
     getStats: vi.fn(),
     getSnapshotV2: vi.fn(),
-    getById: vi.fn(),
     getModelStats: vi.fn(),
     listErrorLogs: vi.fn(),
     routeQuery: {} as Record<string, string>,
@@ -36,8 +35,8 @@ const formatLocalDate = (date: Date): string => {
   return `${year}-${month}-${day}`
 }
 
-vi.mock('@/api/admin', () => ({
-  adminAPI: {
+vi.mock('@/api/operator', () => ({
+  operatorAPI: {
     usage: {
       list,
       getStats,
@@ -46,21 +45,18 @@ vi.mock('@/api/admin', () => ({
       getSnapshotV2,
       getModelStats,
     },
-    users: {
-      getById,
-    },
   },
 }))
 
-vi.mock('@/api/admin/usage', () => ({
-  adminUsageAPI: {
-    list: vi.fn(),
-  },
-}))
+vi.mock('@/api/admin/usage', () => {
+  const adminUsageAPI = { list: vi.fn() }
+  return { adminUsageAPI, default: adminUsageAPI }
+})
 
-vi.mock('@/api/admin/ops', () => ({
-  listErrorLogs,
-}))
+vi.mock('@/api/admin/ops', () => {
+  const opsAPI = { listErrorLogs }
+  return { ...opsAPI, default: opsAPI }
+})
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
@@ -166,7 +162,6 @@ describe('admin UsageView route filters', () => {
     })
     getSnapshotV2.mockReset().mockResolvedValue({ trend: [], models: [], groups: [] })
     getModelStats.mockReset().mockResolvedValue({ models: [] })
-    getById.mockReset()
   })
 
   afterEach(() => {
@@ -174,69 +169,8 @@ describe('admin UsageView route filters', () => {
     vi.useRealTimers()
   })
 
-  it('shows the routed user while applying user_id to usage requests', async () => {
+  it('shows the routed user ID while applying user_id to usage requests', async () => {
     routeQuery.user_id = '42'
-    getById.mockResolvedValue({ id: 42, email: 'route-user@test.com' })
-
-    const wrapper = mountRouteFilteredUsageView()
-    await flushPromises()
-
-    expect(getById).toHaveBeenCalledWith(42, true)
-    expect(list).toHaveBeenCalledWith(expect.objectContaining({ user_id: 42 }), expect.anything())
-    expect(wrapper.find('[data-test="user-filter-label"]').text()).toBe('route-user@test.com')
-  })
-
-  it('does not apply a stale routed user label after user_id changes', async () => {
-    routeQuery.user_id = '42'
-    let resolveLookup!: (user: { id: number; email: string }) => void
-    getById.mockReturnValue(new Promise((resolve) => { resolveLookup = resolve }))
-
-    const wrapper = mountRouteFilteredUsageView()
-    await wrapper.vm.$nextTick()
-    ;(wrapper.vm as any).filters.user_id = 84
-    ;(wrapper.findComponent(UsageFiltersStub).vm as any).setUserKeyword('current-user@test.com')
-
-    resolveLookup({ id: 42, email: 'stale-user@test.com' })
-    await flushPromises()
-
-    expect(wrapper.find('[data-test="user-filter-label"]').text()).toBe('current-user@test.com')
-  })
-
-  it('does not overwrite newer user input when the routed user lookup succeeds', async () => {
-    routeQuery.user_id = '42'
-    let resolveLookup!: (user: { id: number; email: string }) => void
-    getById.mockReturnValue(new Promise((resolve) => { resolveLookup = resolve }))
-
-    const wrapper = mountRouteFilteredUsageView()
-    await wrapper.vm.$nextTick()
-    ;(wrapper.findComponent(UsageFiltersStub).vm as any).simulateUserInput('new-search@test.com')
-
-    resolveLookup({ id: 42, email: 'route-user@test.com' })
-    await flushPromises()
-
-    expect((wrapper.vm as any).filters.user_id).toBe(42)
-    expect(wrapper.find('[data-test="user-filter-label"]').text()).toBe('new-search@test.com')
-  })
-
-  it('does not overwrite newer user input when the routed user lookup fails', async () => {
-    routeQuery.user_id = '42'
-    let rejectLookup!: (error: Error) => void
-    getById.mockReturnValue(new Promise((_, reject) => { rejectLookup = reject }))
-
-    const wrapper = mountRouteFilteredUsageView()
-    await wrapper.vm.$nextTick()
-    ;(wrapper.findComponent(UsageFiltersStub).vm as any).simulateUserInput('new-search@test.com')
-
-    rejectLookup(new Error('lookup failed'))
-    await flushPromises()
-
-    expect((wrapper.vm as any).filters.user_id).toBe(42)
-    expect(wrapper.find('[data-test="user-filter-label"]').text()).toBe('new-search@test.com')
-  })
-
-  it('shows the routed user ID when its label lookup fails', async () => {
-    routeQuery.user_id = '42'
-    getById.mockRejectedValue(new Error('lookup failed'))
 
     const wrapper = mountRouteFilteredUsageView()
     await flushPromises()
@@ -252,7 +186,6 @@ describe('admin UsageView distribution metric toggles', () => {
     list.mockReset()
     getStats.mockReset()
     getSnapshotV2.mockReset()
-    getById.mockReset()
     getModelStats.mockReset()
 
     list.mockResolvedValue({
@@ -376,7 +309,6 @@ describe('admin UsageView handleUserClick', () => {
     list.mockReset()
     getStats.mockReset()
     getSnapshotV2.mockReset()
-    getById.mockReset()
 
     list.mockResolvedValue({ items: [], total: 0, pages: 0 })
     getStats.mockResolvedValue({
@@ -390,9 +322,7 @@ describe('admin UsageView handleUserClick', () => {
     vi.useRealTimers()
   })
 
-  it('opens user via include_deleted when clicking a usage row user', async () => {
-    getById.mockResolvedValue({ id: 2, email: 'd@test.com', deleted_at: '2026-05-28T00:00:00Z' })
-
+  it('drills into usage for the clicked user', async () => {
     const wrapper = mount(UsageView, {
       global: {
         stubs: {
@@ -423,7 +353,11 @@ describe('admin UsageView handleUserClick', () => {
     await wrapper.find('[data-test="usage-table"] .user-click').trigger('click')
     await flushPromises()
 
-    expect(getById).toHaveBeenCalledWith(2, true)
+    expect((wrapper.vm as any).filters.user_id).toBe(2)
+    expect(list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ user_id: 2 }),
+      expect.anything()
+    )
   })
 })
 

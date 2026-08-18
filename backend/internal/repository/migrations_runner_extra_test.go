@@ -33,6 +33,23 @@ func TestApplyMigrations_DelegatesToApplyMigrationsFS(t *testing.T) {
 	err = ApplyMigrations(context.Background(), db)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "acquire migrations lock")
+	require.Zero(t, db.Stats().OpenConnections, "ambiguous lock-acquisition session must be discarded")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestApplyMigrationsReturnsUnlockFailureAndDiscardsSession(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	prepareMigrationsBootstrapExpectations(mock)
+	mock.ExpectQuery("SELECT pg_advisory_unlock\\(\\$1\\)").
+		WithArgs(migrationsAdvisoryLockID).
+		WillReturnError(errors.New("connection lost during unlock"))
+
+	err = applyMigrationsFS(context.Background(), db, fstest.MapFS{})
+	require.ErrorContains(t, err, "release migrations lock")
+	require.Zero(t, db.Stats().OpenConnections, "ambiguous lock session must not return to the pool")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -246,9 +263,9 @@ func TestApplyMigrationsFS_ChecksumMismatchRejected(t *testing.T) {
 	mock.ExpectQuery("SELECT checksum FROM schema_migrations WHERE filename = \\$1").
 		WithArgs("001_init.sql").
 		WillReturnRows(sqlmock.NewRows([]string{"checksum"}).AddRow("mismatched-checksum"))
-	mock.ExpectExec("SELECT pg_advisory_unlock\\(\\$1\\)").
+	mock.ExpectQuery("SELECT pg_advisory_unlock\\(\\$1\\)").
 		WithArgs(migrationsAdvisoryLockID).
-		WillReturnResult(sqlmock.NewResult(0, 1))
+		WillReturnRows(sqlmock.NewRows([]string{"pg_advisory_unlock"}).AddRow(true))
 
 	fsys := fstest.MapFS{
 		"001_init.sql": &fstest.MapFile{Data: []byte("CREATE TABLE t(id int);")},
@@ -268,9 +285,9 @@ func TestApplyMigrationsFS_CheckMigrationQueryError(t *testing.T) {
 	mock.ExpectQuery("SELECT checksum FROM schema_migrations WHERE filename = \\$1").
 		WithArgs("001_err.sql").
 		WillReturnError(errors.New("query failed"))
-	mock.ExpectExec("SELECT pg_advisory_unlock\\(\\$1\\)").
+	mock.ExpectQuery("SELECT pg_advisory_unlock\\(\\$1\\)").
 		WithArgs(migrationsAdvisoryLockID).
-		WillReturnResult(sqlmock.NewResult(0, 1))
+		WillReturnRows(sqlmock.NewRows([]string{"pg_advisory_unlock"}).AddRow(true))
 
 	fsys := fstest.MapFS{
 		"001_err.sql": &fstest.MapFile{Data: []byte("SELECT 1;")},
@@ -293,9 +310,9 @@ func TestApplyMigrationsFS_SkipEmptyAndAlreadyApplied(t *testing.T) {
 	mock.ExpectQuery("SELECT checksum FROM schema_migrations WHERE filename = \\$1").
 		WithArgs("001_already.sql").
 		WillReturnRows(sqlmock.NewRows([]string{"checksum"}).AddRow(checksum))
-	mock.ExpectExec("SELECT pg_advisory_unlock\\(\\$1\\)").
+	mock.ExpectQuery("SELECT pg_advisory_unlock\\(\\$1\\)").
 		WithArgs(migrationsAdvisoryLockID).
-		WillReturnResult(sqlmock.NewResult(0, 1))
+		WillReturnRows(sqlmock.NewRows([]string{"pg_advisory_unlock"}).AddRow(true))
 
 	fsys := fstest.MapFS{
 		"000_empty.sql":   &fstest.MapFile{Data: []byte("   \n\t ")},
@@ -312,9 +329,9 @@ func TestApplyMigrationsFS_ReadMigrationError(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	prepareMigrationsBootstrapExpectations(mock)
-	mock.ExpectExec("SELECT pg_advisory_unlock\\(\\$1\\)").
+	mock.ExpectQuery("SELECT pg_advisory_unlock\\(\\$1\\)").
 		WithArgs(migrationsAdvisoryLockID).
-		WillReturnResult(sqlmock.NewResult(0, 1))
+		WillReturnRows(sqlmock.NewRows([]string{"pg_advisory_unlock"}).AddRow(true))
 
 	fsys := fstest.MapFS{
 		"001_bad.sql": &fstest.MapFile{Mode: fs.ModeDir},
@@ -348,13 +365,27 @@ func TestPgAdvisoryLockAndUnlock_ErrorBranches(t *testing.T) {
 		require.NoError(t, err)
 		defer func() { _ = db.Close() }()
 
-		mock.ExpectExec("SELECT pg_advisory_unlock\\(\\$1\\)").
+		mock.ExpectQuery("SELECT pg_advisory_unlock\\(\\$1\\)").
 			WithArgs(migrationsAdvisoryLockID).
 			WillReturnError(errors.New("unlock failed"))
 
 		err = pgAdvisoryUnlock(context.Background(), db)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "release migrations lock")
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("unlock_false", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer func() { _ = db.Close() }()
+
+		mock.ExpectQuery("SELECT pg_advisory_unlock\\(\\$1\\)").
+			WithArgs(migrationsAdvisoryLockID).
+			WillReturnRows(sqlmock.NewRows([]string{"pg_advisory_unlock"}).AddRow(false))
+
+		err = pgAdvisoryUnlock(context.Background(), db)
+		require.ErrorContains(t, err, "did not hold the lock")
 		require.NoError(t, mock.ExpectationsWereMet())
 	})
 

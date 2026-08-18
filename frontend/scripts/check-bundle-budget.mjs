@@ -12,7 +12,7 @@ const args = new Map(process.argv.slice(2).map((arg) => {
 
 const budgets = [
   { label: 'AccountsView', prefix: 'AccountsView-', maxKB: args.get('--accounts-kb') ?? 180 },
-  { label: 'SettingsView', prefix: 'SettingsView-', maxKB: args.get('--settings-kb') ?? 210 },
+  { label: 'PrivateSettingsView', prefix: 'PrivateSettingsView-', maxKB: args.get('--settings-kb') ?? 210 },
   { label: 'OpsDashboard', prefix: 'OpsDashboard-', maxKB: args.get('--ops-kb') ?? 230 },
 ]
 

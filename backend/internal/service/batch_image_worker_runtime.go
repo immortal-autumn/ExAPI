@@ -89,6 +89,7 @@ func ProvidePrivateBatchImageWorkerRuntime(
 			Config:             cfg,
 			PrivateOperational: true,
 		},
+		PrivateOperatorOnly: true,
 	}
 	runtime := NewBatchImageWorkerRuntime(NewBatchImageWorker(queue, processor, NewBatchImageWorkerOptionsFromConfig(cfg)), cfg)
 	runtime.billingRecovery = &BatchImageBillingRecoveryService{

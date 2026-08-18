@@ -38,7 +38,7 @@ func (r *countTokensRuntimeStateRepo) SetError(_ context.Context, _ int64, _ str
 }
 
 func TestOpenAIGatewayService_ForwardCountTokensAsAnthropic_APIKeyUsesResponsesInputTokens(t *testing.T) {
-	gin.SetMode(gin.TestMode)
+	ensureGinTestMode()
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
@@ -86,7 +86,7 @@ func TestOpenAIGatewayService_ForwardCountTokensAsAnthropic_APIKeyUsesResponsesI
 }
 
 func TestOpenAIGatewayService_ForwardCountTokensAsAnthropic_OAuthFallsBackWhenPlatformEndpointUnsupported(t *testing.T) {
-	gin.SetMode(gin.TestMode)
+	ensureGinTestMode()
 
 	body := []byte(`{"model":"claude-opus-4-1","messages":[{"role":"user","content":"hello"}]}`)
 	account := &Account{
@@ -170,7 +170,7 @@ func TestOpenAIGatewayService_ForwardCountTokensAsAnthropic_OAuthFallsBackWhenPl
 }
 
 func TestOpenAIGatewayService_OpenAIOAuthInputTokensFallbackUsesMinimumWhenEstimateFails(t *testing.T) {
-	gin.SetMode(gin.TestMode)
+	ensureGinTestMode()
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)

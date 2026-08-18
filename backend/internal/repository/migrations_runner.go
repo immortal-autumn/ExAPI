@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -121,7 +122,7 @@ func ApplyMigrations(ctx context.Context, db *sql.DB) error {
 //   - ctx: 上下文
 //   - db: 数据库连接
 //   - fsys: 包含迁移文件的文件系统（通常是 embed.FS）
-func applyMigrationsFS(ctx context.Context, db *sql.DB, fsys fs.FS) error {
+func applyMigrationsFS(ctx context.Context, db *sql.DB, fsys fs.FS) (retErr error) {
 	if db == nil {
 		return errors.New("nil sql db")
 	}
@@ -132,17 +133,14 @@ func applyMigrationsFS(ctx context.Context, db *sql.DB, fsys fs.FS) error {
 	if err != nil {
 		return fmt.Errorf("acquire migrations lock connection: %w", err)
 	}
-	defer func() { _ = lockConn.Close() }()
 	if err := pgAdvisoryLock(ctx, lockConn); err != nil {
+		discardMigrationLockConn(lockConn)
 		return err
 	}
 	defer func() {
-		// 无论迁移是否成功，都要释放锁。
-		// 独立超时确保原 ctx 取消后仍会尝试释放，但数据库链路异常不会
-		// 无限阻塞进程退出。
-		unlockCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = pgAdvisoryUnlock(unlockCtx, lockConn)
+		// Return cleanup failures to startup. A migration cannot be considered
+		// successful while its session-level lock may still block every peer.
+		retErr = errors.Join(retErr, releaseMigrationLockConn(lockConn))
 	}()
 
 	// 创建迁移记录表（如果不存在）。
@@ -567,9 +565,32 @@ func pgAdvisoryLock(ctx context.Context, db advisoryLockConnection) error {
 // pgAdvisoryUnlock 释放 PostgreSQL Advisory Lock。
 // 必须在获取锁后确保释放，否则会阻塞其他实例的迁移操作。
 func pgAdvisoryUnlock(ctx context.Context, db advisoryLockConnection) error {
-	_, err := db.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", migrationsAdvisoryLockID)
-	if err != nil {
+	var unlocked bool
+	if err := db.QueryRowContext(ctx, "SELECT pg_advisory_unlock($1)", migrationsAdvisoryLockID).Scan(&unlocked); err != nil {
 		return fmt.Errorf("release migrations lock: %w", err)
 	}
+	if !unlocked {
+		return errors.New("release migrations lock: PostgreSQL reported that this session did not hold the lock")
+	}
 	return nil
+}
+
+func releaseMigrationLockConn(conn *sql.Conn) error {
+	unlockCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := pgAdvisoryUnlock(unlockCtx, conn); err != nil {
+		discardMigrationLockConn(conn)
+		return err
+	}
+	if err := conn.Close(); err != nil {
+		return fmt.Errorf("release migrations lock connection: %w", err)
+	}
+	return nil
+}
+
+func discardMigrationLockConn(conn *sql.Conn) {
+	// driver.ErrBadConn prevents database/sql from returning a physical
+	// PostgreSQL session with an ambiguously held advisory lock to the pool.
+	_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+	_ = conn.Close()
 }

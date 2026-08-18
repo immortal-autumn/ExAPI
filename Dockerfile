@@ -100,7 +100,12 @@ RUN --mount=type=cache,id=sub2api-gomod,target=/go/pkg/mod \
     -trimpath \
     -ldflags="-s -w" \
     -o /app/migrate-private-only \
-    ./cmd/migrate-private-only
+    ./cmd/migrate-private-only && \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build \
+    -trimpath \
+    -ldflags="-s -w" \
+    -o /app/verify-private-cutover-report \
+    ./cmd/verify-private-cutover-report
 
 # -----------------------------------------------------------------------------
 # Stage 3: PostgreSQL Client (version-matched with docker-compose)
@@ -157,6 +162,7 @@ WORKDIR /app
 # Copy binary/resources with ownership to avoid extra full-layer chown copy
 COPY --from=backend-builder --chown=sub2api:sub2api /app/sub2api /app/sub2api
 COPY --from=backend-builder --chown=sub2api:sub2api /app/migrate-private-only /app/migrate-private-only
+COPY --from=backend-builder --chown=sub2api:sub2api /app/verify-private-cutover-report /app/verify-private-cutover-report
 COPY --from=backend-builder --chown=sub2api:sub2api /app/backend/resources /app/resources
 COPY --chown=sub2api:sub2api deploy/ops/with-migration-report-key.sh /app/with-migration-report-key.sh
 

@@ -21,7 +21,7 @@ func TestUpdateUpstreamBillingProbeSnapshotMatchesDecryptedCredentialIdentity(t 
 	mock.ExpectBegin()
 	expectLockedAccountCredentials(mock, int64(17), `{"api_key":"sk-test"}`)
 	mock.ExpectExec(`(?s)`+regexp.QuoteMeta("UPDATE accounts")+`.*`+regexp.QuoteMeta("AND proxy_id IS NOT DISTINCT FROM $5")+`.*`+regexp.QuoteMeta("COALESCE(extra -> 'upstream_billing_probe', 'null'::jsonb) = $6::jsonb")).
-		WithArgs(sqlmock.AnyArg(), int64(17), service.PlatformOpenAI, service.AccountTypeAPIKey, nil, "null", "null").
+		WithArgs(sqlmock.AnyArg(), int64(17), service.PlatformOpenAI, service.AccountTypeAPIKey, nil, "null", "null", "null", nil).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO scheduler_outbox")).
 		WithArgs(service.SchedulerOutboxEventAccountChanged, int64(17), nil, nil, sqlmock.AnyArg()).
@@ -31,7 +31,7 @@ func TestUpdateUpstreamBillingProbeSnapshotMatchesDecryptedCredentialIdentity(t 
 	repo := newAccountRepositoryWithSQLAndProtector(client, db, nil, mustAccountCredentialProtectorForTest(t))
 	account := &service.Account{ID: 17, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, Credentials: map[string]any{"api_key": "sk-test"}}
 
-	err := repo.UpdateUpstreamBillingProbeSnapshot(context.Background(), account, &service.UpstreamBillingProbeSnapshot{Status: service.UpstreamBillingProbeStatusOK})
+	err := repo.UpdateUpstreamBillingProbeSnapshot(context.Background(), account, &service.UpstreamBillingProbeSnapshot{Status: service.UpstreamBillingProbeStatusOK}, nil)
 	require.NoError(t, err)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -45,7 +45,7 @@ func TestUpdateUpstreamBillingProbeSnapshotRejectsChangedCredentialsBeforeMutati
 	repo := newAccountRepositoryWithSQLAndProtector(client, db, nil, mustAccountCredentialProtectorForTest(t))
 	account := &service.Account{ID: 17, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, Credentials: map[string]any{"api_key": "observed"}}
 
-	err := repo.UpdateUpstreamBillingProbeSnapshot(context.Background(), account, &service.UpstreamBillingProbeSnapshot{Status: service.UpstreamBillingProbeStatusOK})
+	err := repo.UpdateUpstreamBillingProbeSnapshot(context.Background(), account, &service.UpstreamBillingProbeSnapshot{Status: service.UpstreamBillingProbeStatusOK}, nil)
 	require.ErrorIs(t, err, service.ErrUpstreamBillingProbeIdentityChanged)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -67,7 +67,7 @@ func TestUpdateUpstreamBillingProbeSnapshotRejectsChangedProxyIdentity(t *testin
 	}
 	repo := newAccountRepositoryWithSQLAndProtector(client, db, nil, mustAccountCredentialProtectorForTest(t))
 
-	err := repo.UpdateUpstreamBillingProbeSnapshot(context.Background(), account, &service.UpstreamBillingProbeSnapshot{Status: service.UpstreamBillingProbeStatusOK})
+	err := repo.UpdateUpstreamBillingProbeSnapshot(context.Background(), account, &service.UpstreamBillingProbeSnapshot{Status: service.UpstreamBillingProbeStatusOK}, nil)
 	require.ErrorIs(t, err, service.ErrUpstreamBillingProbeIdentityChanged)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -77,7 +77,7 @@ func TestUpdateUpstreamBillingProbeSnapshotRollsBackWhenOutboxFails(t *testing.T
 	mock.ExpectBegin()
 	expectLockedAccountCredentials(mock, int64(18), `{"api_key":"sk-test"}`)
 	mock.ExpectExec(`(?s)`+regexp.QuoteMeta("UPDATE accounts")+`.*`+regexp.QuoteMeta("AND proxy_id IS NOT DISTINCT FROM $5")).
-		WithArgs(sqlmock.AnyArg(), int64(18), service.PlatformOpenAI, service.AccountTypeAPIKey, nil, "null", "null").
+		WithArgs(sqlmock.AnyArg(), int64(18), service.PlatformOpenAI, service.AccountTypeAPIKey, nil, "null", "null", "null", nil).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO scheduler_outbox")).WillReturnError(errors.New("outbox failed"))
 	mock.ExpectRollback()
@@ -85,7 +85,7 @@ func TestUpdateUpstreamBillingProbeSnapshotRollsBackWhenOutboxFails(t *testing.T
 	repo := newAccountRepositoryWithSQLAndProtector(client, db, nil, mustAccountCredentialProtectorForTest(t))
 	account := &service.Account{ID: 18, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, Credentials: map[string]any{"api_key": "sk-test"}}
 
-	err := repo.UpdateUpstreamBillingProbeSnapshot(context.Background(), account, &service.UpstreamBillingProbeSnapshot{Status: service.UpstreamBillingProbeStatusOK})
+	err := repo.UpdateUpstreamBillingProbeSnapshot(context.Background(), account, &service.UpstreamBillingProbeSnapshot{Status: service.UpstreamBillingProbeStatusOK}, nil)
 	require.EqualError(t, err, "outbox failed")
 	require.NoError(t, mock.ExpectationsWereMet())
 }

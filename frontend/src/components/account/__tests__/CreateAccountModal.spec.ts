@@ -26,8 +26,8 @@ vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({ isSimpleMode: true }),
 }))
 
-vi.mock('@/api/admin', () => ({
-  adminAPI: {
+vi.mock('@/api/operator', () => ({
+  operatorAPI: {
     accounts: {
       create: createAccountMock,
       probeUpstreamBilling: probeUpstreamBillingMock,
@@ -45,9 +45,13 @@ vi.mock('@/api/admin', () => ({
   },
 }))
 
-vi.mock('@/api/admin/accounts', () => ({
-  getAntigravityDefaultModelMapping: vi.fn().mockResolvedValue([]),
-}))
+vi.mock('@/api/admin/accounts', () => {
+  const getAntigravityDefaultModelMapping = vi.fn().mockResolvedValue([])
+  return {
+    getAntigravityDefaultModelMapping,
+    default: { getAntigravityDefaultModelMapping },
+  }
+})
 
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')

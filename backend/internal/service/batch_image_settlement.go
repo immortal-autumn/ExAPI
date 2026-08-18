@@ -401,9 +401,10 @@ func BuildBatchImageSettlementManifestHash(job *BatchImageJob) string {
 }
 
 type BatchImagePipelineProcessor struct {
-	ProviderProcessor *BatchImageProviderProcessor
-	SettlementService *BatchImageSettlementService
-	RetryDelay        time.Duration
+	ProviderProcessor   *BatchImageProviderProcessor
+	SettlementService   *BatchImageSettlementService
+	RetryDelay          time.Duration
+	PrivateOperatorOnly bool
 }
 
 func (p *BatchImagePipelineProcessor) Process(ctx context.Context, batchID string) (BatchImageProcessResult, error) {
@@ -413,6 +414,19 @@ func (p *BatchImagePipelineProcessor) Process(ctx context.Context, batchID strin
 	job, err := p.ProviderProcessor.Repo.GetBatchImageJobByBatchID(ctx, batchID)
 	if err != nil {
 		return BatchImageProcessResult{}, err
+	}
+	if p.PrivateOperatorOnly {
+		verifier, ok := p.ProviderProcessor.Repo.(PrivateBatchImageOwnerVerifier)
+		if !ok {
+			return BatchImageProcessResult{}, errors.New("private batch image owner verifier is not configured")
+		}
+		allowed, err := verifier.IsPrivateBatchImageOperator(ctx, job.UserID)
+		if err != nil {
+			return BatchImageProcessResult{}, err
+		}
+		if !allowed {
+			return BatchImageProcessResult{}, ErrBatchImageForeignOwner
+		}
 	}
 	if job.Status == BatchImageJobStatusSettling {
 		if p.SettlementService == nil {

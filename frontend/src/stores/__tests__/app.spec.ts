@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAppStore } from '@/stores/app'
-import { getPublicSettings } from '@/api/auth'
+import { getPublicSettings } from '@/api/publicSettings'
 import type { PublicSettings } from '@/types'
 
 function createDeferred<T>() {
@@ -68,7 +68,7 @@ vi.mock('@/api/admin/system', () => ({
   checkUpdates: vi.fn(),
 }))
 
-vi.mock('@/api/auth', () => ({
+vi.mock('@/api/publicSettings', () => ({
   getPublicSettings: vi.fn(),
 }))
 

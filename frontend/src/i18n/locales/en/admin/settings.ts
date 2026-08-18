@@ -2,6 +2,7 @@ export default {
     settings: {
       title: 'System Settings',
       description: 'Manage registration, email verification, default values, and SMTP settings',
+      saved: 'Settings saved',
       tabs: {
         general: 'General',
         agreement: 'Agreement',
@@ -747,6 +748,7 @@ export default {
         description: 'Configure email sending for verification codes',
         testConnection: 'Test Connection',
         testing: 'Testing...',
+        testFailed: 'SMTP connection test failed',
         host: 'SMTP Host',
         hostPlaceholder: 'smtp.gmail.com',
         port: 'SMTP Port',
@@ -772,6 +774,7 @@ export default {
         recipientEmailPlaceholder: "test{'@'}example.com",
         sendTestEmail: 'Send Test Email',
         sending: 'Sending...',
+        sendFailed: 'Failed to send test email',
         enterRecipientHint: 'Please enter a recipient email address'
       },
       emailTemplates: {

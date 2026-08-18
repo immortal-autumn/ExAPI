@@ -29,7 +29,7 @@ describe('admin group duplicate API', () => {
 
     expect(post).toHaveBeenCalledWith('/admin/groups/42/duplicate', undefined, {
       headers: {
-        'Idempotency-Key': 'group-duplicate-7-42-11111111-1111-4111-8111-111111111111'
+        'Idempotency-Key': 'group-duplicate-operator-42-11111111-1111-4111-8111-111111111111'
       }
     })
     expect(group).toEqual({ id: 43, name: 'primary (Copy)', status: 'inactive' })
@@ -63,10 +63,10 @@ describe('admin group duplicate API', () => {
     expect(sessionStorage.length).toBe(0)
   })
 
-  it('does not reuse an operation key across administrators for the same group', async () => {
-    post.mockRejectedValueOnce(new Error('first admin timeout'))
-    await expect(duplicate(55)).rejects.toThrow('first admin timeout')
-    const firstAdminHeaders = post.mock.calls[0][2].headers
+  it('keeps the operation key scoped to the singleton operator when browser identity changes', async () => {
+    post.mockRejectedValueOnce(new Error('network timeout'))
+    await expect(duplicate(55)).rejects.toThrow('network timeout')
+    const firstHeaders = post.mock.calls[0][2].headers
 
     localStorage.setItem('auth_user', JSON.stringify({ id: 8 }))
     vi.mocked(globalThis.crypto.randomUUID).mockReturnValueOnce(
@@ -75,17 +75,11 @@ describe('admin group duplicate API', () => {
     post.mockResolvedValueOnce({ data: { id: 56, name: 'second admin copy' } })
     await duplicate(55)
 
-    expect(post.mock.calls[1][2].headers).not.toEqual(firstAdminHeaders)
-    expect(post.mock.calls[1][2].headers).toEqual({
-      'Idempotency-Key': 'group-duplicate-8-55-22222222-2222-4222-8222-222222222222'
-    })
-    expect(sessionStorage.getItem('sub2api:admin:group-duplicate:7:55')).toBe(
-      firstAdminHeaders['Idempotency-Key']
-    )
-    expect(sessionStorage.getItem('sub2api:admin:group-duplicate:8:55')).toBeNull()
+    expect(post.mock.calls[1][2].headers).toEqual(firstHeaders)
+    expect(sessionStorage.getItem('sub2api:admin:group-duplicate:operator:55')).toBeNull()
   })
 
-  it('does not persist or reuse keys when the current user cannot be parsed', async () => {
+  it('does not depend on a parseable browser user when retrying as the singleton operator', async () => {
     localStorage.setItem('auth_user', '{invalid json')
     post.mockRejectedValueOnce(new Error('network timeout'))
     await expect(duplicate(66)).rejects.toThrow('network timeout')
@@ -97,7 +91,7 @@ describe('admin group duplicate API', () => {
     post.mockResolvedValueOnce({ data: { id: 67, name: 'fallback copy' } })
     await duplicate(66)
 
-    expect(post.mock.calls[1][2].headers).not.toEqual(firstHeaders)
+    expect(post.mock.calls[1][2].headers).toEqual(firstHeaders)
     expect(sessionStorage.length).toBe(0)
   })
 })

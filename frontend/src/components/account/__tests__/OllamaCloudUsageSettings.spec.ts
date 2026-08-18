@@ -12,7 +12,7 @@ const api = vi.hoisted(() => ({
 }))
 const notifications = vi.hoisted(() => ({ showSuccess: vi.fn(), showError: vi.fn() }))
 
-vi.mock('@/api/admin', () => ({ adminAPI: { accounts: api } }))
+vi.mock('@/api/operator', () => ({ operatorAPI: { accounts: api } }))
 vi.mock('@/stores/app', () => ({ useAppStore: () => notifications }))
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')

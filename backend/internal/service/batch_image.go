@@ -36,9 +36,10 @@ const (
 )
 
 var (
-	ErrBatchImageJobNotFound = infraerrors.New(http.StatusNotFound, "BATCH_IMAGE_JOB_NOT_FOUND", "batch image job not found")
-	ErrBatchImageJobExists   = infraerrors.New(http.StatusConflict, "BATCH_IMAGE_JOB_EXISTS", "batch image job already exists")
-	ErrBatchImageItemExists  = infraerrors.New(http.StatusConflict, "BATCH_IMAGE_ITEM_EXISTS", "batch image item already exists")
+	ErrBatchImageJobNotFound  = infraerrors.New(http.StatusNotFound, "BATCH_IMAGE_JOB_NOT_FOUND", "batch image job not found")
+	ErrBatchImageJobExists    = infraerrors.New(http.StatusConflict, "BATCH_IMAGE_JOB_EXISTS", "batch image job already exists")
+	ErrBatchImageItemExists   = infraerrors.New(http.StatusConflict, "BATCH_IMAGE_ITEM_EXISTS", "batch image item already exists")
+	ErrBatchImageForeignOwner = infraerrors.New(http.StatusForbidden, "BATCH_IMAGE_FOREIGN_OWNER", "batch image job does not belong to the retained private operator")
 
 	ErrBatchImageInvalidTransition = infraerrors.New(http.StatusBadRequest, "BATCH_IMAGE_INVALID_TRANSITION", "invalid batch image job status transition")
 	ErrBatchImageInvalidProvider   = infraerrors.New(http.StatusBadRequest, "BATCH_IMAGE_INVALID_PROVIDER", "invalid batch image provider")
@@ -348,6 +349,13 @@ type BatchImageRepository interface {
 	SetBatchImageOutputExpiresAt(ctx context.Context, batchID string, expiresAt time.Time) error
 	RecordBatchImageCleanupFailure(ctx context.Context, batchID, code, message string) error
 	AppendBatchImageEvent(ctx context.Context, batchID, eventType string, payload any) error
+}
+
+// PrivateBatchImageOwnerVerifier is implemented by repositories that can
+// prove a job owner is the retained operator recorded by the private cutover.
+// The private worker requires this check before contacting any provider.
+type PrivateBatchImageOwnerVerifier interface {
+	IsPrivateBatchImageOperator(ctx context.Context, userID int64) (bool, error)
 }
 
 func NewBatchImageID() (string, error) {

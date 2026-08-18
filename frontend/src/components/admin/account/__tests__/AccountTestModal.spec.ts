@@ -7,8 +7,8 @@ const { getAvailableModels, copyToClipboard } = vi.hoisted(() => ({
   copyToClipboard: vi.fn()
 }))
 
-vi.mock('@/api/admin', () => ({
-  adminAPI: {
+vi.mock('@/api/operator', () => ({
+  operatorAPI: {
     accounts: {
       getAvailableModels
     }

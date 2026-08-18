@@ -27,8 +27,8 @@ const {
   showSuccess: vi.fn()
 }))
 
-vi.mock('@/api/admin', () => ({
-  adminAPI: {
+vi.mock('@/api/operator', () => ({
+  operatorAPI: {
     accounts: {
       list: listAccounts,
       listWithEtag,

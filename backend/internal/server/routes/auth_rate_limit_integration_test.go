@@ -7,26 +7,36 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	appmiddleware "github.com/Wei-Shaw/sub2api/internal/middleware"
+	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 )
 
 const authRouteRedisImageTag = "redis:8.4-alpine"
 
 func TestAuthRegisterRateLimitThresholdHitReturns429(t *testing.T) {
-	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "false")
 	ctx := context.Background()
 	rdb := startAuthRouteRedis(t, ctx)
 
-	router := newAuthRoutesTestRouter(rdb)
+	// Legacy browser-auth routes are intentionally absent from private ExAPI, so
+	// exercise their Redis-backed abuse-control policy on an isolated route
+	// instead of adding Redis back to newAuthRoutesTestRouter.
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	rateLimiter := appmiddleware.NewRateLimiter(rdb)
 	const path = "/api/v1/auth/register"
+	router.POST(path, rateLimiter.LimitWithOptions("auth-register", 5, time.Minute, appmiddleware.RateLimitOptions{
+		FailureMode: appmiddleware.RateLimitFailClose,
+	}), func(c *gin.Context) {
+		c.Status(http.StatusBadRequest)
+	})
 
 	for i := 1; i <= 6; i++ {
 		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
@@ -47,7 +57,7 @@ func TestAuthRegisterRateLimitThresholdHitReturns429(t *testing.T) {
 
 func startAuthRouteRedis(t *testing.T, ctx context.Context) *redis.Client {
 	t.Helper()
-	ensureAuthRouteDockerAvailable(t)
+	testcontainers.SkipIfProviderIsNotHealthy(t)
 
 	redisContainer, err := tcredis.Run(ctx, authRouteRedisImageTag)
 	require.NoError(t, err)
@@ -69,44 +79,4 @@ func startAuthRouteRedis(t *testing.T, ctx context.Context) *redis.Client {
 		_ = rdb.Close()
 	})
 	return rdb
-}
-
-func ensureAuthRouteDockerAvailable(t *testing.T) {
-	t.Helper()
-	if authRouteDockerAvailable() {
-		return
-	}
-	t.Skip("Docker 未启用，跳过认证限流集成测试")
-}
-
-func authRouteDockerAvailable() bool {
-	if os.Getenv("DOCKER_HOST") != "" {
-		return true
-	}
-
-	socketCandidates := []string{
-		"/var/run/docker.sock",
-		filepath.Join(os.Getenv("XDG_RUNTIME_DIR"), "docker.sock"),
-		filepath.Join(authRouteUserHomeDir(), ".docker", "run", "docker.sock"),
-		filepath.Join(authRouteUserHomeDir(), ".docker", "desktop", "docker.sock"),
-		filepath.Join("/run/user", strconv.Itoa(os.Getuid()), "docker.sock"),
-	}
-
-	for _, socket := range socketCandidates {
-		if socket == "" {
-			continue
-		}
-		if _, err := os.Stat(socket); err == nil {
-			return true
-		}
-	}
-	return false
-}
-
-func authRouteUserHomeDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return home
 }

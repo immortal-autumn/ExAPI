@@ -53,7 +53,7 @@ func (s *settingHandlerPublicRepoStub) Delete(ctx context.Context, key string) e
 	panic("unexpected Delete call")
 }
 
-func TestSettingHandler_GetPublicSettings_ExposesForceEmailOnThirdPartySignup(t *testing.T) {
+func TestSettingHandler_GetPublicSettings_SuppressesForceEmailOnThirdPartySignup(t *testing.T) {
 	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "false")
 	gin.SetMode(gin.TestMode)
 
@@ -80,7 +80,7 @@ func TestSettingHandler_GetPublicSettings_ExposesForceEmailOnThirdPartySignup(t 
 	}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, 0, resp.Code)
-	require.True(t, resp.Data.ForceEmailOnThirdPartySignup)
+	require.False(t, resp.Data.ForceEmailOnThirdPartySignup)
 }
 
 func TestSettingHandler_GetPublicSettings_ExposesTencentCaptchaConfiguration(t *testing.T) {
@@ -115,7 +115,7 @@ func TestSettingHandler_GetPublicSettings_ExposesTencentCaptchaConfiguration(t *
 	require.Equal(t, "123456789", resp.Data.TencentCaptchaAppID)
 }
 
-func TestSettingHandler_GetPublicSettings_ExposesWeChatOAuthModeCapabilities(t *testing.T) {
+func TestSettingHandler_GetPublicSettings_SuppressesWeChatOAuthModeCapabilities(t *testing.T) {
 	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "false")
 	gin.SetMode(gin.TestMode)
 	h := NewSettingHandler(service.NewSettingService(&settingHandlerPublicRepoStub{
@@ -150,7 +150,7 @@ func TestSettingHandler_GetPublicSettings_ExposesWeChatOAuthModeCapabilities(t *
 	}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, 0, resp.Code)
-	require.True(t, resp.Data.WeChatOAuthEnabled)
-	require.True(t, resp.Data.WeChatOAuthOpenEnabled)
-	require.True(t, resp.Data.WeChatOAuthMPEnabled)
+	require.False(t, resp.Data.WeChatOAuthEnabled)
+	require.False(t, resp.Data.WeChatOAuthOpenEnabled)
+	require.False(t, resp.Data.WeChatOAuthMPEnabled)
 }

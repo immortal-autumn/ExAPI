@@ -6,7 +6,8 @@ vi.mock('@/stores/app', () => ({
   })
 }))
 
-vi.mock('vue-i18n', () => ({
+vi.mock('vue-i18n', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('vue-i18n')>()),
   useI18n: () => ({
     t: (key: string) => {
       const messages: Record<string, string> = {
@@ -19,8 +20,8 @@ vi.mock('vue-i18n', () => ({
   })
 }))
 
-vi.mock('@/api/admin', () => ({
-  adminAPI: {
+vi.mock('@/api/operator', () => ({
+  operatorAPI: {
     grok: {
       generateAuthUrl: vi.fn(),
       exchangeCode: vi.fn(),
@@ -30,11 +31,11 @@ vi.mock('@/api/admin', () => ({
 }))
 
 import { useGrokOAuth } from '@/composables/useGrokOAuth'
-import { adminAPI } from '@/api/admin'
+import { operatorAPI } from '@/api/operator'
 
 describe('useGrokOAuth.exchangeAuthCode', () => {
   it('shows a state mismatch recovery hint from structured backend errors', async () => {
-    vi.mocked(adminAPI.grok.exchangeCode).mockRejectedValueOnce({
+    vi.mocked(operatorAPI.grok.exchangeCode).mockRejectedValueOnce({
       status: 400,
       reason: 'GROK_OAUTH_INVALID_STATE',
       message: 'invalid oauth state'

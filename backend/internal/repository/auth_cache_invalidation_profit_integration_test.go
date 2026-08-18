@@ -29,7 +29,8 @@ func TestAuthCacheInvalidationTrigger_ProfitControlColumns(t *testing.T) {
 	})
 	groupID := group.ID
 	keyValue := fmt.Sprintf("sk-profit-trigger-%d", suffix)
-	apiKeyRepo := NewAPIKeyRepository(integrationEntClient, integrationDB)
+	apiKeyRepo, err := NewAPIKeyRepository(integrationEntClient, integrationDB)
+	require.NoError(t, err)
 	key := &service.APIKey{UserID: user.ID, GroupID: &groupID, Key: keyValue, Name: "profit-trigger", Status: service.StatusActive}
 	require.NoError(t, apiKeyRepo.Create(ctx, key))
 
@@ -56,7 +57,7 @@ func TestAuthCacheInvalidationTrigger_ProfitControlColumns(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	_, err := integrationDB.ExecContext(ctx, "UPDATE groups SET name = name || '-cosmetic' WHERE id = $1", group.ID)
+	_, err = integrationDB.ExecContext(ctx, "UPDATE groups SET name = name || '-cosmetic' WHERE id = $1", group.ID)
 	require.NoError(t, err)
 	require.Zero(t, count(), "cosmetic 更新不得入队（既有语义回归）")
 

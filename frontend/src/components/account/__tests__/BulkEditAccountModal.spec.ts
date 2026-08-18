@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import BulkEditAccountModal from '../BulkEditAccountModal.vue'
 import ModelWhitelistSelector from '../ModelWhitelistSelector.vue'
-import { adminAPI } from '@/api/admin'
+import { operatorAPI as adminAPI } from '@/api/operator'
 
 const { showError } = vi.hoisted(() => ({
   showError: vi.fn()
@@ -16,8 +16,8 @@ vi.mock('@/stores/app', () => ({
   })
 }))
 
-vi.mock('@/api/admin', () => ({
-  adminAPI: {
+vi.mock('@/api/operator', () => ({
+  operatorAPI: {
     accounts: {
       bulkUpdate: vi.fn(),
       checkMixedChannelRisk: vi.fn()
@@ -25,9 +25,13 @@ vi.mock('@/api/admin', () => ({
   }
 }))
 
-vi.mock('@/api/admin/accounts', () => ({
-  getAntigravityDefaultModelMapping: vi.fn()
-}))
+vi.mock('@/api/admin/accounts', () => {
+  const getAntigravityDefaultModelMapping = vi.fn()
+  return {
+    getAntigravityDefaultModelMapping,
+    default: { getAntigravityDefaultModelMapping }
+  }
+})
 
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
@@ -471,6 +475,7 @@ describe('BulkEditAccountModal', () => {
         mode: 'filtered',
         filters: { platform: 'openai', type: 'apikey', status: 'active' },
         previewCount: 20,
+        accountIds: [101, 102],
         selectedPlatforms: ['openai'],
         selectedTypes: ['apikey']
       }
@@ -481,8 +486,7 @@ describe('BulkEditAccountModal', () => {
     await flushPromises()
 
     expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledTimes(1)
-    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith({
-      filters: { platform: 'openai', type: 'apikey', status: 'active' },
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([101, 102], {
       upstream_billing_probe_enabled: true
     })
   })
@@ -496,6 +500,7 @@ describe('BulkEditAccountModal', () => {
         mode: 'filtered',
         filters: { platform: 'openai' },
         previewCount: 12,
+        accountIds: [201, 202],
         selectedPlatforms: ['openai'],
         selectedTypes: ['oauth', 'apikey']
       }
@@ -512,8 +517,7 @@ describe('BulkEditAccountModal', () => {
     await flushPromises()
 
     expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledTimes(1)
-    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith({
-      filters: { platform: 'openai' },
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([201, 202], {
       extra: {
         openai_compact_mode: 'force_on'
       },
@@ -565,7 +569,7 @@ describe('BulkEditAccountModal', () => {
     expect(wrapper.text()).toContain('admin.accounts.openai.modelRestrictionDisabledByPassthrough')
   })
 
-  it('filtered-results 模式下应提交 filters 而不是 account_ids', async () => {
+  it('filtered-results 模式下应提交解析后的精确 account_ids 快照', async () => {
     const wrapper = mountModal({
       accountIds: [],
       target: {
@@ -579,6 +583,7 @@ describe('BulkEditAccountModal', () => {
           privacy_mode: 'training_set_cf_blocked'
         },
         previewCount: 5,
+        accountIds: [301, 302, 303, 304, 305],
         selectedPlatforms: ['openai'],
         selectedTypes: ['oauth']
       }
@@ -589,15 +594,7 @@ describe('BulkEditAccountModal', () => {
     await flushPromises()
 
     expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledTimes(1)
-    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith({
-      filters: {
-        platform: 'openai',
-        type: 'oauth',
-        status: 'active',
-        group: '12',
-        search: 'bulk-target',
-        privacy_mode: 'training_set_cf_blocked'
-      },
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([301, 302, 303, 304, 305], {
       status: 'active'
     })
   })

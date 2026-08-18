@@ -6,7 +6,8 @@ vi.mock('@/stores/app', () => ({
   })
 }))
 
-vi.mock('vue-i18n', () => ({
+vi.mock('vue-i18n', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('vue-i18n')>()),
   useI18n: () => ({
     t: (key: string) => {
       const messages: Record<string, string> = {
@@ -19,8 +20,8 @@ vi.mock('vue-i18n', () => ({
   })
 }))
 
-vi.mock('@/api/admin', () => ({
-  adminAPI: {
+vi.mock('@/api/operator', () => ({
+  operatorAPI: {
     accounts: {
       generateAuthUrl: vi.fn(),
       exchangeCode: vi.fn(),
@@ -30,7 +31,7 @@ vi.mock('@/api/admin', () => ({
 }))
 
 import { useOpenAIOAuth } from '@/composables/useOpenAIOAuth'
-import { adminAPI } from '@/api/admin'
+import { operatorAPI } from '@/api/operator'
 
 describe('useOpenAIOAuth.buildCredentials', () => {
   it('should keep client_id when token response contains it', () => {
@@ -77,7 +78,7 @@ describe('useOpenAIOAuth.buildCredentials', () => {
 
 describe('useOpenAIOAuth.exchangeAuthCode', () => {
   it('shows a clear proxy hint when code exchange fails without a proxy', async () => {
-    vi.mocked(adminAPI.accounts.exchangeCode).mockRejectedValueOnce({
+    vi.mocked(operatorAPI.accounts.exchangeCode).mockRejectedValueOnce({
       status: 502,
       reason: 'OPENAI_OAUTH_PROXY_REQUIRED',
       message: 'OpenAI OAuth token exchange failed: no proxy is configured.'

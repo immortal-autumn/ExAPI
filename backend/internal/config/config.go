@@ -660,22 +660,23 @@ type PricingConfig struct {
 }
 
 type ServerConfig struct {
-	Host                     string    `mapstructure:"host"`
-	Port                     int       `mapstructure:"port"`
-	PublicListenAddr         string    `mapstructure:"public_listen_addr"`
-	ControlListenAddr        string    `mapstructure:"control_listen_addr"`
-	ControlHosts             []string  `mapstructure:"control_hosts"`
-	OperatorPeerIPs          []string  `mapstructure:"operator_peer_ips"`
-	Mode                     string    `mapstructure:"mode"`                  // debug/release
-	EnableServerTiming       bool      `mapstructure:"enable_server_timing"`  // Admin UI Server-Timing response header
-	FrontendURL              string    `mapstructure:"frontend_url"`          // 前端基础 URL，用于生成邮件中的外部链接
-	ReadHeaderTimeout        int       `mapstructure:"read_header_timeout"`   // 读取请求头超时（秒）
-	MaxHeaderBytes           int       `mapstructure:"max_header_bytes"`      // 请求头最大字节数（HTTP/2 映射为 header-list 上限）
-	IdleTimeout              int       `mapstructure:"idle_timeout"`          // 空闲连接超时（秒）
-	TrustedProxies           []string  `mapstructure:"trusted_proxies"`       // 可信代理列表（CIDR/IP）
-	TrustedProxiesConfigured bool      `mapstructure:"-" json:"-" yaml:"-"`   // 是否显式配置了可信代理列表
-	MaxRequestBodySize       int64     `mapstructure:"max_request_body_size"` // 全局最大请求体限制
-	H2C                      H2CConfig `mapstructure:"h2c"`                   // HTTP/2 Cleartext 配置
+	Host                              string    `mapstructure:"host"`
+	Port                              int       `mapstructure:"port"`
+	PublicListenAddr                  string    `mapstructure:"public_listen_addr"`
+	ControlListenAddr                 string    `mapstructure:"control_listen_addr"`
+	AllowContainerWildcardControlBind bool      `mapstructure:"allow_container_wildcard_control_bind"`
+	ControlHosts                      []string  `mapstructure:"control_hosts"`
+	OperatorPeerIPs                   []string  `mapstructure:"operator_peer_ips"`
+	Mode                              string    `mapstructure:"mode"`                  // debug/release
+	EnableServerTiming                bool      `mapstructure:"enable_server_timing"`  // Admin UI Server-Timing response header
+	FrontendURL                       string    `mapstructure:"frontend_url"`          // 前端基础 URL，用于生成邮件中的外部链接
+	ReadHeaderTimeout                 int       `mapstructure:"read_header_timeout"`   // 读取请求头超时（秒）
+	MaxHeaderBytes                    int       `mapstructure:"max_header_bytes"`      // 请求头最大字节数（HTTP/2 映射为 header-list 上限）
+	IdleTimeout                       int       `mapstructure:"idle_timeout"`          // 空闲连接超时（秒）
+	TrustedProxies                    []string  `mapstructure:"trusted_proxies"`       // 可信代理列表（CIDR/IP）
+	TrustedProxiesConfigured          bool      `mapstructure:"-" json:"-" yaml:"-"`   // 是否显式配置了可信代理列表
+	MaxRequestBodySize                int64     `mapstructure:"max_request_body_size"` // 全局最大请求体限制
+	H2C                               H2CConfig `mapstructure:"h2c"`                   // HTTP/2 Cleartext 配置
 }
 
 // H2CConfig HTTP/2 Cleartext 配置
@@ -2504,6 +2505,7 @@ func setEnvReachableDefaults() {
 	_ = viper.BindEnv("security.forwarded_client_ip_headers", "SECURITY_FORWARDED_CLIENT_IP_HEADERS")
 	_ = viper.BindEnv("server.public_listen_addr", "EXAPI_PUBLIC_LISTEN_ADDR")
 	_ = viper.BindEnv("server.control_listen_addr", "EXAPI_CONTROL_LISTEN_ADDR")
+	_ = viper.BindEnv("server.allow_container_wildcard_control_bind", "EXAPI_ALLOW_CONTAINER_WILDCARD_CONTROL_BIND")
 	_ = viper.BindEnv("server.control_hosts", "EXAPI_CONTROL_HOSTS")
 	_ = viper.BindEnv("server.operator_peer_ips", "EXAPI_OPERATOR_PEER_IPS")
 
@@ -3589,7 +3591,7 @@ func validatePrivateListenerConfig(server *ServerConfig) error {
 	if err := validateListenAddress("EXAPI_PUBLIC_LISTEN_ADDR", publicAddr, false); err != nil {
 		return err
 	}
-	if err := validateListenAddress("EXAPI_CONTROL_LISTEN_ADDR", controlAddr, true); err != nil {
+	if err := validateListenAddress("EXAPI_CONTROL_LISTEN_ADDR", controlAddr, !server.AllowContainerWildcardControlBind); err != nil {
 		return err
 	}
 	if listenAddressesEqual(publicAddr, controlAddr) {

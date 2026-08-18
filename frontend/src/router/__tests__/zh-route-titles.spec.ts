@@ -2,16 +2,15 @@ import { describe, expect, it } from 'vitest'
 
 import router from '../index'
 
-const expectedTitles: Record<string, string> = {
-  Setup: '安装向导',
-  KeyUsage: '密钥用量查询',
-}
+describe('private route titles', () => {
+  it('uses localized title keys instead of legacy English fallback titles', () => {
+    const routes = router.getRoutes().filter((route) => route.name && route.name !== 'NotFound')
 
-describe('Chinese-only route fallback titles', () => {
-  it('does not expose English titles when a titleKey is unavailable', () => {
-    for (const [name, expected] of Object.entries(expectedTitles)) {
-      const route = router.getRoutes().find((item) => item.name === name)
-      expect(route?.meta.title, name).toBe(expected)
+    expect(routes.map((route) => route.name)).not.toContain('Setup')
+    expect(routes.map((route) => route.name)).not.toContain('KeyUsage')
+    for (const route of routes) {
+      expect(route.meta.titleKey, String(route.name)).toEqual(expect.any(String))
+      expect(route.meta.title, String(route.name)).toBeUndefined()
     }
   })
 })

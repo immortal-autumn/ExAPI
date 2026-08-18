@@ -52,13 +52,7 @@ func (s *settingPublicRepoStub) Delete(ctx context.Context, key string) error {
 	panic("unexpected Delete call")
 }
 
-func enableSaaSProduct(t *testing.T) {
-	t.Helper()
-	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "false")
-}
-
-func TestSettingService_GetPublicSettings_ExposesRegistrationEmailSuffixWhitelist(t *testing.T) {
-	enableSaaSProduct(t)
+func TestSettingService_GetPublicSettings_SuppressesRegistrationEmailSuffixWhitelist(t *testing.T) {
 	repo := &settingPublicRepoStub{
 		values: map[string]string{
 			SettingKeyRegistrationEnabled:              "true",
@@ -70,11 +64,10 @@ func TestSettingService_GetPublicSettings_ExposesRegistrationEmailSuffixWhitelis
 
 	settings, err := svc.GetPublicSettings(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, []string{"@example.com", "@foo.bar", "*.edu.cn"}, settings.RegistrationEmailSuffixWhitelist)
+	require.Empty(t, settings.RegistrationEmailSuffixWhitelist)
 }
 
 func TestSettingService_GetPublicSettings_ExposesTablePreferences(t *testing.T) {
-	enableSaaSProduct(t)
 	repo := &settingPublicRepoStub{
 		values: map[string]string{
 			SettingKeyTableDefaultPageSize: "50",
@@ -108,8 +101,7 @@ func TestSettingService_GetPublicSettings_ExposesCompactHomeEnabled(t *testing.T
 	require.False(t, missingSettings.CompactHomeEnabled)
 }
 
-func TestSettingService_GetPublicSettings_ExposesForceEmailOnThirdPartySignup(t *testing.T) {
-	enableSaaSProduct(t)
+func TestSettingService_GetPublicSettings_SuppressesForceEmailOnThirdPartySignup(t *testing.T) {
 	repo := &settingPublicRepoStub{
 		values: map[string]string{
 			SettingKeyForceEmailOnThirdPartySignup: "true",
@@ -119,11 +111,10 @@ func TestSettingService_GetPublicSettings_ExposesForceEmailOnThirdPartySignup(t 
 
 	settings, err := svc.GetPublicSettings(context.Background())
 	require.NoError(t, err)
-	require.True(t, settings.ForceEmailOnThirdPartySignup)
+	require.False(t, settings.ForceEmailOnThirdPartySignup)
 }
 
 func TestSettingService_GetPublicSettings_ExposesAllowUserViewErrorRequests(t *testing.T) {
-	enableSaaSProduct(t)
 	repo := &settingPublicRepoStub{
 		values: map[string]string{
 			SettingKeyAllowUserViewErrorRequests: "true",
@@ -136,8 +127,7 @@ func TestSettingService_GetPublicSettings_ExposesAllowUserViewErrorRequests(t *t
 	require.True(t, settings.AllowUserViewErrorRequests)
 }
 
-func TestSettingService_GetPublicSettings_ExposesWeChatOAuthModeCapabilities(t *testing.T) {
-	enableSaaSProduct(t)
+func TestSettingService_GetPublicSettings_SuppressesWeChatOAuthModeCapabilities(t *testing.T) {
 	svc := NewSettingService(&settingPublicRepoStub{
 		values: map[string]string{
 			SettingKeyWeChatConnectEnabled:             "true",
@@ -154,13 +144,12 @@ func TestSettingService_GetPublicSettings_ExposesWeChatOAuthModeCapabilities(t *
 
 	settings, err := svc.GetPublicSettings(context.Background())
 	require.NoError(t, err)
-	require.True(t, settings.WeChatOAuthEnabled)
-	require.True(t, settings.WeChatOAuthOpenEnabled)
-	require.True(t, settings.WeChatOAuthMPEnabled)
+	require.False(t, settings.WeChatOAuthEnabled)
+	require.False(t, settings.WeChatOAuthOpenEnabled)
+	require.False(t, settings.WeChatOAuthMPEnabled)
 }
 
-func TestSettingService_GetPublicSettings_DoesNotExposeMobileOnlyWeChatAsWebOAuthAvailable(t *testing.T) {
-	enableSaaSProduct(t)
+func TestSettingService_GetPublicSettings_SuppressesMobileOnlyWeChatOAuth(t *testing.T) {
 	svc := NewSettingService(&settingPublicRepoStub{
 		values: map[string]string{
 			SettingKeyWeChatConnectEnabled:             "true",
@@ -177,7 +166,7 @@ func TestSettingService_GetPublicSettings_DoesNotExposeMobileOnlyWeChatAsWebOAut
 	require.False(t, settings.WeChatOAuthEnabled)
 	require.False(t, settings.WeChatOAuthOpenEnabled)
 	require.False(t, settings.WeChatOAuthMPEnabled)
-	require.True(t, settings.WeChatOAuthMobileEnabled)
+	require.False(t, settings.WeChatOAuthMobileEnabled)
 }
 
 func TestSettingService_GetPublicSettings_PrivateProductSuppressesDormantCustomerAuth(t *testing.T) {
@@ -235,8 +224,7 @@ func TestSettingService_GetPublicSettings_PrivateProductSuppressesDormantCustome
 	require.False(t, settings.AvailableChannelsEnabled)
 }
 
-func TestSettingService_GetPublicSettings_FallsBackToConfigForWeChatOAuthCapabilities(t *testing.T) {
-	enableSaaSProduct(t)
+func TestSettingService_GetPublicSettings_DoesNotFallBackToConfigForWeChatOAuthCapabilities(t *testing.T) {
 	svc := NewSettingService(&settingPublicRepoStub{values: map[string]string{}}, &config.Config{
 		WeChat: config.WeChatConnectConfig{
 			Enabled:             true,
@@ -249,8 +237,8 @@ func TestSettingService_GetPublicSettings_FallsBackToConfigForWeChatOAuthCapabil
 
 	settings, err := svc.GetPublicSettings(context.Background())
 	require.NoError(t, err)
-	require.True(t, settings.WeChatOAuthEnabled)
-	require.True(t, settings.WeChatOAuthOpenEnabled)
+	require.False(t, settings.WeChatOAuthEnabled)
+	require.False(t, settings.WeChatOAuthOpenEnabled)
 	require.False(t, settings.WeChatOAuthMPEnabled)
 	require.False(t, settings.WeChatOAuthMobileEnabled)
 }

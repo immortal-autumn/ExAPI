@@ -737,6 +737,11 @@ export async function revertProxyFallback(id: number): Promise<{ message: string
 export async function batchDelete(accountIds: number[]): Promise<BatchOperationResult> {
   const { data } = await apiClient.post<BatchOperationResult>('/admin/accounts/batch-delete', {
     account_ids: accountIds
+  }, {
+    // The UI sends bounded chunks, but account deletion still performs several
+    // transactional cleanup steps. Leave enough time for a chunk to return its
+    // per-account reconciliation result instead of hitting the global 30s cap.
+    timeout: 120000
   })
   return data
 }

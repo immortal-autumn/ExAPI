@@ -251,7 +251,7 @@ func TestApplyCodexOAuthTransform_PreservesLiteNamespaceToolChoice(t *testing.T)
 }
 
 func TestOpenAIGatewayServiceForward_NormalizesResponsesLiteToolsForOAuth(t *testing.T) {
-	gin.SetMode(gin.TestMode)
+	ensureGinTestMode()
 
 	for _, passthrough := range []bool{false, true} {
 		name := "managed"

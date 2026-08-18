@@ -77,14 +77,6 @@ vi.mock('@/composables/useRoutePrefetch', () => ({
   }),
 }))
 
-function createDeferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void
-  const promise = new Promise<T>((resolvePromise) => {
-    resolve = resolvePromise
-  })
-  return { promise, resolve }
-}
-
 function runGuard(meta: Record<string, unknown>, path: string) {
   if (!routerHarness.guard) {
     throw new Error('router guard was not registered')
@@ -119,64 +111,68 @@ describe('feature route guard', () => {
     appStore.fetchPublicSettings.mockReset()
   })
 
-  it('waits for the first public-settings request before deciding payment access', async () => {
-    const deferred = createDeferred<{ payment_enabled: boolean }>()
-    appStore.fetchPublicSettings.mockImplementation(async () => {
-      const settings = await deferred.promise
-      appStore.cachedPublicSettings = settings
-      appStore.publicSettingsLoaded = true
-      return settings
-    })
-
+  it('ignores dormant payment metadata without loading public settings', async () => {
     const { navigation, next } = runGuard({ requiresPayment: true }, '/purchase')
-
-    await vi.waitFor(() => expect(appStore.fetchPublicSettings).toHaveBeenCalledTimes(1))
-    expect(next).not.toHaveBeenCalled()
-
-    deferred.resolve({ payment_enabled: true })
-    await navigation
-    expect(next).toHaveBeenCalledOnce()
-    // Private single-user mode never exposes customer payment routes.
-    expect(next).toHaveBeenCalledWith('/dashboard')
-  })
-
-  it.each([
-    ['payment', { requiresPayment: true }, '/purchase'],
-    ['risk control', { requiresRiskControl: true }, '/admin/risk-control'],
-  ])('does not treat a failed %s settings load as explicitly disabled', async (_name, meta, path) => {
-    authStore.isAdmin = meta.requiresRiskControl === true
-    appStore.fetchPublicSettings.mockResolvedValue(null)
-
-    const { navigation, next } = runGuard(meta, path)
-    await navigation
-
-    expect(appStore.publicSettingsLoaded).toBe(false)
-    expect(next).toHaveBeenCalledOnce()
-    if ((meta as Record<string, unknown>).requiresPayment === true) {
-      expect(next).toHaveBeenCalledWith('/dashboard')
-    } else {
-      expect(next).toHaveBeenCalledWith()
-    }
-  })
-
-  it.each([
-    ['payment', { requiresPayment: true }, { payment_enabled: false }, '/dashboard'],
-    [
-      'risk control',
-      { requiresRiskControl: true },
-      { risk_control_enabled: false },
-      '/admin/settings',
-    ],
-  ])('redirects when loaded settings explicitly disable %s', async (_name, meta, settings, target) => {
-    authStore.isAdmin = meta.requiresRiskControl === true
-    appStore.cachedPublicSettings = settings
-    appStore.publicSettingsLoaded = true
-
-    const { navigation, next } = runGuard(meta, '/feature')
     await navigation
 
     expect(appStore.fetchPublicSettings).not.toHaveBeenCalled()
     expect(next).toHaveBeenCalledOnce()
-    expect(next).toHaveBeenCalledWith(target)
+    expect(next).toHaveBeenCalledWith()
+  })
+
+  it('does not load public settings for dormant payment metadata after an earlier failure', async () => {
+    appStore.fetchPublicSettings.mockResolvedValue(null)
+
+    const { navigation, next } = runGuard({ requiresPayment: true }, '/purchase')
+    await navigation
+
+    expect(appStore.publicSettingsLoaded).toBe(false)
+    expect(appStore.fetchPublicSettings).not.toHaveBeenCalled()
+    expect(next).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledWith()
+  })
+
+  it('ignores a stale disabled payment setting for dormant payment metadata', async () => {
+    appStore.cachedPublicSettings = { payment_enabled: false }
+    appStore.publicSettingsLoaded = true
+
+    const { navigation, next } = runGuard({ requiresPayment: true }, '/purchase')
+    await navigation
+
+    expect(appStore.fetchPublicSettings).not.toHaveBeenCalled()
+    expect(next).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledWith()
+  })
+
+  it('does not treat a failed risk-control settings load as explicitly disabled', async () => {
+    authStore.isAdmin = true
+    appStore.fetchPublicSettings.mockResolvedValue(null)
+
+    const { navigation, next } = runGuard(
+      { requiresRiskControl: true },
+      '/admin/risk-control'
+    )
+    await navigation
+
+    expect(appStore.publicSettingsLoaded).toBe(false)
+    expect(appStore.fetchPublicSettings).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledWith()
+  })
+
+  it('redirects when loaded settings explicitly disable risk control', async () => {
+    authStore.isAdmin = true
+    appStore.cachedPublicSettings = { risk_control_enabled: false }
+    appStore.publicSettingsLoaded = true
+
+    const { navigation, next } = runGuard(
+      { requiresRiskControl: true },
+      '/admin/risk-control'
+    )
+    await navigation
+
+    expect(appStore.fetchPublicSettings).not.toHaveBeenCalled()
+    expect(next).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledWith('/admin/settings')
   })
 })

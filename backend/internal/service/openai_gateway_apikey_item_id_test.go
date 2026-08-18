@@ -17,7 +17,7 @@ import (
 )
 
 func TestOpenAIGatewayService_APIKeyPassthrough_StripsInvalidInputItemIDs(t *testing.T) {
-	gin.SetMode(gin.TestMode)
+	ensureGinTestMode()
 
 	upstream := &httpUpstreamRecorder{resp: &http.Response{
 		StatusCode: http.StatusOK,

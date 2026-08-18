@@ -226,10 +226,11 @@ func TestLockAndMergeAccountProbeExtraCoalescesNullableOllamaGroupIdentity(t *te
 		Credentials: map[string]any{"api_key": "sk-no-base-url"},
 		Extra:       map[string]any{service.UpstreamBillingProbeEnabledExtraKey: true},
 	})
-	loaded, err := newAccountRepositoryWithSQL(tx.Client(), tx, nil).GetByID(ctx, account.ID)
+	repo := newAccountRepositoryWithSQL(tx.Client(), tx, nil)
+	loaded, err := repo.GetByID(ctx, account.ID)
 	require.NoError(t, err)
 
-	merged, err := lockAndMergeAccountProbeExtra(ctx, tx.Client(), loaded, nil, nil)
+	merged, err := repo.lockAndMergeAccountProbeExtra(ctx, tx.Client(), loaded, nil)
 
 	require.NoError(t, err, "a NULL Ollama eligibility expression must scan as false")
 	require.NotContains(t, merged, service.OllamaCloudUsageSessionExtraKey)

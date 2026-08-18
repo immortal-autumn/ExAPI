@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
   useStepUp,
   isStepUpRequired,
@@ -50,30 +50,27 @@ describe('useStepUp.run', () => {
     expect(stepUp.visible.value).toBe(false)
   })
 
-  it('prompts on STEP_UP_REQUIRED and retries after verification', async () => {
+  it('propagates STEP_UP_REQUIRED without opening a browser credential prompt', async () => {
     const stepUp = useStepUp()
+    const err = { status: 403, code: 'STEP_UP_REQUIRED' }
     let calls = 0
     const action = async () => {
       calls++
-      if (calls === 1) throw { status: 403, code: 'STEP_UP_REQUIRED' }
-      return 'ok'
+      throw err
     }
-    const promise = stepUp.run(action)
-    // The dialog should now be open, awaiting verification (after the first rejection is handled).
-    await vi.waitFor(() => expect(stepUp.visible.value).toBe(true))
-    stepUp.onVerified()
-    await expect(promise).resolves.toBe('ok')
-    expect(calls).toBe(2)
+
+    await expect(stepUp.run(action)).rejects.toBe(err)
+    expect(calls).toBe(1)
     expect(stepUp.visible.value).toBe(false)
   })
 
-  it('throws a cancellation sentinel (not the original error) if the user cancels the prompt', async () => {
+  it('treats prompt and dialog callbacks as no-op compatibility hooks', async () => {
     const stepUp = useStepUp()
-    const err = { status: 403, code: 'STEP_UP_REQUIRED' }
-    const promise = stepUp.run(async () => { throw err })
-    await vi.waitFor(() => expect(stepUp.visible.value).toBe(true))
+
+    await expect(stepUp.prompt()).resolves.toBe(true)
+    expect(stepUp.visible.value).toBe(false)
+    stepUp.onVerified()
     stepUp.onCancel()
-    await expect(promise).rejects.toBeInstanceOf(StepUpCancelledError)
     expect(stepUp.visible.value).toBe(false)
   })
 

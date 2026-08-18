@@ -23,7 +23,8 @@ const messages: Record<string, string> = {
   'admin.settings.payment.airwallexWebhookHint': 'Select payment_intent.succeeded and use the latest stable API version.',
 }
 
-vi.mock('vue-i18n', () => ({
+vi.mock('vue-i18n', async () => ({
+  ...(await vi.importActual<typeof import('vue-i18n')>('vue-i18n')),
   useI18n: () => ({
     t: (key: string, params?: Record<string, string>) => {
       const message = messages[key] ?? key

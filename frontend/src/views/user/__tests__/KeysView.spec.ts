@@ -66,15 +66,18 @@ vi.mock('@/api', () => ({
     delete: vi.fn(),
     toggleStatus: vi.fn(),
   },
-  authAPI: {
-    getPublicSettings,
-  },
   usageAPI: {
     getDashboardApiKeysUsage,
   },
   userGroupsAPI: {
     getAvailable: getAvailableGroups,
     getUserGroupRates,
+  },
+}))
+
+vi.mock('@/api/client', () => ({
+  apiClient: {
+    get: getPublicSettings,
   },
 }))
 
@@ -293,7 +296,7 @@ describe('user KeysView column settings', () => {
       page_size: 20,
       pages: 1,
     })
-    getPublicSettings.mockResolvedValue({})
+    getPublicSettings.mockResolvedValue({ data: {} })
     getDashboardApiKeysUsage.mockResolvedValue({ stats: {} })
     getAvailableGroups.mockResolvedValue([])
     getUserGroupRates.mockResolvedValue({})
@@ -303,6 +306,7 @@ describe('user KeysView column settings', () => {
   it('does not offer use or import actions for keys loaded from storage', async () => {
     const wrapper = await mountView()
 
+    expect(getPublicSettings).toHaveBeenCalledWith('/settings/public')
     expect(wrapper.text()).not.toContain('keys.useKey')
     expect(wrapper.text()).not.toContain('keys.importToCcSwitch')
   })

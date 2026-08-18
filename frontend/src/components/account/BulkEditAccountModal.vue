@@ -1340,9 +1340,10 @@ interface Props {
   selectedPlatforms: AccountPlatform[]
   selectedTypes: AccountType[]
   target?: {
-    mode: 'selected' | 'filtered'
-    filters?: Record<string, unknown>
-    previewCount?: number
+      mode: 'selected' | 'filtered'
+      filters?: Record<string, unknown>
+      previewCount?: number
+      accountIds?: number[]
     selectedPlatforms?: AccountPlatform[]
     selectedTypes?: AccountType[]
   }
@@ -1362,6 +1363,7 @@ const appStore = useAppStore()
 // Platform awareness
 const targetMode = computed(() => props.target?.mode ?? 'selected')
 const targetPreviewCount = computed(() => props.target?.previewCount ?? props.accountIds.length)
+const targetAccountIds = computed(() => props.target?.accountIds ?? props.accountIds)
 const targetSelectedPlatforms = computed(() => props.target?.selectedPlatforms ?? props.selectedPlatforms)
 const targetSelectedTypes = computed(() => props.target?.selectedTypes ?? props.selectedTypes)
 // Grok 快捷端点仅在所选账号全部为 grok 平台时展示（其他平台不显示）
@@ -1885,7 +1887,7 @@ const preCheckMixedChannelRisk = async (built: Record<string, unknown>): Promise
 }
 
 const handleSubmit = async () => {
-  if (targetMode.value === 'selected' && props.accountIds.length === 0) {
+  if (targetAccountIds.value.length === 0) {
     appStore.showError(t('admin.accounts.bulkEdit.noSelection'))
     return
   }
@@ -1965,12 +1967,10 @@ const submitBulkUpdate = async (baseUpdates: Record<string, unknown>) => {
   submitting.value = true
 
   try {
-    const res = targetMode.value === 'filtered' && props.target?.filters
-      ? await adminAPI.accounts.bulkUpdate({
-        filters: props.target.filters,
-        ...updates
-      })
-      : await adminAPI.accounts.bulkUpdate(props.accountIds, updates)
+    // Filtered edits are resolved to an exact account-ID snapshot before the
+    // modal opens. This keeps both capability checks and the write target bound
+    // to the same rows even if the live filter result changes before submit.
+    const res = await adminAPI.accounts.bulkUpdate(targetAccountIds.value, updates)
     const success = res.success || 0
     const failed = res.failed || 0
 

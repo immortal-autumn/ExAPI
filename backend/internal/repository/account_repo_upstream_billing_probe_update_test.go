@@ -230,7 +230,7 @@ func TestUpdateCredentialsAtomicallyClearsProbeForOpenAIAPIKeyIdentityChange(t *
 		WillReturnRows(sqlmock.NewRows([]string{"account_id", "group_id", "priority", "created_at"}))
 	mock.ExpectBegin()
 	mock.ExpectExec(`(?s)UPDATE accounts.*credentials = \$1::jsonb.*- 'upstream_billing_probe'`).
-		WithArgs(sqlmock.AnyArg(), int64(27), true).
+		WithArgs(sqlmock.AnyArg(), int64(27), true, true).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO scheduler_outbox")).
 		WithArgs(service.SchedulerOutboxEventAccountChanged, int64(27), nil, nil, sqlmock.AnyArg()).
@@ -334,7 +334,7 @@ func TestUpdateCredentialsRollsBackWhenOutboxFails(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"account_id", "group_id", "priority", "created_at"}))
 	mock.ExpectBegin()
 	mock.ExpectExec(`(?s)UPDATE accounts.*credentials = \$1::jsonb.*- 'upstream_billing_probe'`).
-		WithArgs(sqlmock.AnyArg(), int64(27), true).
+		WithArgs(sqlmock.AnyArg(), int64(27), true, true).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO scheduler_outbox")).WillReturnError(errors.New("outbox failed"))
 	mock.ExpectRollback()

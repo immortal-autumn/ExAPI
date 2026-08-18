@@ -172,6 +172,13 @@ func (w *BatchImageWorker) RunOnce(ctx context.Context) error {
 			zap.String("batch_id", reserved.BatchID),
 			zap.Error(err),
 		)
+		if errors.Is(err, ErrBatchImageJobNotFound) || errors.Is(err, ErrBatchImageForeignOwner) {
+			// Cutover deliberately purges the SQL rows before the application is
+			// restarted. Redis may still contain ready/delayed/active entries for
+			// those jobs; acknowledging terminally removes them instead of creating
+			// an infinite retry loop or contacting a provider for a former customer.
+			return w.queue.Ack(ctx, reserved.BatchID)
+		}
 		return w.queue.RequeueAfter(ctx, reserved.BatchID, w.opts.ErrorRetryDelay)
 	}
 	if result.Terminal {

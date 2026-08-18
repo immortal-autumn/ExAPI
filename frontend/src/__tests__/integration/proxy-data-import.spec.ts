@@ -12,15 +12,16 @@ vi.mock('@/stores/app', () => ({
   })
 }))
 
-vi.mock('@/api/admin', () => ({
-  adminAPI: {
+vi.mock('@/api/operator', () => ({
+  operatorAPI: {
     proxies: {
       importData: vi.fn()
     }
   }
 }))
 
-vi.mock('vue-i18n', () => ({
+vi.mock('vue-i18n', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('vue-i18n')>()),
   useI18n: () => ({
     t: (key: string) => key
   })
@@ -30,8 +31,8 @@ describe('Proxy ImportDataModal', () => {
   beforeEach(async () => {
     showError.mockReset()
     showSuccess.mockReset()
-    const { adminAPI } = await import('@/api/admin')
-    vi.mocked(adminAPI.proxies.importData).mockReset()
+    const { operatorAPI } = await import('@/api/operator')
+    vi.mocked(operatorAPI.proxies.importData).mockReset()
   })
 
   it('未选择文件时提示错误', async () => {
@@ -75,8 +76,8 @@ describe('Proxy ImportDataModal', () => {
   })
 
   it('部分成功时在关闭弹窗后通知父组件刷新', async () => {
-    const { adminAPI } = await import('@/api/admin')
-    vi.mocked(adminAPI.proxies.importData).mockResolvedValue({
+    const { operatorAPI } = await import('@/api/operator')
+    vi.mocked(operatorAPI.proxies.importData).mockResolvedValue({
       proxy_created: 1,
       proxy_reused: 0,
       proxy_failed: 1,

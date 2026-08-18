@@ -408,22 +408,24 @@ func (p *fakeProcessorProvider) Cleanup(context.Context, *BatchImageJob, *Accoun
 }
 
 type fakeBatchImageRepository struct {
-	jobs          map[string]*BatchImageJob
-	items         map[string][]CreateBatchImageItemParams
-	counts        map[string]BatchImageCounts
-	transitions   map[string][]string
-	events        map[string][]string
-	transitionErr error
-	replaceCalls  int
+	jobs                map[string]*BatchImageJob
+	items               map[string][]CreateBatchImageItemParams
+	counts              map[string]BatchImageCounts
+	transitions         map[string][]string
+	events              map[string][]string
+	transitionErr       error
+	replaceCalls        int
+	privateOwnerAllowed bool
 }
 
 func newFakeBatchImageRepository() *fakeBatchImageRepository {
 	return &fakeBatchImageRepository{
-		jobs:        make(map[string]*BatchImageJob),
-		items:       make(map[string][]CreateBatchImageItemParams),
-		counts:      make(map[string]BatchImageCounts),
-		transitions: make(map[string][]string),
-		events:      make(map[string][]string),
+		jobs:                make(map[string]*BatchImageJob),
+		items:               make(map[string][]CreateBatchImageItemParams),
+		counts:              make(map[string]BatchImageCounts),
+		transitions:         make(map[string][]string),
+		events:              make(map[string][]string),
+		privateOwnerAllowed: true,
 	}
 }
 
@@ -470,6 +472,10 @@ func (r *fakeBatchImageRepository) GetBatchImageJobByBatchID(_ context.Context, 
 		return nil, ErrBatchImageJobNotFound
 	}
 	return job, nil
+}
+
+func (r *fakeBatchImageRepository) IsPrivateBatchImageOperator(context.Context, int64) (bool, error) {
+	return r.privateOwnerAllowed, nil
 }
 
 func (r *fakeBatchImageRepository) GetBatchImageJobByIdempotencyKey(_ context.Context, userID, apiKeyID int64, key string) (*BatchImageJob, error) {

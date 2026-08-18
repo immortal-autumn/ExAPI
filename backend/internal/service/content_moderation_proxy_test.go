@@ -259,7 +259,12 @@ func TestContentModerationTestAPIKeysProxySemantics(t *testing.T) {
 	proxyRepo := &contentModerationTestProxyRepo{proxies: map[int64]*Proxy{
 		7: {ID: 7, Name: "audit-proxy", Protocol: "http", Host: host, Port: port, Status: StatusActive},
 	}}
-	svc := NewContentModerationService(settingRepo, nil, nil, nil, nil, proxyRepo, nil, nil)
+	// Inject a loopback-capable direct client for the forced-direct branch.
+	// Production's default client correctly rejects loopback destinations.
+	svc := NewContentModerationService(
+		settingRepo, nil, nil, nil, nil, proxyRepo, nil, nil,
+		WithContentModerationHTTPClient(&http.Client{}),
+	)
 
 	// nil：沿用已保存配置的代理，测试请求应经过代理成功。
 	result, err := svc.TestAPIKeys(context.Background(), TestContentModerationAPIKeysInput{APIKeys: []string{"sk-input"}})

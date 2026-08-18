@@ -40,3 +40,13 @@ func TestValidatePrivateListenerConfigAcceptsExplicitControlBind(t *testing.T) {
 		OperatorPeerIPs:   []string{"100.97.17.25"},
 	}))
 }
+
+func TestValidatePrivateListenerConfigAllowsExplicitContainerWildcardMode(t *testing.T) {
+	require.NoError(t, validatePrivateListenerConfig(&ServerConfig{
+		PublicListenAddr:                  "0.0.0.0:8080",
+		ControlListenAddr:                 "0.0.0.0:8027",
+		AllowContainerWildcardControlBind: true,
+		ControlHosts:                      []string{"100.97.17.1"},
+		OperatorPeerIPs:                   []string{"100.97.17.25"},
+	}))
+}

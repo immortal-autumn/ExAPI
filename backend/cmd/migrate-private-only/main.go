@@ -2,10 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -20,8 +17,9 @@ import (
 
 func main() {
 	confirmation := flag.String("confirm", "", "required exact confirmation: DROP-SAAS-DATA-KEEP-USER-<lowest-active-admin-id>")
-	backupDir := flag.String("backup-dir", os.Getenv("EXAPI_BACKUP_DIR"), "directory whose pre-cutover backups are purged after commit")
-	noManagedBackups := flag.Bool("no-managed-backups", false, "assert that the application has no managed backup records when --backup-dir is omitted")
+	localBackupDir := flag.String("local-backup-dir", os.Getenv("EXAPI_LOCAL_BACKUP_DIR"), "legacy local-backup directory whose pre-cutover files are purged after commit")
+	noLocalBackups := flag.Bool("no-local-backups", false, "assert that the installation has no legacy local-backup directory")
+	batchCleanupEvidencePath := flag.String("batch-cleanup-evidence-file", os.Getenv("EXAPI_BATCH_CLEANUP_EVIDENCE"), "required provider batch-cleanup attestation embedded in the signed report")
 	reportPath := flag.String("report-file", os.Getenv("EXAPI_PRIVATE_MIGRATION_REPORT"), "required 0600 file for the durable signed migration report")
 	flag.Parse()
 	if strings.TrimSpace(*confirmation) == "" {
@@ -30,8 +28,12 @@ func main() {
 	if strings.TrimSpace(*reportPath) == "" {
 		log.Fatal("refusing to run without --report-file (or EXAPI_PRIVATE_MIGRATION_REPORT)")
 	}
+	batchCleanupEvidence, err := privatecutover.ReadBatchCleanupEvidence(*batchCleanupEvidencePath)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	reportKey, err := migrationReportKey()
+	reportKey, err := privatecutover.ParseReportKey(os.Getenv("EXAPI_MIGRATION_REPORT_KEY"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -46,29 +48,11 @@ func main() {
 	defer client.Close()
 
 	if _, err := privatecutover.RunWithOptions(context.Background(), db, *confirmation, reportKey, privatecutover.CutoverOptions{
-		BackupDir:              *backupDir,
-		AssertNoManagedBackups: *noManagedBackups,
-		ReportPath:             *reportPath,
+		LocalBackupDir:       *localBackupDir,
+		AssertNoLocalBackups: *noLocalBackups,
+		BatchCleanupEvidence: batchCleanupEvidence,
+		ReportPath:           *reportPath,
 	}, nil); err != nil {
 		log.Fatalf("private-only cutover failed: %v", err)
 	}
-}
-
-func migrationReportKey() ([]byte, error) {
-	raw := strings.TrimSpace(os.Getenv("EXAPI_MIGRATION_REPORT_KEY"))
-	if raw == "" {
-		return nil, fmt.Errorf("EXAPI_MIGRATION_REPORT_KEY is required and must be a 32-byte key or hex encoding")
-	}
-	if decoded, err := hex.DecodeString(raw); err == nil && len(decoded) >= 32 {
-		return decoded, nil
-	}
-	if len([]byte(raw)) >= 32 {
-		return []byte(raw), nil
-	}
-	return nil, fmt.Errorf("EXAPI_MIGRATION_REPORT_KEY must be at least 32 bytes (sha256 fingerprint=%s)", keyFingerprint([]byte(raw)))
-}
-
-func keyFingerprint(key []byte) string {
-	digest := sha256.Sum256(key)
-	return hex.EncodeToString(digest[:])[:16]
 }

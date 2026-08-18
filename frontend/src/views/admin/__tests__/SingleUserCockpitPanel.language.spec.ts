@@ -9,8 +9,8 @@ const mocks = vi.hoisted(() => ({
   getSummary: vi.fn(),
 }))
 
-vi.mock('@/api/admin', () => ({
-  adminAPI: {
+vi.mock('@/api/operator', () => ({
+  operatorAPI: {
     cockpit: {
       getSummary: mocks.getSummary,
     },

@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	dbaccount "github.com/Wei-Shaw/sub2api/ent/account"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 
@@ -236,40 +238,205 @@ func TestListDueOllamaCloudUsageAccountsFiltersOrdersAndLimits(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestBulkUpdateOllamaIdentityCleanupIsValueConditional(t *testing.T) {
-	exec := &recordingSQLExecutor{result: rowsAffectedResult(1)}
-	repo := newAccountRepositoryWithSQL(nil, exec, nil)
+func TestOllamaCloudUsageCredentialPatchChangesGroupIdentity(t *testing.T) {
+	base := ollamaCloudUsageRepositoryAccount()
+	for _, tt := range []struct {
+		name  string
+		patch map[string]any
+		want  bool
+	}{
+		{name: "equivalent Ollama URL", patch: map[string]any{"base_url": "https://www.ollama.com:443/v1"}},
+		{name: "ineligible base URL", patch: map[string]any{"base_url": "https://relay.example.com/v1"}, want: true},
+		{name: "same API key", patch: map[string]any{"api_key": "key"}},
+		{name: "changed API key", patch: map[string]any{"api_key": "replacement"}, want: true},
+		{name: "unrelated credential", patch: map[string]any{"organization": "test"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			merged := copyJSONMap(base.Credentials)
+			for key, value := range tt.patch {
+				merged[key] = value
+			}
+			require.Equal(t, tt.want, ollamaCloudUsageCredentialPatchChangesGroupIdentity(base, merged, tt.patch))
+		})
+	}
+}
 
-	_, err := repo.BulkUpdate(context.Background(), []int64{17}, service.AccountBulkUpdate{
-		Credentials: map[string]any{"base_url": "https://www.ollama.com:443/v1"},
+func TestBulkUpdateOllamaCredentialCleanupUsesPerRowPlaintextDecision(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		credentials map[string]any
+		wantCleanup bool
+	}{
+		{name: "equivalent base URL preserves managed state", credentials: map[string]any{"base_url": "https://www.ollama.com:443/v1"}},
+		{name: "ineligible base URL clears managed state", credentials: map[string]any{"base_url": "https://relay.example.com/v1"}, wantCleanup: true},
+		{name: "changed API key clears managed state", credentials: map[string]any{"api_key": "replacement"}, wantCleanup: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var updateQuery string
+			matcher := sqlmock.QueryMatcherFunc(func(expectedSQL, actualSQL string) error {
+				if strings.HasPrefix(normalizeSQLWhitespace(actualSQL), "UPDATE accounts SET") {
+					updateQuery = actualSQL
+				}
+				return sqlmock.QueryMatcherRegexp.Match(expectedSQL, actualSQL)
+			})
+			db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(matcher))
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = db.Close() })
+			client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
+			t.Cleanup(func() { _ = client.Close() })
+			protector := mustAccountCredentialProtectorForTest(t)
+			stored, err := protector.seal(17, map[string]any{"api_key": "key", "base_url": "https://ollama.com"})
+			require.NoError(t, err)
+			storedJSON, err := json.Marshal(stored)
+			require.NoError(t, err)
+
+			mock.ExpectQuery(`(?s)SELECT .* FROM "accounts".*WHERE .*"id" IN \(\$1\)`).
+				WithArgs(int64(17)).
+				WillReturnRows(updatedAccountRows(17, storedJSON, `{"ollama_cloud_usage_session":"cipher:session","ollama_cloud_usage_auto_refresh":true,"ollama_cloud_usage_snapshot":{"status":"ok"}}`))
+			mock.ExpectQuery(`(?s)SELECT "account_groups".*WHERE "account_groups"\."account_id" IN \(\$1\)`).
+				WithArgs(int64(17)).
+				WillReturnRows(sqlmock.NewRows([]string{"account_id", "group_id", "priority", "created_at"}))
+			mock.ExpectBegin()
+			update := mock.ExpectExec(`(?s)UPDATE accounts SET credentials = CASE id .*WHERE id = ANY`).
+				WillReturnResult(sqlmock.NewResult(0, 1))
+			if tt.wantCleanup {
+				update.WithArgs(int64(17), sqlmock.AnyArg(), `{17}`, `{17}`)
+			} else {
+				update.WithArgs(int64(17), sqlmock.AnyArg(), `{17}`)
+			}
+			mock.ExpectExec(regexp.QuoteMeta("INSERT INTO scheduler_outbox")).
+				WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+
+			repo := newAccountRepositoryWithSQLAndProtector(client, db, nil, protector)
+			rows, err := repo.BulkUpdate(context.Background(), []int64{17}, service.AccountBulkUpdate{Credentials: tt.credentials})
+			require.NoError(t, err)
+			require.EqualValues(t, 1, rows)
+			normalized := normalizeSQLWhitespace(updateQuery)
+			require.NotContains(t, normalized, "credentials ->> 'base_url'", "sealed credential envelopes must not be inspected in SQL")
+			if tt.wantCleanup {
+				require.Contains(t, normalized, "id = ANY($3)")
+				require.Contains(t, normalized, "- 'ollama_cloud_usage_session' - 'ollama_cloud_usage_auto_refresh' - 'ollama_cloud_usage_snapshot'")
+			} else {
+				require.NotContains(t, normalized, "ollama_cloud_usage_session")
+				require.NotContains(t, normalized, "ollama_cloud_usage_snapshot")
+			}
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestBulkUpdateOllamaCredentialCleanupSelectsOnlyChangedRows(t *testing.T) {
+	var updateQuery string
+	matcher := sqlmock.QueryMatcherFunc(func(expectedSQL, actualSQL string) error {
+		if strings.HasPrefix(normalizeSQLWhitespace(actualSQL), "UPDATE accounts SET") {
+			updateQuery = actualSQL
+		}
+		return sqlmock.QueryMatcherRegexp.Match(expectedSQL, actualSQL)
 	})
-
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(matcher))
 	require.NoError(t, err)
-	require.NotEmpty(t, exec.execQueries)
-	query := normalizeSQLWhitespace(exec.execQueries[0])
-	require.Contains(t, query, "NOT ("+ollamaCloudBaseURLMatchesSQL("credentials ->> 'base_url'"))
-	require.Contains(t, query, ollamaCloudBaseURLMatchesSQL("$1::jsonb ->> 'base_url'"))
-	require.NotContains(t, query, "~*")
-	require.Contains(t, query, "platform IN ('openai', 'anthropic') AND type = 'apikey'")
-	require.Contains(t, query, "- 'ollama_cloud_usage_session' - 'ollama_cloud_usage_auto_refresh' - 'ollama_cloud_usage_snapshot'")
-	payload, ok := exec.execArgs[0][0].([]byte)
-	require.True(t, ok)
-	require.NotContains(t, string(payload), service.OllamaCloudUsageSnapshotExtraKey)
+	t.Cleanup(func() { _ = db.Close() })
+	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
+	t.Cleanup(func() { _ = client.Close() })
+	protector := mustAccountCredentialProtectorForTest(t)
+	now := time.Now()
+	rows := sqlmock.NewRows(dbaccount.Columns)
+	for _, fixture := range []struct {
+		id     int64
+		apiKey string
+	}{
+		{id: 17, apiKey: "replacement"},
+		{id: 18, apiKey: "old-key"},
+	} {
+		stored, sealErr := protector.seal(fixture.id, map[string]any{"api_key": fixture.apiKey, "base_url": "https://ollama.com"})
+		require.NoError(t, sealErr)
+		storedJSON, marshalErr := json.Marshal(stored)
+		require.NoError(t, marshalErr)
+		rows.AddRow(
+			fixture.id, now, now, nil, "test", nil, service.PlatformOpenAI, service.AccountTypeAPIKey,
+			storedJSON, []byte(`{"ollama_cloud_usage_session":"cipher:session","ollama_cloud_usage_auto_refresh":true,"ollama_cloud_usage_snapshot":{"status":"ok"}}`), nil, nil,
+			1, nil, 1, 1.0, service.StatusActive, nil, nil, nil, false, true, nil, nil, nil, nil, nil, nil,
+			nil, nil, nil, service.QuotaDimensionGlobal,
+		)
+	}
+
+	mock.ExpectQuery(`(?s)SELECT .* FROM "accounts".*WHERE .*"id" IN \(\$1, \$2\)`).
+		WithArgs(int64(17), int64(18)).
+		WillReturnRows(rows)
+	mock.ExpectQuery(`(?s)SELECT "account_groups".*WHERE "account_groups"\."account_id" IN \(\$1, \$2\)`).
+		WithArgs(int64(17), int64(18)).
+		WillReturnRows(sqlmock.NewRows([]string{"account_id", "group_id", "priority", "created_at"}))
+	mock.ExpectBegin()
+	mock.ExpectExec(`(?s)UPDATE accounts SET credentials = CASE id .*WHERE id = ANY`).
+		WithArgs(int64(17), sqlmock.AnyArg(), int64(18), sqlmock.AnyArg(), `{18}`, `{17,18}`).
+		WillReturnResult(sqlmock.NewResult(0, 2))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO scheduler_outbox")).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	repo := newAccountRepositoryWithSQLAndProtector(client, db, nil, protector)
+	updated, err := repo.BulkUpdate(context.Background(), []int64{17, 18}, service.AccountBulkUpdate{
+		Credentials: map[string]any{"api_key": "replacement"},
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 2, updated)
+	normalized := normalizeSQLWhitespace(updateQuery)
+	require.Contains(t, normalized, "id = ANY($5)")
+	require.Contains(t, normalized, "- 'ollama_cloud_usage_session' - 'ollama_cloud_usage_auto_refresh' - 'ollama_cloud_usage_snapshot'")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestBulkUpdateOllamaProxyCleanupIsValueConditional(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		proxyID   int64
+		condition string
+	}{
+		{name: "set proxy", proxyID: 9, condition: "proxy_id IS DISTINCT FROM $1"},
+		{name: "clear proxy", proxyID: 0, condition: "proxy_id IS NOT NULL"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			exec := &recordingSQLExecutor{result: rowsAffectedResult(1)}
+			repo := newAccountRepositoryWithSQL(nil, exec, nil)
+			rows, err := repo.BulkUpdate(context.Background(), []int64{17}, service.AccountBulkUpdate{ProxyID: &tt.proxyID})
+			require.NoError(t, err)
+			require.EqualValues(t, 1, rows)
+			require.NotEmpty(t, exec.execQueries)
+			query := normalizeSQLWhitespace(exec.execQueries[0])
+			require.Contains(t, query, tt.condition)
+			require.Contains(t, query, "platform IN ('openai', 'anthropic') AND type = 'apikey'")
+			require.Contains(t, query, "- 'ollama_cloud_usage_snapshot'")
+			require.NotContains(t, query, "ollama_cloud_usage_session")
+			require.NotContains(t, query, "ollama_cloud_usage_auto_refresh")
+		})
+	}
 }
 
 func TestUpdateCredentialsIdentityChangeClearsAllOllamaManagedExtra(t *testing.T) {
 	client, mock := newOllamaCloudUsageRepositoryTestClient(t)
+	protector := mustAccountCredentialProtectorForTest(t)
+	stored, err := protector.seal(17, map[string]any{"api_key": "old-key", "base_url": "https://ollama.com"})
+	require.NoError(t, err)
+	storedJSON, err := json.Marshal(stored)
+	require.NoError(t, err)
+	mock.ExpectQuery(`(?s)SELECT .* FROM "accounts".*WHERE .*"id" = \$1`).
+		WithArgs(int64(17)).
+		WillReturnRows(updatedAccountRows(17, storedJSON, `{"ollama_cloud_usage_session":"cipher:session","ollama_cloud_usage_auto_refresh":true,"ollama_cloud_usage_snapshot":{"status":"ok"}}`))
+	mock.ExpectQuery(`(?s)SELECT "account_groups".*WHERE "account_groups"\."account_id" IN \(\$1\)`).
+		WithArgs(int64(17)).
+		WillReturnRows(sqlmock.NewRows([]string{"account_id", "group_id", "priority", "created_at"}))
 	mock.ExpectBegin()
-	mock.ExpectExec(`(?s)UPDATE accounts.*credentials -> 'api_key' IS DISTINCT FROM.*ollama_cloud_usage_session.*ollama_cloud_usage_auto_refresh.*ollama_cloud_usage_snapshot`).
-		WithArgs(`{"api_key":"new-key","base_url":"https://ollama.com"}`, int64(17)).
+	mock.ExpectExec(`(?s)UPDATE accounts.*WHEN \$4.*ollama_cloud_usage_session.*ollama_cloud_usage_auto_refresh.*ollama_cloud_usage_snapshot`).
+		WithArgs(sqlmock.AnyArg(), int64(17), true, true).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO scheduler_outbox")).
 		WithArgs(service.SchedulerOutboxEventAccountChanged, int64(17), nil, nil, sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
-	repo := newAccountRepositoryWithSQL(client, nil, nil)
+	repo := newAccountRepositoryWithSQLAndProtector(client, nil, nil, protector)
 
-	err := repo.UpdateCredentials(context.Background(), 17, map[string]any{
+	err = repo.UpdateCredentials(context.Background(), 17, map[string]any{
 		"api_key": "new-key", "base_url": "https://ollama.com",
 	})
 
@@ -298,17 +465,28 @@ func TestDisableOllamaCloudUsageAutoRefreshUsesGroupIdentityCAS(t *testing.T) {
 // openai/anthropic apikey 账号在凭证未变化的持久化上也会误清探测快照。
 func TestUpdateCredentialsCleanupBranchRequiresChangedCredentials(t *testing.T) {
 	client, mock := newOllamaCloudUsageRepositoryTestClient(t)
+	protector := mustAccountCredentialProtectorForTest(t)
+	stored, err := protector.seal(17, map[string]any{"api_key": "same-key", "base_url": "https://relay.example.com/v1"})
+	require.NoError(t, err)
+	storedJSON, err := json.Marshal(stored)
+	require.NoError(t, err)
+	mock.ExpectQuery(`(?s)SELECT .* FROM "accounts".*WHERE .*"id" = \$1`).
+		WithArgs(int64(17)).
+		WillReturnRows(updatedAccountRows(17, storedJSON, `{"ollama_cloud_usage_snapshot":{"status":"stale"}}`))
+	mock.ExpectQuery(`(?s)SELECT "account_groups".*WHERE "account_groups"\."account_id" IN \(\$1\)`).
+		WithArgs(int64(17)).
+		WillReturnRows(sqlmock.NewRows([]string{"account_id", "group_id", "priority", "created_at"}))
 	mock.ExpectBegin()
-	mock.ExpectExec(`(?s)UPDATE accounts.*CASE.*AND credentials IS DISTINCT FROM \$1::jsonb\s+AND \(\s+credentials -> 'api_key' IS DISTINCT FROM`).
-		WithArgs(`{"api_key":"same-key","base_url":"https://relay.example.com/v1"}`, int64(17)).
+	mock.ExpectExec(`(?s)UPDATE accounts.*WHEN \$4.*ollama_cloud_usage_session`).
+		WithArgs(sqlmock.AnyArg(), int64(17), false, false).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO scheduler_outbox")).
 		WithArgs(service.SchedulerOutboxEventAccountChanged, int64(17), nil, nil, sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
-	repo := newAccountRepositoryWithSQL(client, nil, nil)
+	repo := newAccountRepositoryWithSQLAndProtector(client, nil, nil, protector)
 
-	err := repo.UpdateCredentials(context.Background(), 17, map[string]any{
+	err = repo.UpdateCredentials(context.Background(), 17, map[string]any{
 		"api_key": "same-key", "base_url": "https://relay.example.com/v1",
 	})
 

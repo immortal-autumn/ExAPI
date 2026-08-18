@@ -50,6 +50,7 @@ WORKDIR /app
 # resources from GoReleaser.
 COPY sub2api /app/sub2api
 COPY migrate-private-only /app/migrate-private-only
+COPY verify-private-cutover-report /app/verify-private-cutover-report
 COPY --chown=sub2api:sub2api backend/resources /app/resources
 COPY --chown=sub2api:sub2api deploy/ops/with-migration-report-key.sh /app/with-migration-report-key.sh
 

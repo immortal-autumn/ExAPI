@@ -1830,8 +1830,13 @@ func (s *ContentModerationService) moderationHTTPClient(ctx context.Context, cfg
 		return nil, err
 	}
 	client, err := httpclient.GetClient(httpclient.Options{
-		ProxyURL:           proxyURL,
-		ValidateResolvedIP: true,
+		ProxyURL: proxyURL,
+		// A configured proxy is an explicit operator-controlled trust boundary.
+		// Resolving the destination locally here both defeats remote proxy DNS
+		// and creates a direct-resolution policy that the socket never uses.
+		// Redirect URL structure/literals remain checked below; destination DNS
+		// and egress policy belong to the configured proxy.
+		ValidateResolvedIP: false,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build moderation proxy client: %w", err)

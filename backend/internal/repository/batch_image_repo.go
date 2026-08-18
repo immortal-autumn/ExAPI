@@ -58,6 +58,26 @@ func (r *batchImageRepository) GetBatchImageJobByBatchID(ctx context.Context, ba
 	return job, nil
 }
 
+func (r *batchImageRepository) IsPrivateBatchImageOperator(ctx context.Context, userID int64) (bool, error) {
+	var allowed bool
+	err := r.sql.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM exapi_private_state state
+			JOIN users operator ON operator.id = state.operator_id
+			WHERE state.id = true
+			  AND state.operator_id = $1
+			  AND operator.role = 'admin'
+			  AND operator.status = 'active'
+			  AND operator.deleted_at IS NULL
+		)
+	`, userID).Scan(&allowed)
+	if err != nil {
+		return false, err
+	}
+	return allowed, nil
+}
+
 func (r *batchImageRepository) GetBatchImageJobByIdempotencyKey(ctx context.Context, userID, apiKeyID int64, key string) (*service.BatchImageJob, error) {
 	job, err := scanBatchImageJob(r.sql.QueryRowContext(ctx, batchImageJobSelectSQL+`
  WHERE user_id = $1 AND api_key_id = $2 AND idempotency_key = $3

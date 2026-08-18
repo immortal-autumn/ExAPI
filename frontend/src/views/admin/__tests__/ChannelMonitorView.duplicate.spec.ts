@@ -18,8 +18,8 @@ const {
   showError: vi.fn(),
 }))
 
-vi.mock('@/api/admin', () => ({
-  adminAPI: {
+vi.mock('@/api/operator', () => ({
+  operatorAPI: {
     channelMonitor: {
       list: listMonitors,
       duplicate: duplicateMonitor,

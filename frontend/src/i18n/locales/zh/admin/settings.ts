@@ -2,6 +2,7 @@ export default {
     settings: {
       title: '系统设置',
       description: '管理注册、邮箱验证、默认值和 SMTP 设置',
+      saved: '设置已保存',
       tabs: {
         general: '通用设置',
         agreement: '登录条款',
@@ -742,6 +743,7 @@ export default {
         description: '配置用于发送验证码的邮件服务',
         testConnection: '测试连接',
         testing: '测试中...',
+        testFailed: 'SMTP 连接测试失败',
         host: 'SMTP 主机',
         hostPlaceholder: 'smtp.gmail.com',
         port: 'SMTP 端口',
@@ -767,6 +769,7 @@ export default {
         recipientEmailPlaceholder: "test{'@'}example.com",
         sendTestEmail: '发送测试邮件',
         sending: '发送中...',
+        sendFailed: '测试邮件发送失败',
         enterRecipientHint: '请输入收件人邮箱地址'
       },
       emailTemplates: {

@@ -89,8 +89,10 @@ func TestValidateWebAuthnConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			viper.Reset()
 			t.Setenv("JWT_SECRET", strings.Repeat("x", 32))
+			t.Setenv("REDIS_PASSWORD", "private-redis-password")
 			cfg, err := Load()
 			require.NoError(t, err)
+			cfg.Redis.Password = "private-redis-password"
 			tt.configure(cfg)
 
 			err = cfg.Validate()

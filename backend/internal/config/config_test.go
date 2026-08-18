@@ -792,7 +792,7 @@ func TestValidatePrivateModeRequiresRedisAuthentication(t *testing.T) {
 	}
 }
 
-func TestValidateExplicitStandardModeAllowsLegacyPasswordlessRedis(t *testing.T) {
+func TestValidatePrivateModeCannotBeDisabledByLegacyEnvironment(t *testing.T) {
 	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "false")
 	resetViperWithJWTSecret(t)
 	cfg, loadErr := Load()
@@ -801,8 +801,8 @@ func TestValidateExplicitStandardModeAllowsLegacyPasswordlessRedis(t *testing.T)
 	}
 	cfg.Redis.Password = ""
 
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("explicit standard mode should preserve legacy passwordless Redis compatibility: %v", err)
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "redis.password") {
+		t.Fatalf("legacy environment escape hatch must not disable private Redis authentication: %v", err)
 	}
 }
 
@@ -1405,28 +1405,27 @@ func TestWarnIfInsecureURLHTTPS(t *testing.T) {
 	warnIfInsecureURL("secure", "https://example.com")
 }
 
-func TestValidateJWTSecret_UTF8Bytes(t *testing.T) {
+func TestValidatePrivateModeDoesNotRequireLegacyJWTSecret(t *testing.T) {
 	resetViperWithJWTSecret(t)
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	// 31 bytes (< 32) even though it's 31 characters.
+	cfg.Redis.Password = "private-redis-password"
+
+	// Peer-authenticated private control does not consume the legacy customer
+	// JWT secret, so stale/short values must not gate startup.
 	cfg.JWT.Secret = strings.Repeat("a", 31)
 	err = cfg.Validate()
-	if err == nil {
-		t.Fatalf("Validate() should reject 31-byte secret")
-	}
-	if !strings.Contains(err.Error(), "at least 32 bytes") {
-		t.Fatalf("Validate() error = %v", err)
+	if err != nil {
+		t.Fatalf("private mode should ignore the legacy JWT secret: %v", err)
 	}
 
-	// 32 bytes OK.
-	cfg.JWT.Secret = strings.Repeat("a", 32)
+	cfg.JWT.Secret = ""
 	err = cfg.Validate()
 	if err != nil {
-		t.Fatalf("Validate() should accept 32-byte secret: %v", err)
+		t.Fatalf("private mode should allow an absent legacy JWT secret: %v", err)
 	}
 }
 
@@ -1438,6 +1437,7 @@ func TestValidateConfigErrors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Load() error: %v", err)
 		}
+		cfg.Redis.Password = "private-redis-password"
 		return cfg
 	}
 
@@ -1490,16 +1490,6 @@ func TestValidateConfigErrors(t *testing.T) {
 				c.APIKeyAuth.InvalidAbuse.Capacity = 255
 			},
 			wantErr: "api_key_auth_cache.invalid_abuse.capacity",
-		},
-		{
-			name:    "jwt secret required",
-			mutate:  func(c *Config) { c.JWT.Secret = "" },
-			wantErr: "jwt.secret is required",
-		},
-		{
-			name:    "jwt secret min bytes",
-			mutate:  func(c *Config) { c.JWT.Secret = strings.Repeat("a", 31) },
-			wantErr: "jwt.secret must be at least 32 bytes",
 		},
 		{
 			name:    "subscription maintenance worker_count non-negative",

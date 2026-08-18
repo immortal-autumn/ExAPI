@@ -10,16 +10,12 @@ on:
         description: 'Tag to release (e.g., v1.0.0)'
         required: true
         type: string
-      simple_release:
-        description: 'Simple release: only x86_64 GHCR image, skip other artifacts'
-        required: false
-        type: boolean
-        default: false
 
-# 环境变量：合并 workflow_dispatch 输入和 repository variable
-# tag push 触发时读取 vars.SIMPLE_RELEASE，workflow_dispatch 时使用输入参数
 env:
-  SIMPLE_RELEASE: ${{ github.event.inputs.simple_release == 'true' || vars.SIMPLE_RELEASE == 'true' }}
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  # SemVer without build metadata. OCI/Docker tags cannot contain "+", so the
+  # release ref is rejected before any build or publication work starts.
+  RELEASE_TAG_PATTERN: '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
 
 permissions:
   contents: write
@@ -42,41 +38,28 @@ jobs:
 
       - name: Resolve immutable release commit
         id: source
+        env:
+          REQUESTED_TAG: ${{ env.RELEASE_TAG }}
         run: |
+          python3 - <<'PY'
+          import os
+          import re
+
+          tag = os.environ["REQUESTED_TAG"]
+          pattern = os.environ["RELEASE_TAG_PATTERN"]
+          if re.fullmatch(pattern, tag) is None:
+              raise SystemExit(f"invalid release tag for SemVer/OCI publication: {tag!r}")
+          prerelease = tag.split("-", 1)[1] if "-" in tag else ""
+          if any(part.isdigit() and len(part) > 1 and part.startswith("0") for part in prerelease.split(".")):
+              raise SystemExit(f"numeric prerelease identifiers must not contain leading zeroes: {tag!r}")
+          PY
+          test "$(git cat-file -t "$REQUESTED_TAG")" = tag
           SHA=$(git rev-parse HEAD)
+          test "$(git rev-parse "${REQUESTED_TAG}^{commit}")" = "$SHA"
+          VERSION=${REQUESTED_TAG#v}
+          test "$(tr -d '\r\n' < backend/cmd/server/VERSION)" = "$VERSION"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "Resolved release commit: $SHA"
-
-  # Update VERSION file with tag version
-  update-version:
-    needs: resolve-ref
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ needs.resolve-ref.outputs.sha }}
-
-      - name: Verify resolved source identity
-        run: test "$(git rev-parse HEAD)" = "${{ needs.resolve-ref.outputs.sha }}"
-
-      - name: Update VERSION file
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION=${{ github.event.inputs.tag }}
-            VERSION=${VERSION#v}
-          else
-            VERSION=${GITHUB_REF#refs/tags/v}
-          fi
-          echo "$VERSION" > backend/cmd/server/VERSION
-          echo "Updated VERSION file to: $VERSION"
-
-      - name: Upload VERSION artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: version-file
-          path: backend/cmd/server/VERSION
-          retention-days: 1
 
   quality-gate:
     needs: resolve-ref
@@ -149,7 +132,7 @@ jobs:
           retention-days: 1
 
   release:
-    needs: [resolve-ref, update-version, quality-gate]
+    needs: [resolve-ref, quality-gate]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -160,12 +143,6 @@ jobs:
 
       - name: Verify resolved source identity
         run: test "$(git rev-parse HEAD)" = "${{ needs.resolve-ref.outputs.sha }}"
-
-      - name: Download VERSION artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: version-file
-          path: backend/cmd/server/
 
       - name: Download frontend artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -196,15 +173,6 @@ jobs:
           version: v0.36.1
           driver-opts: image=moby/buildkit@sha256:2f5adac4ecd194d9f8c10b7b5d7bceb5186853db1b26e5abd3a657af0b7e26ec
 
-      - name: Login to DockerHub
-        if: ${{ env.DOCKERHUB_USERNAME != '' }}
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Login to GitHub Container Registry
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
@@ -212,33 +180,24 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Fetch tags with annotations
-        run: |
-          # 确保获取完整的 annotated tag 信息
-          git fetch --tags --force
-
       - name: Get tag message
         id: tag_message
+        env:
+          TAG_NAME: ${{ env.RELEASE_TAG }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG_NAME=${{ github.event.inputs.tag }}
-          else
-            TAG_NAME=${GITHUB_REF#refs/tags/}
-          fi
-          echo "Processing tag: $TAG_NAME"
-
-          # 获取完整的 tag message（跳过第一行标题）
           TAG_MESSAGE=$(git tag -l --format='%(contents:body)' "$TAG_NAME")
-
-          # 调试输出
-          echo "Tag message length: ${#TAG_MESSAGE}"
-          echo "Tag message preview:"
-          echo "$TAG_MESSAGE" | head -10
-
-          # 使用 EOF 分隔符处理多行内容
-          echo "message<<EOF" >> $GITHUB_OUTPUT
-          echo "$TAG_MESSAGE" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # The annotated tag body is untrusted multiline data. Use a random
+          # delimiter that cannot be predicted when the tag is created, and do
+          # not interpolate or print the body in a shell program.
+          delimiter=$(python3 -c 'import secrets; print("TAG_MESSAGE_" + secrets.token_hex(16))')
+          while grep -Fxq "$delimiter" <<<"$TAG_MESSAGE"; do
+            delimiter=$(python3 -c 'import secrets; print("TAG_MESSAGE_" + secrets.token_hex(16))')
+          done
+          {
+            printf 'message<<%s\n' "$delimiter"
+            printf '%s\n' "$TAG_MESSAGE"
+            printf '%s\n' "$delimiter"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Set lowercase owner for GHCR
         id: lowercase
@@ -248,28 +207,35 @@ jobs:
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:
           version: v2.17.1
-          args: release --clean ${{ env.SIMPLE_RELEASE == 'true' && '--config=.goreleaser.simple.yaml' || '' }}
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Bind GoReleaser to the exact annotated tag validated by resolve-ref,
+          # including manual dispatches and commits carrying multiple tags.
+          GORELEASER_CURRENT_TAG: ${{ env.RELEASE_TAG }}
           TAG_MESSAGE: ${{ steps.tag_message.outputs.message }}
           GITHUB_REPO_OWNER: ${{ github.repository_owner }}
           GITHUB_REPO_OWNER_LOWER: ${{ steps.lowercase.outputs.owner }}
           GITHUB_REPO_NAME: ${{ github.event.repository.name }}
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME || 'skip' }}
 
-      - name: Resolve published immutable image
-        id: published-image
+      - name: Confirm GitHub release is still draft
         env:
-          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+
+      - name: Resolve candidate immutable image
+        id: candidate-image
+        env:
           GHCR_OWNER: ${{ steps.lowercase.outputs.owner }}
         run: |
           VERSION=${RELEASE_TAG#v}
-          IMAGE="ghcr.io/${GHCR_OWNER}/sub2api2personal:${VERSION}"
+          IMAGE="ghcr.io/${GHCR_OWNER}/sub2api2personal:candidate-${VERSION}"
           docker buildx imagetools inspect "$IMAGE" --format '{{json .Manifest}}' > image-manifest.json
           DIGEST=$(jq -r '.digest' image-manifest.json)
           test "$(jq -r '.schemaVersion' image-manifest.json)" = 2
           [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
-          jq -e '.manifests == null or ([.manifests[].digest | test("^sha256:[0-9a-f]{64}$")] | all)' image-manifest.json >/dev/null
+          jq -e '([.manifests[].platform | select(.os == "linux") | .architecture] | sort) == ["amd64", "arm64"]' image-manifest.json >/dev/null
+          jq -e '[.manifests[].digest | test("^sha256:[0-9a-f]{64}$")] | all' image-manifest.json >/dev/null
           echo "name=ghcr.io/${GHCR_OWNER}/sub2api2personal" >> "$GITHUB_OUTPUT"
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "reference=ghcr.io/${GHCR_OWNER}/sub2api2personal@$DIGEST" >> "$GITHUB_OUTPUT"
@@ -277,19 +243,27 @@ jobs:
       - name: Generate SPDX JSON SBOM for immutable image
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
-          image: ${{ steps.published-image.outputs.reference }}
+          image: ${{ steps.candidate-image.outputs.reference }}
           format: spdx-json
           syft-version: v1.42.3
           output-file: image.spdx.json
           artifact-name: exapi-image.spdx.json
           upload-artifact: true
-          upload-release-assets: true
+          # The action cannot reliably discover the requested release during
+          # workflow_dispatch, so attachment is handled explicitly below.
+          upload-release-assets: false
+
+      - name: Attach SPDX SBOM to draft GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$RELEASE_TAG" image.spdx.json --clobber
+          test "$(gh release view "$RELEASE_TAG" --json assets --jq '[.assets[] | select(.name == "image.spdx.json")] | length')" = 1
 
       - name: Verify OCI labels and embedded version
         env:
-          IMAGE_REFERENCE: ${{ steps.published-image.outputs.reference }}
+          IMAGE_REFERENCE: ${{ steps.candidate-image.outputs.reference }}
           EXPECTED_COMMIT: ${{ needs.resolve-ref.outputs.sha }}
-          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           VERSION=${RELEASE_TAG#v}
           docker pull "$IMAGE_REFERENCE"
@@ -297,21 +271,21 @@ jobs:
           test "$(docker image inspect "$IMAGE_REFERENCE" --format '{{ index .Config.Labels "org.opencontainers.image.source" }}')" = 'https://github.com/immortal-autumn/Sub2API2Personal'
           test "$(docker image inspect "$IMAGE_REFERENCE" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')" = "$VERSION"
           docker run --rm --network none --entrypoint /bin/sh "$IMAGE_REFERENCE" -ec \
-            'test -x /app/migrate-private-only && test -x /app/with-migration-report-key.sh'
+            'test -x /app/migrate-private-only && test -x /app/verify-private-cutover-report && test -x /app/with-migration-report-key.sh'
           docker run --rm --network none "$IMAGE_REFERENCE" --version 2>&1 | grep -F "ExAPI $VERSION (commit: $EXPECTED_COMMIT,"
 
       - name: Attest SLSA build provenance
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
-          subject-name: ${{ steps.published-image.outputs.name }}
-          subject-digest: ${{ steps.published-image.outputs.digest }}
+          subject-name: ${{ steps.candidate-image.outputs.name }}
+          subject-digest: ${{ steps.candidate-image.outputs.digest }}
           push-to-registry: true
 
       - name: Attest SPDX SBOM
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
         with:
-          subject-name: ${{ steps.published-image.outputs.name }}
-          subject-digest: ${{ steps.published-image.outputs.digest }}
+          subject-name: ${{ steps.candidate-image.outputs.name }}
+          subject-digest: ${{ steps.candidate-image.outputs.digest }}
           sbom-path: image.spdx.json
           push-to-registry: true
 
@@ -322,26 +296,29 @@ jobs:
           path: image-manifest.json
           retention-days: 90
 
-      # Update DockerHub description
-      - name: Update DockerHub description
-        if: ${{ env.SIMPLE_RELEASE != 'true' && env.DOCKERHUB_USERNAME != '' }}
-        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5
+      - name: Promote verified digest to final GHCR tag
         env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-          repository: ${{ secrets.DOCKERHUB_USERNAME }}/sub2api2personal
-          short-description: "ExAPI - Private Multi-user AI API Gateway"
-          readme-filepath: ./deploy/DOCKER.md
+          GHCR_OWNER: ${{ steps.lowercase.outputs.owner }}
+          CANDIDATE_REFERENCE: ${{ steps.candidate-image.outputs.reference }}
+          CANDIDATE_DIGEST: ${{ steps.candidate-image.outputs.digest }}
+        run: |
+          VERSION=${RELEASE_TAG#v}
+          FINAL_IMAGE="ghcr.io/${GHCR_OWNER}/sub2api2personal:${VERSION}"
+          docker buildx imagetools create --tag "$FINAL_IMAGE" "$CANDIDATE_REFERENCE"
+          FINAL_DIGEST=$(docker buildx imagetools inspect "$FINAL_IMAGE" --format '{{json .Manifest}}' | jq -r .digest)
+          test "$FINAL_DIGEST" = "$CANDIDATE_DIGEST"
+
+      - name: Publish verified GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$RELEASE_TAG" --draft=false
 
       # Send Telegram notification
       - name: Send Telegram Notification
-        if: ${{ env.SIMPLE_RELEASE != 'true' }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          TAG_MESSAGE: ${{ steps.tag_message.outputs.message }}
         continue-on-error: true
         run: |
           # 检查必要的环境变量
@@ -350,18 +327,13 @@ jobs:
             exit 0
           fi
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG_NAME=${{ github.event.inputs.tag }}
-          else
-            TAG_NAME=${GITHUB_REF#refs/tags/}
-          fi
+          TAG_NAME=$RELEASE_TAG
           VERSION=${TAG_NAME#v}
           REPO="${{ github.repository }}"
           GHCR_IMAGE="ghcr.io/${REPO,,}"  # ${,,} converts to lowercase
 
           # 获取 tag message 内容并转义 Markdown 特殊字符
-          TAG_MESSAGE='${{ steps.tag_message.outputs.message }}'
-          TAG_MESSAGE=$(echo "$TAG_MESSAGE" | sed 's/\([_*`\[]\)/\\\1/g')
+          TAG_MESSAGE=$(printf '%s' "$TAG_MESSAGE" | sed 's/\([_*`\[]\)/\\\1/g')
 
           # 限制消息长度（Telegram 消息限制 4096 字符，预留空间给头尾固定内容）
           if [ ${#TAG_MESSAGE} -gt 3500 ]; then
@@ -379,20 +351,10 @@ jobs:
 
           MESSAGE+="🐳 *Docker 部署:*"$'\n'
           MESSAGE+="\`\`\`bash"$'\n'
-          # 根据是否配置 DockerHub 动态生成
-          if [ -n "$DOCKERHUB_USERNAME" ]; then
-            DOCKER_IMAGE="${DOCKERHUB_USERNAME}/sub2api2personal"
-            MESSAGE+="# Docker Hub"$'\n'
-            MESSAGE+="docker pull ${DOCKER_IMAGE}:${VERSION}"$'\n'
-            MESSAGE+="# GitHub Container Registry"$'\n'
-          fi
           MESSAGE+="docker pull ${GHCR_IMAGE}:${VERSION}"$'\n'
           MESSAGE+="\`\`\`"$'\n'$'\n'
           MESSAGE+="🔗 *相关链接:*"$'\n'
           MESSAGE+="• [GitHub Release](https://github.com/${REPO}/releases/tag/${TAG_NAME})"$'\n'
-          if [ -n "$DOCKERHUB_USERNAME" ]; then
-            MESSAGE+="• [Docker Hub](https://hub.docker.com/r/${DOCKER_IMAGE})"$'\n'
-          fi
           MESSAGE+="• [GitHub Packages](https://github.com/${REPO}/pkgs/container/sub2api2personal)"$'\n'$'\n'
           MESSAGE+="#ExAPI #Release #${TAG_NAME//./_}"
 
@@ -408,36 +370,3 @@ jobs:
                 parse_mode: "Markdown",
                 disable_web_page_preview: true
               }')"
-
-  sync-version-file:
-    needs: [release]
-    if: ${{ needs.release.result == 'success' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout default branch
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-
-      - name: Sync VERSION file to released tag
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION=${{ github.event.inputs.tag }}
-            VERSION=${VERSION#v}
-          else
-            VERSION=${GITHUB_REF#refs/tags/v}
-          fi
-
-          CURRENT_VERSION=$(tr -d '\r\n' < backend/cmd/server/VERSION || true)
-          if [ "$CURRENT_VERSION" = "$VERSION" ]; then
-            echo "VERSION file already matches $VERSION"
-            exit 0
-          fi
-
-          echo "$VERSION" > backend/cmd/server/VERSION
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/cmd/server/VERSION
-          git commit -m "chore: sync VERSION to ${VERSION} [skip ci]"
-          git push origin HEAD:${{ github.event.repository.default_branch }}

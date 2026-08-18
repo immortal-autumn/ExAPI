@@ -7,8 +7,8 @@ const { getUsage } = vi.hoisted(() => ({
   getUsage: vi.fn()
 }))
 
-vi.mock('@/api/admin', () => ({
-  adminAPI: {
+vi.mock('@/api/operator', () => ({
+  operatorAPI: {
     accounts: {
       getUsage
     }

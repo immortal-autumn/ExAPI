@@ -1,0 +1,29 @@
+#!/usr/bin/env python3
+"""Minimal plutil fixture for Apple-container lifecycle tests."""
+
+import json
+import sys
+
+
+def main() -> int:
+    try:
+        extract_index = sys.argv.index("-extract")
+        path = sys.argv[extract_index + 1]
+        output_format = sys.argv[extract_index + 2]
+        value = json.load(sys.stdin)
+        for component in path.split("."):
+            value = value[int(component)] if isinstance(value, list) else value[component]
+        if output_format == "json":
+            print(json.dumps(value, separators=(",", ":")))
+        elif output_format == "raw":
+            print(value)
+        else:
+            raise ValueError(f"unsupported output format: {output_format}")
+    except (ValueError, KeyError, IndexError, TypeError, json.JSONDecodeError) as error:
+        print(f"plutil fixture error: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

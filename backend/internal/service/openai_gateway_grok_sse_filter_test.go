@@ -166,7 +166,7 @@ func TestGrokResponsesBillingPingFilterDoesNotFilterNonGrokAccounts(t *testing.T
 }
 
 func TestGrokResponsesBillingPingFilterPreservesUsageAndTerminalEvent(t *testing.T) {
-	gin.SetMode(gin.TestMode)
+	ensureGinTestMode()
 	input := strings.Join([]string{
 		"event: ping",
 		`data: {"type":"ping","x-opencode-type":"inference-cost","cost":"0"}`,

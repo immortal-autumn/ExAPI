@@ -59,6 +59,7 @@ for path in ("Dockerfile", "deploy/Dockerfile", "Dockerfile.goreleaser"):
     require(path, "org.opencontainers.image.source=\"https://github.com/immortal-autumn/Sub2API2Personal\"")
     require(path, "http://localhost:${SERVER_PORT:-8080}/ready")
     require(path, "/app/migrate-private-only")
+    require(path, "/app/verify-private-cutover-report")
     require(path, "/app/with-migration-report-key.sh")
     forbid(path, "http://localhost:${SERVER_PORT:-8080}/health")
     forbid(path, "github.com/Wei-Shaw/sub2api")
@@ -83,19 +84,24 @@ for path, expected_args in docker_build_image_args.items():
 
 require(".github/workflows/release.yml", "quality-gate")
 require(".github/workflows/release.yml", "resolve-ref:")
-require(".github/workflows/release.yml", "needs: [resolve-ref, update-version, quality-gate]")
+require(".github/workflows/release.yml", "needs: [resolve-ref, quality-gate]")
 require(".github/workflows/release.yml", "ref: ${{ needs.resolve-ref.outputs.sha }}")
 require(".github/workflows/release.yml", "python3 tools/check_release_contract.py")
+forbid(".github/workflows/release.yml", "sync-version-file:")
+forbid(".github/workflows/release.yml", "name: version-file")
 require(".github/workflows/release.yml", "test -x /app/migrate-private-only")
+require(".github/workflows/release.yml", "test -x /app/verify-private-cutover-report")
 require(".github/workflows/release.yml", "test -x /app/with-migration-report-key.sh")
 require(".goreleaser.yaml", "id: migrate-private-only")
-require(".goreleaser.simple.yaml", "id: migrate-private-only")
 require("Dockerfile.goreleaser", "COPY migrate-private-only /app/migrate-private-only")
+require("Dockerfile.goreleaser", "COPY verify-private-cutover-report /app/verify-private-cutover-report")
 require("Dockerfile.goreleaser", "deploy/ops/with-migration-report-key.sh /app/with-migration-report-key.sh")
-if (ROOT / ".goreleaser.yaml").read_text(encoding="utf-8").count("      - migrate-private-only") != 4:
+if (ROOT / ".goreleaser.yaml").read_text(encoding="utf-8").count("      - migrate-private-only") != 2:
     raise SystemExit(".goreleaser.yaml: every production Docker target must include the offline cutover build")
-if (ROOT / ".goreleaser.simple.yaml").read_text(encoding="utf-8").count("      - migrate-private-only") != 1:
-    raise SystemExit(".goreleaser.simple.yaml: simple Docker target must include the offline cutover build")
+if (ROOT / ".goreleaser.yaml").read_text(encoding="utf-8").count("      - verify-private-cutover-report") != 2:
+    raise SystemExit(".goreleaser.yaml: every production Docker target must include the cutover verifier build")
+if (ROOT / ".goreleaser.simple.yaml").exists():
+    raise SystemExit(".goreleaser.simple.yaml: x86-only production release path must remain removed")
 release_lines = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8").splitlines()
 backend_gate_index = release_lines.index("      - name: Backend unit and integration tests")
 if release_lines[backend_gate_index + 1].strip() != "working-directory: backend":
@@ -103,9 +109,54 @@ if release_lines[backend_gate_index + 1].strip() != "working-directory: backend"
 release_workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
 if release_workflow.count("ref: ${{ github.event.inputs.tag || github.ref }}") != 1:
     raise SystemExit(".github/workflows/release.yml: the mutable event ref may only be used by resolve-ref")
-if release_workflow.count("ref: ${{ needs.resolve-ref.outputs.sha }}") != 3:
+if release_workflow.count("ref: ${{ needs.resolve-ref.outputs.sha }}") != 2:
     raise SystemExit(".github/workflows/release.yml: every consuming job must checkout the one resolved release SHA")
+tag_pattern_match = re.search(r"^\s*RELEASE_TAG_PATTERN: '([^']+)'\s*$", release_workflow, re.MULTILINE)
+if not tag_pattern_match:
+    raise SystemExit(".github/workflows/release.yml: missing explicit release tag pattern")
+release_tag_pattern = re.compile(tag_pattern_match.group(1))
+for accepted_tag in ("v0.2.0", "v0.2.0-rc.1", "v12.34.56-beta.2"):
+    if release_tag_pattern.fullmatch(accepted_tag) is None:
+        raise SystemExit(f".github/workflows/release.yml: release tag pattern rejects {accepted_tag}")
+for rejected_tag in ("v0.2.0+build.1", "v0.2.0-rc.1+build.1", "0.2.0", "v0.2"):
+    if release_tag_pattern.fullmatch(rejected_tag) is not None:
+        raise SystemExit(f".github/workflows/release.yml: release tag pattern accepts unsafe {rejected_tag}")
+require(".github/workflows/release.yml", 'while grep -Fxq "$delimiter" <<<"$TAG_MESSAGE"')
+require(".github/workflows/release.yml", "secrets.token_hex(16)")
+if release_workflow.count("TAG_MESSAGE: ${{ steps.tag_message.outputs.message }}") != 2:
+    raise SystemExit(".github/workflows/release.yml: tag messages must reach consumers only through step environment values")
+if release_workflow.count("${{ steps.tag_message.outputs.message }}") != 2:
+    raise SystemExit(".github/workflows/release.yml: tag-message expressions must not be interpolated into shell source")
+forbid(".github/workflows/release.yml", "message<<EOF")
+forbid(".github/workflows/release.yml", "TAG_MESSAGE='${{ steps.tag_message.outputs.message }}'")
+forbid(".github/workflows/release.yml", 'echo "$TAG_MESSAGE"')
 forbid(".github/workflows/release.yml", "--skip=validate")
+forbid(".github/workflows/release.yml", "simple_release")
+forbid(".github/workflows/release.yml", "SIMPLE_RELEASE")
+forbid(".github/workflows/release.yml", "DOCKERHUB")
+forbid(".github/workflows/release.yml", "dockerhub")
+forbid(".goreleaser.yaml", "DOCKERHUB")
+forbid(".goreleaser.yaml", "docker.io/")
+require(".goreleaser.yaml", "candidate-{{ .Version }}-amd64")
+require(".goreleaser.yaml", "candidate-{{ .Version }}-arm64")
+require(".goreleaser.yaml", 'draft: true')
+require(".goreleaser.yaml", 'prerelease: auto')
+forbid(".goreleaser.yaml", 'prerelease: false')
+require(".github/workflows/release.yml", "Promote verified digest to final GHCR tag")
+require(".github/workflows/release.yml", 'gh release edit "$RELEASE_TAG" --draft=false')
+require(".github/workflows/release.yml", "GORELEASER_CURRENT_TAG: ${{ env.RELEASE_TAG }}")
+require(".github/workflows/release.yml", "upload-release-assets: false")
+require(".github/workflows/release.yml", 'gh release upload "$RELEASE_TAG" image.spdx.json --clobber')
+forbid(".github/workflows/release.yml", "upload-release-assets: true")
+release_steps = [line.strip() for line in release_lines]
+for earlier, later in (
+    ("- name: Attach SPDX SBOM to draft GitHub release", "- name: Publish verified GitHub release"),
+    ("- name: Attest SLSA build provenance", "- name: Promote verified digest to final GHCR tag"),
+    ("- name: Attest SPDX SBOM", "- name: Promote verified digest to final GHCR tag"),
+    ("- name: Promote verified digest to final GHCR tag", "- name: Publish verified GitHub release"),
+):
+    if release_steps.index(earlier) >= release_steps.index(later):
+        raise SystemExit(f".github/workflows/release.yml: {earlier} must precede {later}")
 
 for path in (
     "deploy/install.sh",
@@ -183,7 +234,7 @@ for required in (
     "id-token: write",
     "attestations: write",
     "format: spdx-json",
-    "subject-digest: ${{ steps.published-image.outputs.digest }}",
+    "subject-digest: ${{ steps.candidate-image.outputs.digest }}",
     "push-to-registry: true",
     "Verify OCI labels and embedded version",
     "docker.io/tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0",
@@ -196,9 +247,8 @@ for required in (
 
 require("deploy/apple-container.sh", "validate_immutable_app_image")
 require("deploy/apple-container.sh", "SUB2API_GATEWAY_KEY_DIGEST_KEYS_JSON")
-require(".goreleaser.yaml", "/sub2api2personal:{{ .Version }}")
-require(".goreleaser.simple.yaml", "/sub2api2personal:{{ .Version }}")
-for path in (".goreleaser.yaml", ".goreleaser.simple.yaml"):
+require(".goreleaser.yaml", "/sub2api2personal:candidate-{{ .Version }}")
+for path in (".goreleaser.yaml",):
     forbid(path, "/sub2api:latest")
     forbid(path, "/sub2api2personal:latest")
     require(path, "go -C backend mod tidy -diff")

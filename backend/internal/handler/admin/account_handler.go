@@ -1597,15 +1597,16 @@ func (h *AccountHandler) BatchDelete(c *gin.Context) {
 	rootIDs := make([]int64, 0, len(accountIDs))
 	dependentIDs := make(map[int64][]int64)
 	failedIDs := make([]int64, 0)
+	alreadyAbsentIDs := make([]int64, 0)
 	errorsByAccount := make([]deleteError, 0)
 	for _, accountID := range accountIDs {
 		account := accountsByID[accountID]
 		if account == nil {
-			failedIDs = append(failedIDs, accountID)
-			errorsByAccount = append(errorsByAccount, deleteError{
-				AccountID: accountID,
-				Error:     "account not found",
-			})
+			// Batch deletion is intentionally idempotent. A client retry after a
+			// timeout cannot distinguish an ID deleted by the interrupted request
+			// from one that was already absent; in both cases the requested final
+			// state has been achieved.
+			alreadyAbsentIDs = append(alreadyAbsentIDs, accountID)
 			continue
 		}
 
@@ -1643,7 +1644,7 @@ func (h *AccountHandler) BatchDelete(c *gin.Context) {
 	g.SetLimit(maxConcurrency)
 
 	var mu sync.Mutex
-	successIDs := make([]int64, 0, len(accountIDs))
+	successIDs := append(make([]int64, 0, len(accountIDs)), alreadyAbsentIDs...)
 
 	// Every worker returns nil so one account failure does not cancel the remaining deletions.
 	for _, id := range rootIDs {

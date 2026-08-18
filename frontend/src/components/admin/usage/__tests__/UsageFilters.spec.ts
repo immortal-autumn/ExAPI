@@ -54,8 +54,8 @@ const mockGroupsList = vi.fn().mockResolvedValue({ items: [] })
 const mockGetModelStats = vi.fn().mockResolvedValue({ models: [] })
 const mockAccountsList = vi.fn().mockResolvedValue({ items: [] })
 
-vi.mock('@/api/admin', () => ({
-  adminAPI: {
+vi.mock('@/api/operator', () => ({
+  operatorAPI: {
     usage: {
       searchUsers: (...args: any[]) => mockSearchUsers(...args),
       searchApiKeys: (...args: any[]) => mockSearchApiKeys(...args),

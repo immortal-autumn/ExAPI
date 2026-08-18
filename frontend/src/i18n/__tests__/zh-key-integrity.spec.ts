@@ -1,8 +1,6 @@
 // @vitest-environment node
 
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import zh from '../locales/zh'
 
 function flatten(value: Record<string, unknown>, prefix = '', out = new Set<string>()): Set<string> {

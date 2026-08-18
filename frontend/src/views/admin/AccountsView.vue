@@ -174,6 +174,9 @@
       <template #table>
         <AccountBulkActionsBar
           :selected-ids="selIds"
+          :total-results="pagination.total"
+          :selecting-all="selectingAllResults"
+          :all-results-selected="allResultsSelected"
           @delete="handleBulkDelete"
           @reset-status="handleBulkResetStatus"
           @refresh-token="handleBulkRefreshToken"
@@ -182,6 +185,7 @@
           @edit-filtered="openBulkEditFiltered"
           @clear="clearSelection"
           @select-page="selectPage"
+          @select-all-results="handleSelectAllResults"
           @toggle-schedulable="handleBulkToggleSchedulable"
         />
         <div ref="accountTableRef" class="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -335,8 +339,17 @@
             </div>
           </template>
           <template #cell-rate_multiplier="{ row }">
-            <span class="text-sm font-mono text-gray-700 dark:text-gray-300">
-              {{ (row.rate_multiplier ?? 1).toFixed(2) }}x
+            <span class="inline-flex items-center gap-1 text-sm font-mono text-gray-700 dark:text-gray-300">
+              <span>{{ formatMultiplier(row.rate_multiplier ?? 1) }}x</span>
+              <span
+                v-if="row.extra?.upstream_billing_rate_sync_enabled === true"
+                class="inline-flex cursor-help text-emerald-600 dark:text-emerald-400"
+                :aria-label="t('admin.accounts.upstreamBilling.syncedRateTooltip')"
+                :title="t('admin.accounts.upstreamBilling.syncedRateTooltip')"
+                data-testid="account-rate-sync-indicator"
+              >
+                <Icon name="sync" size="xs" />
+              </span>
             </span>
           </template>
           <template #header-upstream_billing_rate="{ column }">
@@ -441,8 +454,8 @@
       v-if="showBulkEdit"
       :show="showBulkEdit"
       :account-ids="selIds"
-      :selected-platforms="selPlatforms"
-      :selected-types="selTypes"
+      :selected-platforms="bulkEditTarget?.selectedPlatforms ?? []"
+      :selected-types="bulkEditTarget?.selectedTypes ?? []"
       :target="bulkEditTarget ?? undefined"
       :proxies="proxies"
       :groups="groups"
@@ -493,8 +506,10 @@ import AccountCapacityCell from '@/components/account/AccountCapacityCell.vue'
 import UpstreamBillingRateCell from '@/components/account/UpstreamBillingRateCell.vue'
 import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { fetchAllAccountRows } from '@/utils/accountSelection'
 import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
 import { formatDateTime, formatRelativeTime } from '@/utils/format'
+import { formatMultiplier } from '@/utils/formatters'
 import { proxyExpiryBadgeClass, proxyExpiryLabelKey } from '@/utils/proxyExpiry'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { sanitizeUrl } from '@/utils/url'
@@ -541,25 +556,10 @@ type AccountBulkEditTarget =
         sort_order?: AccountSortOrder
       }
       previewCount: number
+      accountIds: number[]
       selectedPlatforms: AccountPlatform[]
       selectedTypes: AccountType[]
     }
-const selPlatforms = computed<AccountPlatform[]>(() => {
-  const platforms = new Set(
-    accounts.value
-      .filter(a => isSelected(a.id))
-      .map(a => a.platform)
-  )
-  return [...platforms]
-})
-const selTypes = computed<AccountType[]>(() => {
-  const types = new Set(
-    accounts.value
-      .filter(a => isSelected(a.id))
-      .map(a => a.type)
-  )
-  return [...types]
-})
 const showCreate = ref(false)
 const showEdit = ref(false)
 const showSync = ref(false)
@@ -919,6 +919,7 @@ const {
 })
 
 const {
+  selectedSet,
   selectedIds: selIds,
   allVisibleSelected,
   isSelected,
@@ -926,15 +927,35 @@ const {
   select,
   deselect,
   toggle: toggleSel,
-  clear: clearSelection,
+  clear: clearSelectedIds,
   removeMany: removeSelectedAccounts,
   toggleVisible,
-  selectVisible: selectPage,
+  selectVisible: selectCurrentPage,
   batchUpdate
 } = useTableSelection<Account>({
   rows: accounts,
   getId: (account) => account.id
 })
+
+const selectingAllResults = ref(false)
+const selectedAllResultIDs = ref<Set<number> | null>(null)
+const selectionRequestVersion = ref(0)
+const allResultsSelected = computed(() => {
+  const snapshot = selectedAllResultIDs.value
+  if (!snapshot || snapshot.size === 0 || snapshot.size !== pagination.total || snapshot.size !== selectedSet.value.size) return false
+  return Array.from(snapshot).every(id => selectedSet.value.has(id))
+})
+
+const clearSelection = () => {
+  selectionRequestVersion.value++
+  selectingAllResults.value = false
+  selectedAllResultIDs.value = null
+  clearSelectedIds()
+}
+
+const selectPage = () => {
+  selectCurrentPage()
+}
 
 const swipeVirtualContext: SwipeSelectVirtualContext = {
   getVirtualizer: () => dataTableRef.value?.virtualizer ?? null,
@@ -1003,6 +1024,7 @@ const refreshUpstreamBillingSortedList = async (force = false) => {
 }
 
 const debouncedReload = () => {
+  clearSelection()
   syncAccountListDerivedParams()
   hasPendingListSync.value = false
   resetAutoRefreshCache()
@@ -1478,7 +1500,57 @@ const toggleSelectAllVisible = (event: Event) => {
   const target = event.target as HTMLInputElement
   toggleVisible(target.checked)
 }
-const handleBulkDelete = async () => { if(!confirm(t('common.confirm'))) return; try { await Promise.all(selIds.value.map(id => adminAPI.accounts.delete(id))); clearSelection(); reload() } catch (error) { console.error('Failed to bulk delete accounts:', error) } }
+const handleBulkDelete = async () => {
+  const accountIds = [...selIds.value]
+  if (!confirm(t('admin.accounts.bulkActions.confirmDelete', { count: accountIds.length }))) return
+  const confirmedSuccessIDs: number[] = []
+  const failedIDs: number[] = []
+  const chunkSize = 50
+  let unresolvedIDs: number[] = []
+
+  for (let offset = 0; offset < accountIds.length; offset += chunkSize) {
+    const chunk = accountIds.slice(offset, offset + chunkSize)
+    try {
+      const result = await adminAPI.accounts.batchDelete(chunk)
+      const successIDs = Array.isArray(result.success_ids) ? result.success_ids : []
+      const chunkFailedIDs = Array.isArray(result.failed_ids) ? result.failed_ids : []
+      const expected = new Set(chunk)
+      const reported = [...successIDs, ...chunkFailedIDs]
+      const responseIsComplete =
+        reported.length === chunk.length &&
+        new Set(reported).size === chunk.length &&
+        reported.every(id => expected.has(id)) &&
+        result.success === successIDs.length &&
+        result.failed === chunkFailedIDs.length
+      if (!responseIsComplete) {
+        throw new Error('batch delete returned incomplete per-account results')
+      }
+      confirmedSuccessIDs.push(...successIDs)
+      failedIDs.push(...chunkFailedIDs)
+    } catch (error) {
+      console.error('Failed to delete an account batch:', error)
+      // This chunk may have partially committed before a timeout. Keep it and
+      // every unstarted ID selected; the endpoint treats already-absent IDs as
+      // successful so retrying this bounded unresolved set is safe.
+      unresolvedIDs = accountIds.slice(offset)
+      break
+    }
+  }
+
+  const remainingIDs = [...failedIDs, ...unresolvedIDs]
+  if (remainingIDs.length > 0) {
+    selectedAllResultIDs.value = null
+    setSelectedIds(remainingIDs)
+    appStore.showError(t('admin.accounts.bulkActions.partialSuccess', {
+      success: confirmedSuccessIDs.length,
+      failed: remainingIDs.length
+    }))
+  } else {
+    appStore.showSuccess(t('admin.accounts.bulkActions.deleteSuccess', { count: confirmedSuccessIDs.length }))
+    clearSelection()
+  }
+  await reload()
+}
 const handleBulkResetStatus = async () => {
   if (!confirm(t('common.confirm'))) return
   try {
@@ -1531,7 +1603,7 @@ const handleBulkProbeUpstreamBilling = async () => {
         patched = true
       }
     })
-    if (patched) await refreshUpstreamBillingSortedList(true)
+    if (patched) await refreshAccountsAfterUpstreamBillingProbe()
     const failed = results.filter(result => result.error).length
     if (failed > 0) {
       appStore.showError(t('admin.accounts.upstreamBilling.batchPartial', { success: results.length - failed, failed }))
@@ -1662,34 +1734,92 @@ const buildBulkEditFilterSnapshot = () => {
   }
 }
 
+const handleSelectAllResults = async () => {
+  if (selectingAllResults.value || pagination.total === 0) return
+
+  const requestVersion = ++selectionRequestVersion.value
+  const filters = buildBulkEditFilterSnapshot()
+  selectingAllResults.value = true
+  try {
+    const rows = await fetchAllAccountRows(
+      (page, pageSize, requestFilters) => adminAPI.accounts.list(page, pageSize, requestFilters),
+      filters
+    )
+    if (requestVersion !== selectionRequestVersion.value) return
+
+    const ids = rows.map(account => account.id)
+    setSelectedIds(ids)
+    selectedAllResultIDs.value = new Set(ids)
+  } catch (error) {
+    if (requestVersion !== selectionRequestVersion.value) return
+    console.error('Failed to select all account results:', error)
+    appStore.showError(t('admin.accounts.bulkActions.selectAllFailed'))
+  } finally {
+    if (requestVersion === selectionRequestVersion.value) {
+      selectingAllResults.value = false
+    }
+  }
+}
+
 const collectSelectionMetadata = (rows: Account[]) => {
   const selectedPlatforms = Array.from(new Set(rows.map(account => account.platform)))
   const selectedTypes = Array.from(new Set(rows.map(account => account.type)))
   return { selectedPlatforms, selectedTypes }
 }
 
-const openBulkEditSelected = () => {
-  bulkEditTarget.value = {
-    mode: 'selected',
-    accountIds: [...selIds.value],
-    selectedPlatforms: [...selPlatforms.value],
-    selectedTypes: [...selTypes.value]
+const fetchBulkEditSnapshot = (filters: ReturnType<typeof buildBulkEditFilterSnapshot>) =>
+  fetchAllAccountRows(
+    (page, pageSize, requestFilters) => adminAPI.accounts.list(page, pageSize, requestFilters),
+    filters
+  )
+
+const openBulkEditSelected = async () => {
+  const accountIds = [...selIds.value]
+  const selectedIDSet = new Set(accountIds)
+  const requestVersion = selectionRequestVersion.value
+  try {
+    const rows = await fetchBulkEditSnapshot(buildBulkEditFilterSnapshot())
+    if (requestVersion !== selectionRequestVersion.value) return
+    const selectedRows = rows.filter(account => selectedIDSet.has(account.id))
+    if (selectedRows.length !== selectedIDSet.size) {
+      throw new Error('selected account metadata snapshot is incomplete')
+    }
+    const { selectedPlatforms, selectedTypes } = collectSelectionMetadata(selectedRows)
+    bulkEditTarget.value = {
+      mode: 'selected',
+      accountIds,
+      selectedPlatforms,
+      selectedTypes
+    }
+    showBulkEdit.value = true
+  } catch (error) {
+    if (requestVersion !== selectionRequestVersion.value) return
+    console.error('Failed to resolve selected account metadata:', error)
+    appStore.showError(t('admin.accounts.bulkEdit.failed'))
   }
-  showBulkEdit.value = true
 }
 
 const openBulkEditFiltered = async () => {
   const filters = buildBulkEditFilterSnapshot()
-  const preview = await adminAPI.accounts.list(1, 100, filters)
-  const { selectedPlatforms, selectedTypes } = collectSelectionMetadata(preview.items)
-  bulkEditTarget.value = {
-    mode: 'filtered',
-    filters,
-    previewCount: preview.total,
-    selectedPlatforms,
-    selectedTypes
+  const requestVersion = selectionRequestVersion.value
+  try {
+    const rows = await fetchBulkEditSnapshot(filters)
+    if (requestVersion !== selectionRequestVersion.value) return
+    const { selectedPlatforms, selectedTypes } = collectSelectionMetadata(rows)
+    bulkEditTarget.value = {
+      mode: 'filtered',
+      filters,
+      previewCount: rows.length,
+      accountIds: rows.map(account => account.id),
+      selectedPlatforms,
+      selectedTypes
+    }
+    showBulkEdit.value = true
+  } catch (error) {
+    if (requestVersion !== selectionRequestVersion.value) return
+    console.error('Failed to resolve filtered account metadata:', error)
+    appStore.showError(t('admin.accounts.bulkEdit.failed'))
   }
-  showBulkEdit.value = true
 }
 
 const handleBulkUpdated = () => {
@@ -1804,6 +1934,13 @@ const patchUpstreamBillingSnapshot = (accountID: number, snapshot: UpstreamBilli
     extra: { ...account.extra, upstream_billing_probe: snapshot }
   })
 }
+const refreshAccountsAfterUpstreamBillingProbe = async () => {
+  try {
+    await load()
+  } catch (error) {
+    console.error('Failed to refresh accounts after upstream billing probe:', error)
+  }
+}
 const handleProbeUpstreamBilling = async (account: Account) => {
   if (probingUpstreamBilling.has(account.id)) return
   probingUpstreamBilling.add(account.id)
@@ -1811,7 +1948,7 @@ const handleProbeUpstreamBilling = async (account: Account) => {
     const result = await adminAPI.accounts.probeUpstreamBilling(account.id)
     if (result.snapshot) {
       patchUpstreamBillingSnapshot(account.id, result.snapshot)
-      await refreshUpstreamBillingSortedList(true)
+      await refreshAccountsAfterUpstreamBillingProbe()
     }
   } catch (error) {
     console.error('Failed to probe upstream billing:', error)

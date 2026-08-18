@@ -43,14 +43,15 @@ const messages: Record<string, string> = {
   'admin.groups.columns.actions': 'Actions',
 }
 
-vi.mock('@/api/admin', () => ({
-  adminAPI: {
+vi.mock('@/api/operator', () => ({
+  operatorAPI: {
     groups: {
       list: listGroups,
       getAll: getAllGroups,
       getModelsListCandidates,
       getUsageSummary,
       getCapacitySummary,
+      getLiveCapability: vi.fn().mockResolvedValue({ supported: false }),
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),

@@ -34,7 +34,8 @@ func TestGetByKeyForAuthCarriesProfitControlProjection(t *testing.T) {
 	})
 	groupID := group.ID
 	keyValue := fmt.Sprintf("sk-profit-proj-%d", suffix)
-	apiKeyRepo := NewAPIKeyRepository(integrationEntClient, integrationDB)
+	apiKeyRepo, err := NewAPIKeyRepository(integrationEntClient, integrationDB)
+	require.NoError(t, err)
 	key := &service.APIKey{UserID: user.ID, GroupID: &groupID, Key: keyValue, Name: "profit-proj", Status: service.StatusActive}
 	require.NoError(t, apiKeyRepo.Create(ctx, key))
 	t.Cleanup(func() {

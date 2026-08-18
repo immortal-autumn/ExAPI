@@ -264,6 +264,24 @@ func TestBatchImagePipelineProcessor_SettlesQueuedSettlingJob(t *testing.T) {
 	require.Len(t, billing.captures, 1)
 }
 
+func TestBatchImagePipelineProcessor_RejectsForeignOwnerBeforeProviderOrSettlement(t *testing.T) {
+	repo := newFakeBatchImageRepository()
+	repo.privateOwnerAllowed = false
+	job := testSettlingBatchImageJob("imgbatch_foreign_owner")
+	repo.jobs[job.BatchID] = job
+	billing := &fakeBatchImageBillingRepo{}
+	processor := &BatchImagePipelineProcessor{
+		ProviderProcessor:   &BatchImageProviderProcessor{Repo: repo, ProviderRegistry: NewBatchImageProviderRegistry(&fakeProcessorProvider{}), AccountResolver: &fakeBatchImageAccountResolver{account: &Account{}}},
+		SettlementService:   &BatchImageSettlementService{Repo: repo, BillingRepo: billing, Pricing: &fakeBatchImagePricingResolver{unitPrice: 0.25}},
+		PrivateOperatorOnly: true,
+	}
+
+	_, err := processor.Process(context.Background(), job.BatchID)
+	require.ErrorIs(t, err, ErrBatchImageForeignOwner)
+	require.Equal(t, BatchImageJobStatusSettling, repo.jobs[job.BatchID].Status)
+	require.Empty(t, billing.captures)
+}
+
 func TestBatchImagePipelineProcessor_RequeuesTransientSettlementFailure(t *testing.T) {
 	repo := newFakeBatchImageRepository()
 	job := testSettlingBatchImageJob("imgbatch_pipeline_retry")

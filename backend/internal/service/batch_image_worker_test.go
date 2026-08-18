@@ -56,6 +56,18 @@ func TestBatchImageWorker_RequeuesOnProcessorError(t *testing.T) {
 	require.Empty(t, queue.acked)
 }
 
+func TestBatchImageWorker_AcksCutoverStaleQueueEntries(t *testing.T) {
+	for _, processorErr := range []error{ErrBatchImageJobNotFound, ErrBatchImageForeignOwner} {
+		queue := newFakeBatchImageQueue("imgbatch_cutover_stale")
+		processor := &fakeBatchImageProcessor{err: processorErr}
+		worker := NewBatchImageWorker(queue, processor, BatchImageWorkerOptions{ErrorRetryDelay: 7 * time.Second})
+
+		require.NoError(t, worker.RunOnce(context.Background()))
+		require.Equal(t, []string{"imgbatch_cutover_stale"}, queue.acked)
+		require.Empty(t, queue.requeued)
+	}
+}
+
 func TestBatchImageWorker_RequeuesWhenJobLockNotAcquired(t *testing.T) {
 	queue := newFakeBatchImageQueue("imgbatch_worker_locked")
 	queue.lockAcquired = false
