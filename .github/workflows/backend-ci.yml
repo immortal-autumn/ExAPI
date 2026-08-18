@@ -25,22 +25,23 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Set up Docker Compose CLI
         run: |
-          brew install docker docker-compose
+          brew install bash docker docker-compose
           mkdir -p "$HOME/.docker/cli-plugins"
           ln -s "$(brew --prefix)/lib/docker/cli-plugins/docker-compose" "$HOME/.docker/cli-plugins/docker-compose"
           docker compose version
       - name: Check deployment scripts
         run: |
-          /bin/bash -n deploy/install.sh
-          /bin/bash -n deploy/docker-deploy.sh
-          /bin/bash -n deploy/apple-container.sh
-          /bin/bash deploy/test-bind-defaults.sh
-          /bin/bash deploy/test-canary-compose.sh
-          /bin/bash deploy/test-docker-deploy-keyrings.sh
-          /bin/bash deploy/test-install-purge.sh
-          /bin/bash deploy/test-keyring-contract.sh
-          /bin/bash deploy/test-production-rollout-contract.sh
-          /bin/bash deploy/tests/apple-container-test.sh
+          BASH_BIN="$(brew --prefix)/bin/bash"
+          "$BASH_BIN" -n deploy/install.sh
+          "$BASH_BIN" -n deploy/docker-deploy.sh
+          "$BASH_BIN" -n deploy/apple-container.sh
+          "$BASH_BIN" deploy/test-bind-defaults.sh
+          "$BASH_BIN" deploy/test-canary-compose.sh
+          "$BASH_BIN" deploy/test-docker-deploy-keyrings.sh
+          "$BASH_BIN" deploy/test-install-purge.sh
+          "$BASH_BIN" deploy/test-keyring-contract.sh
+          "$BASH_BIN" deploy/test-production-rollout-contract.sh
+          "$BASH_BIN" deploy/tests/apple-container-test.sh
           /bin/sh deploy/tests/docker-compose-security-test.sh
           /bin/sh deploy/tests/docker-runtime-resources-test.sh
           /bin/sh deploy/test-caddyfile-cache.sh
