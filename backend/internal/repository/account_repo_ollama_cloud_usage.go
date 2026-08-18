@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"sort"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
@@ -33,6 +35,9 @@ func ollamaCloudBaseURLMatchesSQL(expression string) string {
 func (r *accountRepository) ListOllamaCloudUsageGroupAccounts(ctx context.Context, accounts []*service.Account) ([]service.Account, error) {
 	if r == nil || r.sql == nil {
 		return nil, service.ErrOllamaCloudUsageUnavailable
+	}
+	if r.protector != nil {
+		return r.listProtectedOllamaCloudUsageGroupAccounts(ctx, accounts)
 	}
 	keys := make([]string, 0, len(accounts))
 	seen := make(map[string]struct{}, len(accounts))
@@ -87,6 +92,66 @@ func (r *accountRepository) ListOllamaCloudUsageGroupAccounts(ctx context.Contex
 		}
 	}
 	return result, nil
+}
+
+func (r *accountRepository) listProtectedOllamaCloudUsageGroupAccounts(ctx context.Context, accounts []*service.Account) ([]service.Account, error) {
+	keys := make(map[string]struct{}, len(accounts))
+	for _, account := range accounts {
+		if !service.IsOllamaCloudUsageAccount(account) || account.Credentials == nil {
+			continue
+		}
+		apiKey, ok := account.Credentials["api_key"].(string)
+		if ok && apiKey != "" {
+			keys[apiKey] = struct{}{}
+		}
+	}
+	if len(keys) == 0 {
+		return []service.Account{}, nil
+	}
+	ids, err := r.listOllamaCloudUsageAccountIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	hydrated, err := r.GetByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]service.Account, 0, len(hydrated))
+	for _, account := range hydrated {
+		if !service.IsOllamaCloudUsageAccount(account) {
+			continue
+		}
+		apiKey, ok := account.Credentials["api_key"].(string)
+		if _, selected := keys[apiKey]; !ok || !selected {
+			continue
+		}
+		result = append(result, *account)
+	}
+	return result, nil
+}
+
+func (r *accountRepository) listOllamaCloudUsageAccountIDs(ctx context.Context) ([]int64, error) {
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT id
+		FROM accounts
+		WHERE deleted_at IS NULL
+			AND platform IN ('openai', 'anthropic')
+			AND type = 'apikey'
+		ORDER BY id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	ids := make([]int64, 0)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func (r *accountRepository) SaveOllamaCloudUsageSession(ctx context.Context, account *service.Account, ciphertext string, autoRefresh bool) error {
@@ -190,7 +255,7 @@ func (r *accountRepository) updateOllamaCloudUsageGroup(
 		if !matchesProxy {
 			return service.ErrOllamaCloudUsageIdentityChanged
 		}
-		members, err := lockOllamaCloudUsageGroup(txCtx, client, account, apiKey)
+		members, err := r.lockOllamaCloudUsageGroup(txCtx, client, account, apiKey)
 		if err != nil {
 			return err
 		}
@@ -235,18 +300,26 @@ func (r *accountRepository) updateOllamaCloudUsageGroup(
 		for index := range members {
 			memberIDs[index] = members[index].id
 		}
-		result, err := client.ExecContext(txCtx, `
+		query := `
 			UPDATE accounts
 			SET extra = (COALESCE(extra, '{}'::jsonb)
 					- 'ollama_cloud_usage_session'
 					- 'ollama_cloud_usage_auto_refresh'
 					- 'ollama_cloud_usage_snapshot') || $1::jsonb,
 				updated_at = NOW()
-			WHERE deleted_at IS NULL
-				AND `+ollamaCloudUsageEligibleSQL+`
+			WHERE deleted_at IS NULL`
+		args := []any{string(encoded)}
+		if r.protector != nil {
+			query += ` AND id = ANY($2)`
+			args = append(args, pq.Array(memberIDs))
+		} else {
+			query += `
+				AND ` + ollamaCloudUsageEligibleSQL + `
 				AND credentials ->> 'api_key' = $2
-				AND id = ANY($3)
-		`, string(encoded), apiKey, pq.Array(memberIDs))
+				AND id = ANY($3)`
+			args = append(args, apiKey, pq.Array(memberIDs))
+		}
+		result, err := client.ExecContext(txCtx, query, args...)
 		if err != nil {
 			return err
 		}
@@ -277,12 +350,15 @@ func (r *accountRepository) updateOllamaCloudUsageGroup(
 	return tx.Commit()
 }
 
-func lockOllamaCloudUsageGroup(
+func (r *accountRepository) lockOllamaCloudUsageGroup(
 	ctx context.Context,
 	client *dbent.Client,
 	account *service.Account,
 	apiKey string,
 ) ([]lockedOllamaCloudUsageMember, error) {
+	if r.protector != nil {
+		return r.lockProtectedOllamaCloudUsageGroup(ctx, client, account, apiKey)
+	}
 	credentials, err := json.Marshal(normalizeJSONMap(account.Credentials))
 	if err != nil {
 		return nil, err
@@ -320,6 +396,80 @@ func lockOllamaCloudUsageGroup(
 			return nil, err
 		}
 		members = append(members, member)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(members) == 0 {
+		return nil, service.ErrOllamaCloudUsageIdentityChanged
+	}
+	return members, nil
+}
+
+func (r *accountRepository) lockProtectedOllamaCloudUsageGroup(
+	ctx context.Context,
+	client *dbent.Client,
+	account *service.Account,
+	apiKey string,
+) ([]lockedOllamaCloudUsageMember, error) {
+	expectedCredentials, err := json.Marshal(normalizeJSONMap(account.Credentials))
+	if err != nil {
+		return nil, err
+	}
+	rows, err := client.QueryContext(ctx, `
+		SELECT id, platform, type, credentials, proxy_id,
+			COALESCE((extra -> 'ollama_cloud_usage_session')::text, 'null'),
+			COALESCE((extra -> 'ollama_cloud_usage_auto_refresh')::text, 'null'),
+			COALESCE((extra -> 'ollama_cloud_usage_snapshot')::text, 'null')
+		FROM accounts
+		WHERE deleted_at IS NULL
+			AND platform IN ('openai', 'anthropic')
+			AND type = 'apikey'
+		ORDER BY id
+		FOR NO KEY UPDATE
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	members := make([]lockedOllamaCloudUsageMember, 0, 1)
+	for rows.Next() {
+		var (
+			id                              int64
+			platform, accountType           string
+			storedCredentials               []byte
+			proxyID                         sql.NullInt64
+			sessionJSON, autoJSON, snapJSON string
+		)
+		if err := rows.Scan(&id, &platform, &accountType, &storedCredentials, &proxyID, &sessionJSON, &autoJSON, &snapJSON); err != nil {
+			return nil, err
+		}
+		var stored map[string]any
+		if err := json.Unmarshal(storedCredentials, &stored); err != nil {
+			return nil, err
+		}
+		credentials, _, err := r.protector.openLegacy(id, stored)
+		if err != nil {
+			return nil, err
+		}
+		candidate := &service.Account{Platform: platform, Type: accountType, Credentials: credentials}
+		candidateAPIKey, _ := credentials["api_key"].(string)
+		if candidateAPIKey != apiKey || !service.IsOllamaCloudUsageAccount(candidate) {
+			continue
+		}
+		credentialsJSON, err := json.Marshal(normalizeJSONMap(credentials))
+		if err != nil {
+			return nil, err
+		}
+		proxyMatches := (!proxyID.Valid && account.ProxyID == nil) ||
+			(proxyID.Valid && account.ProxyID != nil && proxyID.Int64 == *account.ProxyID)
+		members = append(members, lockedOllamaCloudUsageMember{
+			id:            id,
+			anchorMatches: id == account.ID && platform == account.Platform && accountType == account.Type && proxyMatches && string(credentialsJSON) == string(expectedCredentials),
+			sessionJSON:   sessionJSON,
+			autoJSON:      autoJSON,
+			snapshotJSON:  snapJSON,
+		})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -412,6 +562,9 @@ func (r *accountRepository) ListDueOllamaCloudUsageAccounts(
 	}
 	if r == nil || r.sql == nil {
 		return nil, errors.New("account repository SQL executor not configured")
+	}
+	if r.protector != nil {
+		return r.listDueProtectedOllamaCloudUsageAccounts(ctx, now, debounce, maxWait, limit)
 	}
 	if debounce <= 0 {
 		debounce = time.Minute
@@ -560,4 +713,165 @@ func (r *accountRepository) ListDueOllamaCloudUsageAccounts(
 		result = append(result, *account)
 	}
 	return result, nil
+}
+
+type protectedOllamaCloudUsageDueCandidate struct {
+	account       *service.Account
+	groupLastUsed *time.Time
+	dueAt         time.Time
+}
+
+func (r *accountRepository) listDueProtectedOllamaCloudUsageAccounts(
+	ctx context.Context,
+	now time.Time,
+	debounce, maxWait time.Duration,
+	limit int,
+) ([]service.Account, error) {
+	ids, err := r.listOllamaCloudUsageAccountIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	accounts, err := r.GetByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	type group struct {
+		lastUsed   *time.Time
+		candidates []*service.Account
+	}
+	groups := make(map[string]*group)
+	for _, account := range accounts {
+		if !service.IsOllamaCloudUsageAccount(account) {
+			continue
+		}
+		apiKey, _ := account.Credentials["api_key"].(string)
+		state := groups[apiKey]
+		if state == nil {
+			state = &group{}
+			groups[apiKey] = state
+		}
+		if account.LastUsedAt != nil && !account.LastUsedAt.IsZero() &&
+			(state.lastUsed == nil || account.LastUsedAt.After(*state.lastUsed)) {
+			lastUsed := account.LastUsedAt.UTC()
+			state.lastUsed = &lastUsed
+		}
+		_, hasSession := account.Extra[service.OllamaCloudUsageSessionExtraKey].(string)
+		autoRefresh, _ := account.Extra[service.OllamaCloudUsageAutoRefreshExtraKey].(bool)
+		if account.Status == service.StatusActive && hasSession && autoRefresh {
+			state.candidates = append(state.candidates, account)
+		}
+	}
+
+	due := make([]protectedOllamaCloudUsageDueCandidate, 0, len(groups))
+	for _, state := range groups {
+		var selected *protectedOllamaCloudUsageDueCandidate
+		for _, account := range state.candidates {
+			dueAt, eligible := protectedOllamaCloudUsageAutoRefreshDueAt(
+				decodeProtectedOllamaCloudUsageSnapshot(account.Extra), state.lastUsed, debounce, maxWait,
+			)
+			if !eligible || now.UTC().Before(dueAt) {
+				continue
+			}
+			candidate := protectedOllamaCloudUsageDueCandidate{account: account, groupLastUsed: state.lastUsed, dueAt: dueAt}
+			if selected == nil || dueAt.Before(selected.dueAt) || (dueAt.Equal(selected.dueAt) && account.ID < selected.account.ID) {
+				selected = &candidate
+			}
+		}
+		if selected != nil {
+			due = append(due, *selected)
+		}
+	}
+	sort.Slice(due, func(i, j int) bool {
+		if due[i].dueAt.Equal(due[j].dueAt) {
+			return due[i].account.ID < due[j].account.ID
+		}
+		return due[i].dueAt.Before(due[j].dueAt)
+	})
+	if len(due) > limit {
+		due = due[:limit]
+	}
+	result := make([]service.Account, 0, len(due))
+	for _, candidate := range due {
+		account := *candidate.account
+		account.LastUsedAt = candidate.groupLastUsed
+		result = append(result, account)
+	}
+	return result, nil
+}
+
+func decodeProtectedOllamaCloudUsageSnapshot(extra map[string]any) *service.OllamaCloudUsageSnapshot {
+	if extra == nil {
+		return nil
+	}
+	value, ok := extra[service.OllamaCloudUsageSnapshotExtraKey]
+	if !ok || value == nil {
+		return nil
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil
+	}
+	var snapshot service.OllamaCloudUsageSnapshot
+	if err := json.Unmarshal(raw, &snapshot); err != nil {
+		return nil
+	}
+	if snapshot.Status != service.OllamaCloudUsageStatusOK &&
+		snapshot.Status != service.OllamaCloudUsageStatusUnauthorized &&
+		snapshot.Status != service.OllamaCloudUsageStatusFailed {
+		return nil
+	}
+	return &snapshot
+}
+
+func protectedOllamaCloudUsageAutoRefreshDueAt(
+	snapshot *service.OllamaCloudUsageSnapshot,
+	groupLastUsedAt *time.Time,
+	debounce, maxWait time.Duration,
+) (time.Time, bool) {
+	if debounce <= 0 {
+		debounce = time.Minute
+	}
+	if maxWait <= 0 {
+		maxWait = time.Hour
+	}
+	if snapshot == nil {
+		return time.Time{}, true
+	}
+	switch snapshot.Status {
+	case service.OllamaCloudUsageStatusOK:
+		if snapshot.FetchedAt == nil || snapshot.FetchedAt.IsZero() {
+			return time.Time{}, true
+		}
+		fetchedAt := snapshot.FetchedAt.UTC()
+		if groupLastUsedAt == nil || !groupLastUsedAt.After(fetchedAt) {
+			return time.Time{}, false
+		}
+		dueAt := earlierOllamaCloudUsageTime(groupLastUsedAt.UTC().Add(debounce), fetchedAt.Add(maxWait))
+		if floor := fetchedAt.Add(service.OllamaCloudUsageMinFetchInterval); dueAt.Before(floor) {
+			return floor, true
+		}
+		return dueAt, true
+	case service.OllamaCloudUsageStatusFailed, service.OllamaCloudUsageStatusUnauthorized:
+		if snapshot.LastAttemptAt.IsZero() {
+			return time.Time{}, true
+		}
+		lastAttempt := snapshot.LastAttemptAt.UTC()
+		if groupLastUsedAt == nil || !groupLastUsedAt.After(lastAttempt) {
+			return time.Time{}, false
+		}
+		activityDue := earlierOllamaCloudUsageTime(groupLastUsedAt.UTC().Add(debounce), lastAttempt.Add(maxWait))
+		if !snapshot.NextRefreshAt.IsZero() && snapshot.NextRefreshAt.UTC().After(activityDue) {
+			return snapshot.NextRefreshAt.UTC(), true
+		}
+		return activityDue, true
+	default:
+		return time.Time{}, true
+	}
+}
+
+func earlierOllamaCloudUsageTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
 }

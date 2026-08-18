@@ -8,9 +8,8 @@ package repository
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,8 +33,10 @@ func TestAuthCacheInvalidationTrigger_ProfitControlColumns(t *testing.T) {
 	key := &service.APIKey{UserID: user.ID, GroupID: &groupID, Key: keyValue, Name: "profit-trigger", Status: service.StatusActive}
 	require.NoError(t, apiKeyRepo.Create(ctx, key))
 
-	sum := sha256.Sum256([]byte(keyValue))
-	cacheKey := hex.EncodeToString(sum[:])
+	// Migration 213 deliberately normalizes trigger-driven invalidation to a
+	// global generation barrier because protected API keys are no longer
+	// recoverable by PostgreSQL triggers.
+	cacheKey := strings.Repeat("0", 64)
 	clear := func() {
 		_, err := integrationDB.ExecContext(ctx, "DELETE FROM auth_cache_invalidation_outbox WHERE cache_key = $1", cacheKey)
 		require.NoError(t, err)

@@ -541,6 +541,9 @@ func (r *accountRepository) updateLockedAccount(ctx context.Context, client *dbe
 	if err != nil {
 		return nil, err
 	}
+	if explicitRateSyncEnabled != nil {
+		extra[service.UpstreamBillingRateSyncEnabledExtraKey] = *explicitRateSyncEnabled
+	}
 	account.Extra = extra
 	sealedCredentials, err := r.sealAccountCredentials(account.ID, account.Credentials)
 	if err != nil {
