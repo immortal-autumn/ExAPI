@@ -81,7 +81,7 @@ func rfc3339WithFraction(t time.Time, fraction string) string {
 func TestListDueUpstreamBillingProbeAccountsParsesNanosecondTimestamps(t *testing.T) {
 	ctx := context.Background()
 	tx := testEntTx(t)
-	repo := newAccountRepositoryWithSQL(tx.Client(), tx, nil)
+	repo := integrationAccountRepository(t, tx.Client(), tx, nil)
 	now := time.Date(2026, time.July, 25, 17, 30, 0, 0, time.UTC)
 	_, err := tx.ExecContext(ctx, `
 		UPDATE accounts
@@ -120,7 +120,7 @@ func TestListDueUpstreamBillingProbeAccountsParsesNanosecondTimestamps(t *testin
 func TestListDueUpstreamBillingProbeAccountsSelectsEarliestDueAcrossIDs(t *testing.T) {
 	ctx := context.Background()
 	tx := testEntTx(t)
-	repo := newAccountRepositoryWithSQL(tx.Client(), tx, nil)
+	repo := integrationAccountRepository(t, tx.Client(), tx, nil)
 	now := time.Date(2026, time.July, 25, 17, 30, 0, 0, time.UTC)
 	_, err := tx.ExecContext(ctx, `
 		UPDATE accounts
@@ -159,7 +159,7 @@ func TestListDueUpstreamBillingProbeAccountsSelectsEarliestDueAcrossIDs(t *testi
 func TestListDueUpstreamBillingProbeAccountsIncludesAllAPIKeyPlatforms(t *testing.T) {
 	ctx := context.Background()
 	tx := testEntTx(t)
-	repo := newAccountRepositoryWithSQL(tx.Client(), tx, nil)
+	repo := integrationAccountRepository(t, tx.Client(), tx, nil)
 	now := time.Date(2026, time.July, 26, 3, 0, 0, 0, time.UTC)
 	_, err := tx.ExecContext(ctx, `
 		UPDATE accounts

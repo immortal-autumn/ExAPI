@@ -104,12 +104,25 @@ func (r *settingRepository) GetValue(ctx context.Context, key string) (string, e
 }
 
 func (r *settingRepository) Set(ctx context.Context, key, value string) error {
+	return r.withTransaction(ctx, func(client *ent.Client) error {
+		return r.setWithClient(ctx, client, key, value)
+	})
+}
+
+// withTransaction starts and commits a transaction when the repository owns a
+// regular Ent client. If the caller supplied a transaction-scoped client, Ent
+// returns ErrTxStarted; in that case the repository joins the caller's
+// transaction and leaves commit or rollback ownership with the caller.
+func (r *settingRepository) withTransaction(ctx context.Context, operation func(*ent.Client) error) error {
 	tx, err := r.client.Tx(ctx)
-	if err != nil {
+	if err != nil && !errors.Is(err, ent.ErrTxStarted) {
 		return err
 	}
+	if tx == nil {
+		return operation(r.client)
+	}
 	defer func() { _ = tx.Rollback() }()
-	if err := r.setWithClient(ctx, tx.Client(), key, value); err != nil {
+	if err := operation(tx.Client()); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -185,17 +198,14 @@ func (r *settingRepository) SetMultiple(ctx context.Context, values map[string]s
 	if len(values) == 0 {
 		return nil
 	}
-	tx, err := r.client.Tx(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	for key, value := range values {
-		if err := r.setWithClient(ctx, tx.Client(), key, value); err != nil {
-			return err
+	return r.withTransaction(ctx, func(client *ent.Client) error {
+		for key, value := range values {
+			if err := r.setWithClient(ctx, client, key, value); err != nil {
+				return err
+			}
 		}
-	}
-	return tx.Commit()
+		return nil
+	})
 }
 
 func (r *settingRepository) GetAll(ctx context.Context) (map[string]string, error) {
@@ -228,18 +238,13 @@ func (r *settingRepository) GetAll(ctx context.Context) (map[string]string, erro
 }
 
 func (r *settingRepository) Delete(ctx context.Context, key string) error {
-	tx, err := r.client.Tx(ctx)
-	if err != nil {
+	return r.withTransaction(ctx, func(client *ent.Client) error {
+		if _, err := client.ProtectedSetting.Delete().Where(protectedsetting.KeyEQ(key)).Exec(ctx); err != nil {
+			return err
+		}
+		_, err := client.Setting.Delete().Where(setting.KeyEQ(key)).Exec(ctx)
 		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ProtectedSetting.Delete().Where(protectedsetting.KeyEQ(key)).Exec(ctx); err != nil {
-		return err
-	}
-	if _, err := tx.Setting.Delete().Where(setting.KeyEQ(key)).Exec(ctx); err != nil {
-		return err
-	}
-	return tx.Commit()
+	})
 }
 
 // StoreAdminAPIKeyDigest and VerifyAdminAPIKey are intentionally outside the

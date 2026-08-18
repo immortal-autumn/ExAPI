@@ -36,6 +36,7 @@ func NewAPIKeyRepository(client *dbent.Client, sqlDB *sql.DB) (service.APIKeyRep
 	return newAPIKeyRepositoryWithSQLAndDigester(client, sqlDB, digester), nil
 }
 
+//nolint:unused // Used by unit-tag tests.
 func newAPIKeyRepositoryWithSQL(client *dbent.Client, sqlq sqlExecutor) *apiKeyRepository {
 	return &apiKeyRepository{client: client, sql: sqlq}
 }
@@ -237,6 +238,9 @@ func (r *apiKeyRepository) getByKey(ctx context.Context, raw string, minimal boo
 			group.FieldPeakStart,
 			group.FieldPeakEnd,
 			group.FieldPeakRateMultiplier,
+			group.FieldProfitControlEnabled,
+			group.FieldProfitMinMargin,
+			group.FieldProfitSafetyBuffer,
 		)
 	})
 
