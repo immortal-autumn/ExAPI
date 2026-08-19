@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+expected=${EXAPI_EXPECTED_APP_REPLICAS:?EXAPI_EXPECTED_APP_REPLICAS is required}
+[[ "$expected" == 0 || "$expected" == 1 ]] || { printf 'invalid expected replica count\n' >&2; exit 1; }
+grep -Fxq 'return 503;' /etc/nginx/snippets/exapi-maintenance.conf || {
+  printf 'maintenance response is not configured\n' >&2
+  exit 1
+}
+nginx -t >/dev/null 2>&1
+actual=$(docker ps --filter label=com.docker.compose.project=sub2api \
+  --filter label=com.docker.compose.service=sub2api --filter status=running -q | awk 'NF{n++} END{print n+0}')
+[[ "$actual" == "$expected" ]] || { printf 'application replica mismatch: expected %s got %s\n' "$expected" "$actual" >&2; exit 1; }
+status=$(curl -k --silent --output /dev/null --write-out '%{http_code}' --max-time 10 \
+  https://sub2api.research.for-immortal.cn/health || true)
+[[ "$status" == 503 ]] || { printf 'public ingress is not closed: HTTP %s\n' "$status" >&2; exit 1; }
+if [[ "$expected" == 1 ]]; then
+  # Probe the app's loopback-only public backend while nginx returns 503. The
+  # control listener intentionally accepts operator peers only; the server's
+  # own WireGuard address is not an operator peer and must receive 404.
+  control=$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 \
+    http://127.0.0.1:8027/health || true)
+  [[ "$control" == 200 ]] || { printf 'application backend is not healthy before stop\n' >&2; exit 1; }
+else
+  control=$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 3 \
+    http://127.0.0.1:8027/health || true)
+  [[ "$control" != 200 ]] || { printf 'application backend still serves after app stop\n' >&2; exit 1; }
+fi
+printf 'maintenance gate verified: public=503 replicas=%s control=%s\n' "$actual" "$control"
