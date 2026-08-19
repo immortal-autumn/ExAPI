@@ -79,6 +79,19 @@ func TestControlBoundaryAllowsSafeControlAPIWithoutFetchMetadata(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, recorder.Code)
 }
 
+func TestControlBoundaryAllowsMutationWithoutFetchMetadataWhenOriginMatches(t *testing.T) {
+	request := httptest.NewRequest(http.MethodPost, "http://100.97.17.1:8027/api/v1/admin/settings", strings.NewReader("{}"))
+	request.Host = "100.97.17.1:8027"
+	request.RemoteAddr = "100.97.17.25:42100"
+	request.Header.Set(ControlRequestHeader, "1")
+	request.Header.Set("Origin", "http://100.97.17.1:8027")
+	recorder := httptest.NewRecorder()
+
+	controlBoundaryTestRouter().ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusNoContent, recorder.Code)
+}
+
 func TestControlBoundaryRejectsCrossOriginAndCrossSiteMutations(t *testing.T) {
 	for _, mutate := range []func(*http.Request){
 		func(request *http.Request) { request.Header.Set("Origin", "https://attacker.invalid") },

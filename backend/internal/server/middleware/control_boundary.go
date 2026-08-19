@@ -109,17 +109,15 @@ func controlFetchMetadataAllowed(request *http.Request) bool {
 	// embedded clients are allowed to omit it (Chrome headless and some
 	// WebViews do). The direct listener has already authenticated the exact
 	// Host and WireGuard peer, and API requests still require the explicit
-	// control marker. Keep the stricter same-origin requirement for mutations.
-	if strings.HasPrefix(request.URL.Path, "/api/") && site == "" && !isWebSocketRequest(request) && unsafe {
-		return false
-	}
+	// control marker. Unsafe requests additionally require a matching Origin
+	// below; that check remains effective when Fetch Metadata is absent.
 	if site != "" && site != "same-origin" && site != "none" {
 		return false
 	}
 	if strings.HasPrefix(request.URL.Path, "/api/") && mode == "navigate" {
 		return false
 	}
-	if unsafe && site != "same-origin" {
+	if unsafe && site != "" && site != "same-origin" {
 		return false
 	}
 	return true
