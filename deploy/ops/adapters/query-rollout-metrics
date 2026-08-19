@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+: "${CONTAINER_NAME:?CONTAINER_NAME is required}"
+: "${EXAPI_OBSERVATION_START_EPOCH:?EXAPI_OBSERVATION_START_EPOCH is required}"
+: "${EXAPI_OBSERVATION_END_EPOCH:?EXAPI_OBSERVATION_END_EPOCH is required}"
+: "${EXAPI_PROBE_TRACE_FILE:?EXAPI_PROBE_TRACE_FILE is required}"
+[[ "$EXAPI_OBSERVATION_START_EPOCH" =~ ^[0-9]+$ && "$EXAPI_OBSERVATION_END_EPOCH" =~ ^[0-9]+$ ]] || {
+  printf 'observation epochs must be integers\n' >&2
+  exit 1
+}
+(( EXAPI_OBSERVATION_END_EPOCH > EXAPI_OBSERVATION_START_EPOCH )) || {
+  printf 'observation end must follow start\n' >&2
+  exit 1
+}
+
+[[ -r "$EXAPI_PROBE_TRACE_FILE" ]] || { printf 'readiness probe trace is unreadable\n' >&2; exit 1; }
+WORK=${EXAPI_METRICS_WORK_DIR:-}
+[[ -n "$WORK" && -d "$WORK" ]] || { printf 'EXAPI_METRICS_WORK_DIR must be an existing observation directory\n' >&2; exit 1; }
+LOG="$WORK/app-observation.log"
+start=$(date -u -d "@$EXAPI_OBSERVATION_START_EPOCH" +%Y-%m-%dT%H:%M:%SZ)
+end=$(date -u -d "@$EXAPI_OBSERVATION_END_EPOCH" +%Y-%m-%dT%H:%M:%SZ)
+if ! docker logs --timestamps --since "$start" --until "$end" "$CONTAINER_NAME" >"$LOG" 2>&1; then
+  printf 'failed to retrieve observation logs for %s\n' "$CONTAINER_NAME" >&2
+  exit 1
+fi
+BASELINE=${EXAPI_BASELINE_P95_FILE:-/protected/monitoring/exapi-baseline.json}
+python3 - "$LOG" "$BASELINE" "$EXAPI_PROBE_TRACE_FILE" <<'PY'
+import hashlib, json, re, sys
+from pathlib import Path
+
+lines = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace").splitlines()
+baseline_path = Path(sys.argv[2])
+probe_path = Path(sys.argv[3])
+status_re = re.compile(r'"status_code"\s*:\s*(\d{3})')
+latency_re = re.compile(r'"latency_ms"\s*:\s*([0-9]+(?:\.[0-9]+)?)')
+requests = []
+latencies = []
+new_p0_p1 = 0
+for line in lines:
+    if re.search(r'"(?:severity|priority|alert_level)"\s*:\s*"P[01]"', line, re.I):
+        new_p0_p1 += 1
+    # Count only the application's structured access records. Provider/user
+    # payload JSON must never be able to manufacture rollout metrics.
+    if '"component": "http.access"' not in line and '"component":"http.access"' not in line:
+        continue
+    status = status_re.search(line)
+    if not status:
+        continue
+    code = int(status.group(1))
+    requests.append(code)
+    latency = latency_re.search(line)
+    if latency:
+        latencies.append(float(latency.group(1)))
+
+def p95(values):
+    if not values:
+        return 0.0
+    values = sorted(values)
+    index = max(0, min(len(values) - 1, int((len(values) * 95 + 99) // 100) - 1))
+    return values[index]
+
+try:
+    baseline_raw = baseline_path.read_bytes()
+    data = json.loads(baseline_raw)
+    baseline = float(data["p95_ms"])
+except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"cannot load rollout baseline: {exc}") from exc
+if baseline <= 0:
+    raise SystemExit("rollout baseline p95_ms must be positive")
+trace_lines = [line for line in probe_path.read_text(encoding="utf-8").splitlines() if line]
+trace = [json.loads(line) for line in trace_lines]
+if not trace or any(item.get("success") is not True for item in trace):
+    raise SystemExit("readiness probe trace is incomplete or unsuccessful")
+unexpected = sum(1 for code in requests if 500 <= code <= 599)
+print(json.dumps({
+    "request_count": len(requests),
+    "unexpected_5xx": unexpected,
+    "error_rate": (unexpected / len(requests)) if requests else 0.0,
+    "latency_sample_count": len(latencies),
+    "p95_ms": p95(latencies),
+    "baseline_p95_ms": baseline,
+    "baseline_sha256": hashlib.sha256(baseline_raw).hexdigest(),
+    "probe_trace_sha256": hashlib.sha256(probe_path.read_bytes()).hexdigest(),
+    "probe_request_count": len(trace),
+    "new_p0_p1": new_p0_p1,
+}, sort_keys=True))
+PY

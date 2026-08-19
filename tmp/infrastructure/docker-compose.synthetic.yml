@@ -1,0 +1,52 @@
+services:
+  sub2api:
+    depends_on:
+      mock-provider:
+        condition: service_healthy
+    environment:
+      - SUB2API_CANARY_CLASS=synthetic-provider
+      # The network itself is the canary's egress control. The provider is an
+      # intentionally plain-HTTP service on that private network, so the
+      # application URL allowlist must not be presented as the control.
+      - SECURITY_URL_ALLOWLIST_ENABLED=false
+      - SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP=true
+      - SECURITY_URL_ALLOWLIST_ALLOW_PRIVATE_HOSTS=true
+      - SECURITY_URL_ALLOWLIST_UPSTREAM_HOSTS=
+
+  mock-provider:
+    image: ${SYNTHETIC_PROVIDER_IMAGE:?SYNTHETIC_PROVIDER_IMAGE must be pinned by digest}
+    container_name: ${EXAPI_PROVIDER_CONTAINER_NAME:?EXAPI_PROVIDER_CONTAINER_NAME is required}
+    restart: unless-stopped
+    read_only: true
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    command: ["python3", "/opt/exapi/mock-provider.py"]
+    environment:
+      - MOCK_PROVIDER_BIND=0.0.0.0
+      - SYNTHETIC_UPSTREAM_KEY=${SYNTHETIC_UPSTREAM_KEY:?SYNTHETIC_UPSTREAM_KEY is required}
+      - SYNTHETIC_ROLLOUT_ID=${SYNTHETIC_ROLLOUT_ID:?SYNTHETIC_ROLLOUT_ID is required}
+    volumes:
+      - ./tmp/infrastructure/mock-provider.py:/opt/exapi/mock-provider.py:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=8m
+    networks:
+      - sub2api-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:19091/health', timeout=2).read()",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 3s
+
+networks:
+  sub2api-network:
+    internal: true

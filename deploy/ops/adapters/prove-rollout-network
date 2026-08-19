@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+for name in EXAPI_CONTAINER_NAME EXAPI_OBSERVATION_CLASS EXAPI_OBSERVATION_START_EPOCH \
+  EXAPI_OBSERVATION_END_EPOCH EXAPI_CONTAINER_IDENTITY_FILE EXAPI_TARGET_BASE_URL; do
+  [[ -n "${!name:-}" ]] || { printf '%s is required\n' "$name" >&2; exit 1; }
+done
+[[ "$EXAPI_OBSERVATION_START_EPOCH" =~ ^[0-9]+$ && "$EXAPI_OBSERVATION_END_EPOCH" =~ ^[0-9]+$ ]] || {
+  printf 'observation epochs must be integers\n' >&2; exit 1;
+}
+[[ -r "$EXAPI_CONTAINER_IDENTITY_FILE" ]] || { printf 'container identity file is unreadable\n' >&2; exit 1; }
+
+container_id=$(docker inspect "$EXAPI_CONTAINER_NAME" --format '{{.Id}}')
+expected_container_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))["id"])' "$EXAPI_CONTAINER_IDENTITY_FILE")
+[[ "$container_id" == "$expected_container_id" ]] || { printf 'container identity changed before network proof\n' >&2; exit 1; }
+network_json=$(docker inspect "$EXAPI_CONTAINER_NAME" --format '{{json .NetworkSettings.Networks}}')
+network_name=$(NETWORK_JSON="$network_json" python3 - <<'PY'
+import json,os
+items=json.loads(os.environ["NETWORK_JSON"])
+if len(items)!=1: raise SystemExit("target must have exactly one network")
+print(next(iter(items)))
+PY
+)
+network_id=$(docker network inspect "$network_name" --format '{{.Id}}')
+network_internal=$(docker network inspect "$network_name" --format '{{.Internal}}')
+verified_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+start_rfc3339=$(date -u -d "@$EXAPI_OBSERVATION_START_EPOCH" +%Y-%m-%dT%H:%M:%SZ)
+end_rfc3339=$(date -u -d "@$EXAPI_OBSERVATION_END_EPOCH" +%Y-%m-%dT%H:%M:%SZ)
+
+deny_public_egress() {
+  if docker exec "$EXAPI_CONTAINER_NAME" sh -ec 'wget -q -T 3 -O /dev/null https://example.com' >/dev/null 2>&1; then
+    printf 'canary unexpectedly reached the public network\n' >&2
+    exit 1
+  fi
+}
+
+case "$EXAPI_OBSERVATION_CLASS" in
+  restored-data)
+    [[ "$network_internal" == true ]] || { printf 'restored canary network is not internal\n' >&2; exit 1; }
+    deny_public_egress
+    pg=${EXAPI_RESTORED_POSTGRES_CONTAINER:-exapi-canary-restored-postgres}
+    : "${EXAPI_RESTORED_POSTGRES_EXPECTED_ID:?EXAPI_RESTORED_POSTGRES_EXPECTED_ID is required}"
+    : "${EXAPI_RESTORED_POSTGRES_EXPECTED_DATA_SOURCE:?EXAPI_RESTORED_POSTGRES_EXPECTED_DATA_SOURCE is required}"
+    pg_identity=$(PG="$pg" EXPECTED_ID="$EXAPI_RESTORED_POSTGRES_EXPECTED_ID" \
+      EXPECTED_SOURCE="$EXAPI_RESTORED_POSTGRES_EXPECTED_DATA_SOURCE" NETWORK="$network_name" python3 - <<'PY'
+import json,os,subprocess
+d=json.loads(subprocess.check_output(["docker","inspect",os.environ["PG"]],text=True))[0]
+if d["Id"]!=os.environ["EXPECTED_ID"]: raise SystemExit("restored PostgreSQL identity mismatch")
+if set(d.get("NetworkSettings",{}).get("Networks",{}))!={os.environ["NETWORK"]}: raise SystemExit("restored PostgreSQL network mismatch")
+mounts=[m for m in d.get("Mounts",[]) if m.get("Destination")=="/var/lib/postgresql/data"]
+if len(mounts)!=1 or mounts[0].get("Source")!=os.environ["EXPECTED_SOURCE"]: raise SystemExit("restored PostgreSQL data source mismatch")
+print(json.dumps({"name":os.environ["PG"],"id":d["Id"],"image_id":d["Image"],"config_image":d["Config"]["Image"],"data_mount":mounts[0]},sort_keys=True))
+PY
+    )
+    marker=$(docker exec "$pg" sh -ec 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atqc "SELECT private_schema_version FROM exapi_private_state WHERE id=true"')
+    [[ "$marker" == 2 ]] || { printf 'private marker is not schema version 2\n' >&2; exit 1; }
+    counts=$(docker exec "$pg" sh -ec 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -AtF "|" -c "SELECT (SELECT COUNT(*) FROM users),(SELECT COUNT(*) FROM accounts WHERE deleted_at IS NULL),(SELECT COUNT(*) FROM api_keys WHERE deleted_at IS NULL),(SELECT COUNT(*) FROM batch_image_jobs),(SELECT COUNT(*) FROM schema_migrations)"')
+    [[ "$counts" == 1\|23\|8\|0\|* ]] || { printf 'restored-data counts are not intact\n' >&2; exit 1; }
+    logs=$(docker logs --since "$start_rfc3339" --until "$end_rfc3339" "$EXAPI_CONTAINER_NAME" 2>&1)
+    grep -Fq 'prompt_guard.config_loaded' <<<"$logs" || { printf 'encrypted settings were not loaded during the observation\n' >&2; exit 1; }
+    grep -Fq 'token_refresh' <<<"$logs" || { printf 'credential decryption was not exercised during the observation\n' >&2; exit 1; }
+    jq -n --arg verified_at "$verified_at" --arg network_name "$network_name" --arg network_id "$network_id" \
+      --arg container_id "$container_id" --argjson postgres "$pg_identity" \
+      '{verified_at:$verified_at,network_name:$network_name,network_id:$network_id,container_id:$container_id,
+        internal_network:true,egress_denied:true,integrity_verified:true,decryption_verified:true,
+        restored_postgres_identity:$postgres}'
+    ;;
+  synthetic-provider)
+    [[ "$network_internal" == true ]] || { printf 'synthetic canary network is not internal\n' >&2; exit 1; }
+    deny_public_egress
+    proof=${EXAPI_SYNTHETIC_PROVIDER_PROOF_FILE:-/protected/monitoring/synthetic-provider-proof.json}
+    python3 - "$proof" "$network_name" "$network_id" "$EXAPI_CONTAINER_NAME" "${EXAPI_ROLLOUT_ID:-}" \
+      "${EXAPI_IMAGE_DIGEST:-}" "$verified_at" "$EXAPI_OBSERVATION_START_EPOCH" "$EXAPI_OBSERVATION_END_EPOCH" <<'PY'
+import datetime,hashlib,json,os,stat,subprocess,sys
+proof_path,network_name,network_id,app_name,rollout_id,image_digest,verified_at,start_raw,end_raw=sys.argv[1:]
+metadata=os.stat(proof_path)
+if metadata.st_uid!=0 or stat.S_IMODE(metadata.st_mode)&0o077: raise SystemExit("synthetic provider proof ownership/mode is not protected")
+proof_bytes=open(proof_path,"rb").read(); d=json.loads(proof_bytes)
+for key in ("verified","canary_only_credentials","egress_allowlist_verified","provider_smoke_verified"):
+    if d.get(key) is not True: raise SystemExit(f"synthetic provider proof omitted {key}=true")
+if d.get("rollout_id")!=rollout_id: raise SystemExit("synthetic provider proof rollout mismatch")
+if d.get("image_digest")!=image_digest: raise SystemExit("synthetic provider proof image digest mismatch")
+network=d.get("network",{})
+if network.get("name")!=network_name or network.get("id")!=network_id or network.get("internal") is not True: raise SystemExit("synthetic provider proof network identity mismatch")
+if network.get("public_internet_denied") is not True or network.get("production_mounts_shared") is not False: raise SystemExit("synthetic isolation proof is incomplete")
+control=d.get("egress_control",{})
+if control.get("kind")!="docker_internal_network" or set(control.get("allowed_services",[]))!={"mock-provider","postgres","redis"}: raise SystemExit("synthetic egress control description mismatch")
+containers=network.get("containers")
+if not isinstance(containers,dict) or app_name not in containers: raise SystemExit("synthetic provider proof omitted container identities")
+current_network=json.loads(subprocess.check_output(["docker","network","inspect",network_name],text=True))[0]
+attached={item["Name"] for item in current_network.get("Containers",{}).values()}
+if attached!=set(containers): raise SystemExit("synthetic network membership changed")
+provider_name=""
+for name,expected in containers.items():
+ current=json.loads(subprocess.check_output(["docker","inspect",name],text=True))[0]
+ if expected.get("id")!=current.get("Id") or expected.get("image_id")!=current.get("Image"): raise SystemExit(f"synthetic container identity changed: {name}")
+ if current.get("RestartCount")!=expected.get("restart_count") or current.get("RestartCount")!=0: raise SystemExit(f"synthetic container restarted: {name}")
+ if name.endswith("-provider"): provider_name=name
+if not provider_name: raise SystemExit("synthetic provider container identity is missing")
+raw=subprocess.check_output(["docker","exec",provider_name,"python3","-c",'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:19091/stats",timeout=5).read().decode())'],text=True)
+stats=json.loads(raw); stored=d.get("provider",{}).get("stats",{})
+if stats.get("rollout_id")!=rollout_id or stats.get("auth_failures")!=0: raise SystemExit("synthetic provider runtime identity/authentication changed")
+if not isinstance(stats.get("chat_completions"),int) or stats["chat_completions"]<=stored.get("chat_completions",0): raise SystemExit("no synthetic provider request occurred after the setup proof")
+try: request_time=datetime.datetime.fromisoformat(stats["last_request"]["observed_at"].replace("Z","+00:00"))
+except (KeyError,TypeError,ValueError) as exc: raise SystemExit("synthetic provider request timestamp is invalid") from exc
+start=datetime.datetime.fromtimestamp(int(start_raw),datetime.timezone.utc); end=datetime.datetime.fromtimestamp(int(end_raw),datetime.timezone.utc)
+if request_time<start or request_time>end: raise SystemExit("synthetic provider request was outside the observation window")
+print(json.dumps({"verified_at":verified_at,"network_name":network_name,"network_id":network_id,
+ "container_id":containers[app_name]["id"],"internal_network":True,"egress_allowlist_verified":True,
+ "canary_only_credentials":True,"provider_smoke_verified":True,"provider_request_count":stats["chat_completions"],
+ "provider_last_request_at":stats["last_request"]["observed_at"],"source_proof_sha256":hashlib.sha256(proof_bytes).hexdigest()},sort_keys=True))
+PY
+    ;;
+  production)
+    [[ "$network_internal" == false ]] || { printf 'production network unexpectedly marked internal\n' >&2; exit 1; }
+    : "${EXAPI_EXPECTED_POSTGRES_ID:?EXAPI_EXPECTED_POSTGRES_ID is required}"
+    : "${EXAPI_EXPECTED_REDIS_ID:?EXAPI_EXPECTED_REDIS_ID is required}"
+    project=${EXAPI_EXPECTED_COMPOSE_PROJECT:-sub2api}
+    postgres=${EXAPI_PRODUCTION_POSTGRES_CONTAINER:-sub2api-postgres}
+    redis=${EXAPI_PRODUCTION_REDIS_CONTAINER:-sub2api-redis}
+    topology=$(APP="$EXAPI_CONTAINER_NAME" APP_ID="$container_id" POSTGRES="$postgres" REDIS="$redis" \
+      POSTGRES_ID="$EXAPI_EXPECTED_POSTGRES_ID" REDIS_ID="$EXAPI_EXPECTED_REDIS_ID" \
+      PROJECT="$project" NETWORK="$network_name" \
+      APP_SOURCE="${EXAPI_EXPECTED_APP_DATA_SOURCE:-/opt/sub2api/data}" \
+      POSTGRES_SOURCE="${EXAPI_EXPECTED_POSTGRES_DATA_SOURCE:-/opt/sub2api/postgres_data}" \
+      REDIS_SOURCE="${EXAPI_EXPECTED_REDIS_DATA_SOURCE:-/opt/sub2api/redis_data}" python3 - <<'PY'
+import json,os,subprocess
+names=[os.environ["APP"],os.environ["POSTGRES"],os.environ["REDIS"]]
+network=json.loads(subprocess.check_output(["docker","network","inspect",os.environ["NETWORK"]],text=True))[0]
+attached={item["Name"] for item in network.get("Containers",{}).values()}
+if attached!=set(names): raise SystemExit("production network membership mismatch")
+expected_ids={os.environ["APP"]:os.environ["APP_ID"],os.environ["POSTGRES"]:os.environ["POSTGRES_ID"],os.environ["REDIS"]:os.environ["REDIS_ID"]}
+expected_mounts={os.environ["APP"]:("/app/data",os.environ["APP_SOURCE"]),os.environ["POSTGRES"]:("/var/lib/postgresql/data",os.environ["POSTGRES_SOURCE"]),os.environ["REDIS"]:("/data",os.environ["REDIS_SOURCE"])}
+result={}
+for name in names:
+ d=json.loads(subprocess.check_output(["docker","inspect",name],text=True))[0]
+ if d["Id"]!=expected_ids[name]: raise SystemExit(f"production container identity mismatch: {name}")
+ if d.get("Config",{}).get("Labels",{}).get("com.docker.compose.project")!=os.environ["PROJECT"]: raise SystemExit(f"production Compose project mismatch: {name}")
+ if set(d.get("NetworkSettings",{}).get("Networks",{}))!={os.environ["NETWORK"]}: raise SystemExit(f"production network mismatch: {name}")
+ if d.get("State",{}).get("Running") is not True: raise SystemExit(f"production container is not running: {name}")
+ destination,source=expected_mounts[name]
+ mounts=[m for m in d.get("Mounts",[]) if m.get("Destination")==destination]
+ if len(mounts)!=1 or mounts[0].get("Source")!=source: raise SystemExit(f"production data mount mismatch: {name}")
+ result[name]={"id":d["Id"],"image_id":d["Image"],"config_image":d["Config"]["Image"],"started_at":d["State"]["StartedAt"],"restart_count":d["RestartCount"],"data_mount":mounts[0]}
+print(json.dumps(result,sort_keys=True))
+PY
+    )
+    jq -n --arg verified_at "$verified_at" --arg network_name "$network_name" --arg network_id "$network_id" \
+      --arg container_id "$container_id" --argjson topology "$topology" \
+      '{verified_at:$verified_at,network_name:$network_name,network_id:$network_id,container_id:$container_id,
+        internal_network:false,production_topology_verified:true,production_containers:$topology}'
+    ;;
+  *) printf 'unsupported observation class\n' >&2; exit 1 ;;
+esac

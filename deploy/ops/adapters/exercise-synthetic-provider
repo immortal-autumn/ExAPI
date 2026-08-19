@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+: "${EXAPI_CONTAINER_NAME:?EXAPI_CONTAINER_NAME is required}"
+: "${EXAPI_ROLLOUT_ID:?EXAPI_ROLLOUT_ID is required}"
+key_file=${EXAPI_SYNTHETIC_GATEWAY_KEY_FILE:-/protected/synthetic-runtime/$EXAPI_ROLLOUT_ID/gateway-key}
+[[ -r "$key_file" ]] || { printf 'synthetic gateway key is unreadable\n' >&2; exit 1; }
+gateway_key=$(<"$key_file")
+[[ "$gateway_key" == sk-* ]] || { printf 'synthetic gateway key has an unexpected format\n' >&2; exit 1; }
+request_id="rollout-$EXAPI_ROLLOUT_ID-$(date -u +%s)"
+payload='{"model":"synthetic-model","messages":[{"role":"user","content":"synthetic observation probe"}],"stream":false}'
+response=$(docker exec "$EXAPI_CONTAINER_NAME" wget -q -T 20 -O - \
+  --header='Content-Type: application/json' --header="Authorization: Bearer $gateway_key" \
+  --header="X-Request-Id: $request_id" --post-data="$payload" \
+  http://localhost:8080/v1/chat/completions)
+RESPONSE="$response" REQUEST_ID="$request_id" python3 - <<'PY'
+import json,os
+d=json.loads(os.environ["RESPONSE"])
+if d.get("choices",[{}])[0].get("message",{}).get("content")!="synthetic-ok":
+    raise SystemExit("synthetic provider response did not contain the expected marker")
+PY

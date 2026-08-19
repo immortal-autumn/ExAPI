@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+proof=${EXAPI_OFFHOST_MONITOR_PROOF_FILE:-/protected/monitoring/offhost-readiness-proof.json}
+require_recovery=${EXAPI_REQUIRE_MONITOR_RECOVERY:-false}
+[[ "$require_recovery" == true || "$require_recovery" == false ]] || { printf 'EXAPI_REQUIRE_MONITOR_RECOVERY must be true or false\n' >&2; exit 1; }
+[[ -r "$proof" ]] || { printf 'off-host monitor proof is unreadable\n' >&2; exit 1; }
+REQUIRE_RECOVERY="$require_recovery" python3 - "$proof" "$(hostname)" <<'PY'
+import datetime,json,os,sys
+d=json.load(open(sys.argv[1],encoding="utf-8"))
+if d.get("schema_version")!=1 or d.get("delivery_accepted") is not True:
+    raise SystemExit("alert delivery was not accepted")
+if d.get("delivery_kind")!="desktop-notification":
+    raise SystemExit("unexpected alert delivery channel")
+if not isinstance(d.get("monitor_host"),str) or not d["monitor_host"] or d["monitor_host"]==sys.argv[2]:
+    raise SystemExit("alert delivery did not originate off-host")
+alert=d.get("last_alert")
+if not isinstance(alert,dict) or alert.get("status")!="unhealthy" or alert.get("delivery_exit_code")!=0:
+    raise SystemExit("a delivered unhealthy transition is missing")
+if alert.get("alert_sent") is not True or alert.get("delivery_kind")!=d["delivery_kind"]:
+    raise SystemExit("alert transition is not bound to the delivery channel")
+recovery=d.get("last_recovery")
+if os.environ["REQUIRE_RECOVERY"]=="true":
+    if not isinstance(recovery,dict) or recovery.get("status")!="healthy" or recovery.get("delivery_exit_code")!=0:
+        raise SystemExit("a delivered recovery transition is missing")
+    if recovery.get("observed_at","")<=alert.get("observed_at",""):
+        raise SystemExit("monitor recovery does not follow the alert")
+print(json.dumps({"verified":True,"monitor_host":d["monitor_host"],"delivery_kind":d["delivery_kind"],
+ "alert_delivered_at":alert["observed_at"],"recovery_required":os.environ["REQUIRE_RECOVERY"]=="true",
+ "recovery_delivered_at":recovery.get("observed_at") if isinstance(recovery,dict) else None},sort_keys=True))
+PY
