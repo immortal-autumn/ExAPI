@@ -46,7 +46,9 @@ if os.environ["REQUIRE_RECOVERY"]=="true":
         raise SystemExit("recovery transition probe/delivery result is invalid")
     try: recovery_time=datetime.datetime.fromisoformat(recovery["observed_at"].replace("Z","+00:00"))
     except (KeyError,TypeError,ValueError) as exc: raise SystemExit("recovery timestamp is invalid") from exc
-    if recovery_time<now-datetime.timedelta(minutes=5) or recovery_time>now+datetime.timedelta(minutes=2):
+    # A deployment recovery is followed by the mandatory one-hour production
+    # observation, so retain it as fresh for that complete gate plus margin.
+    if recovery_time<now-datetime.timedelta(hours=2) or recovery_time>now+datetime.timedelta(minutes=2):
         raise SystemExit("recovery delivery is stale or from the future")
 print(json.dumps({"verified":True,"monitor_host":d["monitor_host"],"delivery_kind":d["delivery_kind"],
  "alert_delivered_at":alert["observed_at"],"recovery_required":os.environ["REQUIRE_RECOVERY"]=="true",
