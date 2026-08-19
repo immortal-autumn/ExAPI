@@ -105,7 +105,12 @@ func controlFetchMetadataAllowed(request *http.Request) bool {
 	site := strings.ToLower(strings.TrimSpace(request.Header.Get("Sec-Fetch-Site")))
 	mode := strings.ToLower(strings.TrimSpace(request.Header.Get("Sec-Fetch-Mode")))
 	unsafe := request.Method != http.MethodGet && request.Method != http.MethodHead && request.Method != http.MethodOptions
-	if strings.HasPrefix(request.URL.Path, "/api/") && site == "" && !isWebSocketRequest(request) {
+	// Fetch Metadata is a useful defense-in-depth signal, but browsers and
+	// embedded clients are allowed to omit it (Chrome headless and some
+	// WebViews do). The direct listener has already authenticated the exact
+	// Host and WireGuard peer, and API requests still require the explicit
+	// control marker. Keep the stricter same-origin requirement for mutations.
+	if strings.HasPrefix(request.URL.Path, "/api/") && site == "" && !isWebSocketRequest(request) && unsafe {
 		return false
 	}
 	if site != "" && site != "same-origin" && site != "none" {
