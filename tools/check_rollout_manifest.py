@@ -309,14 +309,14 @@ def verify_signature(args: argparse.Namespace) -> None:
     if args.key:
         command += ["--key", args.key]
     else:
-        if not args.certificate_identity or not args.certificate_oidc_issuer:
+        if not args.certificate_identity_regexp or not args.certificate_oidc_issuer:
             fail("keyless signature verification requires certificate identity and OIDC issuer")
-        if args.certificate_identity != CANONICAL_WORKFLOW_IDENTITY_REGEXP:
+        if args.certificate_identity_regexp != CANONICAL_WORKFLOW_IDENTITY_REGEXP:
             fail("keyless signature verification must require the canonical release workflow identity")
         if args.certificate_oidc_issuer != CANONICAL_OIDC_ISSUER:
             fail("keyless signature verification must require the canonical GitHub OIDC issuer")
         command += [
-            "--certificate-identity-regexp", args.certificate_identity,
+            "--certificate-identity-regexp", args.certificate_identity_regexp,
             "--certificate-oidc-issuer", args.certificate_oidc_issuer,
         ]
     command.append(str(args.manifest))
@@ -336,7 +336,7 @@ def main() -> int:
     parser.add_argument("--certificate-identity-regexp")
     parser.add_argument("--certificate-oidc-issuer")
     args = parser.parse_args()
-    if args.key and (args.certificate_identity or args.certificate_oidc_issuer):
+    if args.key and (args.certificate_identity_regexp or args.certificate_oidc_issuer):
         parser.error("--key cannot be combined with keyless certificate options")
     try:
         document = json.loads(args.manifest.read_text(encoding="utf-8"))
