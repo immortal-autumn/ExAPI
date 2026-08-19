@@ -218,6 +218,7 @@ grep -Fq 'database and secret recovery objects must have disjoint age recipients
 grep -Fq 'snapshot retention_until is shorter than RECOVERY_RETENTION_UNTIL' deploy/ops/create-recovery-set.sh || \
   fail 'snapshot retention can be shorter than requested'
 grep -Fq 'cosign verify-attestation' deploy/ops/publish-rollout-manifest.sh || fail 'OCI provenance is not verified before publication'
+grep -Fq -- '--type https://slsa.dev/provenance/v1' deploy/ops/publish-rollout-manifest.sh || fail 'current SLSA provenance predicate type is not selected'
 grep -Fq 'oci-provenance-verification.json' deploy/ops/publish-rollout-manifest.sh || fail 'OCI provenance verification evidence is not uploaded'
 grep -Fq 'attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373' .github/workflows/release.yml || fail 'SLSA provenance action is missing or mutable'
 grep -Fq 'format: spdx-json' .github/workflows/release.yml || fail 'SPDX JSON generation is missing'
