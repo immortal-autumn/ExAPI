@@ -90,7 +90,7 @@ func controlOriginAllowed(request *http.Request) bool {
 		}
 		if strings.HasPrefix(request.URL.Path, "/api/") {
 			site := strings.ToLower(strings.TrimSpace(request.Header.Get("Sec-Fetch-Site")))
-			return !unsafe && (site == "same-origin" || site == "none")
+			return !unsafe && (site == "" || site == "same-origin" || site == "none")
 		}
 		return !unsafe
 	}
