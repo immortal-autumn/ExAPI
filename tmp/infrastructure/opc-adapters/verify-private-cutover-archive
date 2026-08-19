@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+. /protected/lib/lib-exapi-storage.sh
+exapi_load_s3_credentials
+[[ -r "${EXAPI_ARCHIVE_RESULT_FILE:-}" ]] || { printf 'archive result is unreadable\n' >&2; exit 1; }
+SRC=/home/opc/src/exapi-release-5201644814ae
+tmp_dir="$SRC/tmp/archive-verification/${EXAPI_ROLLOUT_ID:?}"
+mkdir -p "$tmp_dir"
+chmod 700 "$tmp_dir"
+result=$(<"$EXAPI_ARCHIVE_RESULT_FILE")
+retention=$(jq -er .retention_until <<<"$result")
+
+verify_one() {
+  local label=$1 identity=$2 expected=$3 uri version bucket key encrypted plain actual head
+  uri=$(jq -er ".${label}_uri" <<<"$result")
+  version=$(jq -er ".${label}_version_id" <<<"$result")
+  read -r bucket key < <(exapi_parse_s3 "$uri")
+  head=$(exapi_aws s3api head-object --bucket "$bucket" --key "$key" --version-id "$version" --output json)
+  [[ "$(jq -r .ObjectLockMode <<<"$head")" == COMPLIANCE ]] || return 1
+  encrypted="$tmp_dir/$label.age"
+  plain="$tmp_dir/$label.plain"
+  exapi_aws s3api get-object --bucket "$bucket" --key "$key" --version-id "$version" "$encrypted" >/dev/null
+  age --decrypt -i "$identity" -o "$plain" "$encrypted"
+  actual=$(sha256sum "$plain" | awk '{print $1}')
+  [[ "$actual" == "$expected" ]]
+  rm -f -- "$encrypted" "$plain"
+}
+report_sha=$(jq -er .report_file_sha256 <<<"$result" | sed 's/^sha256://')
+evidence_sha=$(jq -er .evidence_file_sha256 <<<"$result" | sed 's/^sha256://')
+key_file_sha=$(jq -er .key_file_sha256 <<<"$result" | sed 's/^sha256://')
+verify_one report /offline/identities/archive.agekey "$report_sha"
+verify_one evidence /offline/identities/archive.agekey "$evidence_sha"
+verify_one key /offline/identities/secrets.agekey "$key_file_sha"
+key_uri=$(jq -er .key_uri <<<"$result")
+key_version=$(jq -er .key_version_id <<<"$result")
+read -r key_bucket key_name < <(exapi_parse_s3 "$key_uri")
+key_enc="$tmp_dir/key-check.age"
+key_plain="$tmp_dir/key-check.plain"
+exapi_aws s3api get-object --bucket "$key_bucket" --key "$key_name" --version-id "$key_version" "$key_enc" >/dev/null
+age --decrypt -i /offline/identities/secrets.agekey -o "$key_plain" "$key_enc"
+decoded_sha=$(python3 - "$key_plain" <<'PY'
+import hashlib, pathlib, sys
+raw=pathlib.Path(sys.argv[1]).read_text().strip()
+print(hashlib.sha256(bytes.fromhex(raw)).hexdigest())
+PY
+)
+[[ "$decoded_sha" == "$(jq -er .report_key_sha256 <<<"$result" | sed 's/^sha256://')" ]]
+rm -f -- "$key_enc" "$key_plain"
+jq -c '. + {verified:true,encrypted:true,immutable:true}' <<<"$result"

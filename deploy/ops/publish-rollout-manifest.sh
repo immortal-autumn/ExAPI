@@ -35,7 +35,7 @@ PY
 canonical_oidc_issuer=https://token.actions.githubusercontent.com
 canonical_workflow_identity='^https://github\.com/immortal-autumn/Sub2API2Personal/\.github/workflows/release\.yml@'
 cosign verify-attestation \
-  --type slsaprovenance \
+  --type https://slsa.dev/provenance/v1 \
   --certificate-identity-regexp "$canonical_workflow_identity" \
   --certificate-oidc-issuer "$canonical_oidc_issuer" \
   "$oci_image" >"$attestation_evidence"
