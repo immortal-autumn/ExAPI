@@ -35,24 +35,10 @@ baseline_path = Path(sys.argv[2])
 probe_path = Path(sys.argv[3])
 status_re = re.compile(r'"status_code"\s*:\s*(\d{3})')
 latency_re = re.compile(r'"latency_ms"\s*:\s*([0-9]+(?:\.[0-9]+)?)')
-requests = []
-latencies = []
 new_p0_p1 = 0
 for line in lines:
     if re.search(r'"(?:severity|priority|alert_level)"\s*:\s*"P[01]"', line, re.I):
         new_p0_p1 += 1
-    # Count only the application's structured access records. Provider/user
-    # payload JSON must never be able to manufacture rollout metrics.
-    if '"component": "http.access"' not in line and '"component":"http.access"' not in line:
-        continue
-    status = status_re.search(line)
-    if not status:
-        continue
-    code = int(status.group(1))
-    requests.append(code)
-    latency = latency_re.search(line)
-    if latency:
-        latencies.append(float(latency.group(1)))
 
 def p95(values):
     if not values:
@@ -73,6 +59,21 @@ trace_lines = [line for line in probe_path.read_text(encoding="utf-8").splitline
 trace = [json.loads(line) for line in trace_lines]
 if not trace or any(item.get("success") is not True for item in trace):
     raise SystemExit("readiness probe trace is incomplete or unsuccessful")
+request_ids={item.get("request_id") for item in trace}
+if None in request_ids or len(request_ids)!=len(trace):
+    raise SystemExit("readiness probe request IDs are missing or duplicated")
+requests=[]
+latencies=[]
+for line in lines:
+    if '"component": "http.access"' not in line and '"component":"http.access"' not in line:
+        continue
+    if not any(f'"request_id": "{value}"' in line or f'"request_id":"{value}"' in line for value in request_ids):
+        continue
+    status=status_re.search(line); latency=latency_re.search(line)
+    if status: requests.append(int(status.group(1)))
+    if latency: latencies.append(float(latency.group(1)))
+if len(requests)!=len(trace) or len(latencies)!=len(trace):
+    raise SystemExit("application access logs do not cover every readiness probe exactly once")
 unexpected = sum(1 for code in requests if 500 <= code <= 599)
 print(json.dumps({
     "request_count": len(requests),

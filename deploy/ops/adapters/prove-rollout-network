@@ -114,13 +114,21 @@ PY
     ;;
   production)
     [[ "$network_internal" == false ]] || { printf 'production network unexpectedly marked internal\n' >&2; exit 1; }
+    : "${EXAPI_EXPECTED_NETWORK_ID:?EXAPI_EXPECTED_NETWORK_ID is required}"
     : "${EXAPI_EXPECTED_POSTGRES_ID:?EXAPI_EXPECTED_POSTGRES_ID is required}"
     : "${EXAPI_EXPECTED_REDIS_ID:?EXAPI_EXPECTED_REDIS_ID is required}"
+    : "${EXAPI_EXPECTED_POSTGRES_STARTED_AT:?EXAPI_EXPECTED_POSTGRES_STARTED_AT is required}"
+    : "${EXAPI_EXPECTED_REDIS_STARTED_AT:?EXAPI_EXPECTED_REDIS_STARTED_AT is required}"
+    : "${EXAPI_EXPECTED_POSTGRES_RESTART_COUNT:?EXAPI_EXPECTED_POSTGRES_RESTART_COUNT is required}"
+    : "${EXAPI_EXPECTED_REDIS_RESTART_COUNT:?EXAPI_EXPECTED_REDIS_RESTART_COUNT is required}"
+    [[ "$network_id" == "$EXAPI_EXPECTED_NETWORK_ID" ]] || { printf 'production network identity mismatch\n' >&2; exit 1; }
     project=${EXAPI_EXPECTED_COMPOSE_PROJECT:-sub2api}
     postgres=${EXAPI_PRODUCTION_POSTGRES_CONTAINER:-sub2api-postgres}
     redis=${EXAPI_PRODUCTION_REDIS_CONTAINER:-sub2api-redis}
     topology=$(APP="$EXAPI_CONTAINER_NAME" APP_ID="$container_id" POSTGRES="$postgres" REDIS="$redis" \
       POSTGRES_ID="$EXAPI_EXPECTED_POSTGRES_ID" REDIS_ID="$EXAPI_EXPECTED_REDIS_ID" \
+      POSTGRES_STARTED_AT="$EXAPI_EXPECTED_POSTGRES_STARTED_AT" REDIS_STARTED_AT="$EXAPI_EXPECTED_REDIS_STARTED_AT" \
+      POSTGRES_RESTART_COUNT="$EXAPI_EXPECTED_POSTGRES_RESTART_COUNT" REDIS_RESTART_COUNT="$EXAPI_EXPECTED_REDIS_RESTART_COUNT" \
       PROJECT="$project" NETWORK="$network_name" \
       APP_SOURCE="${EXAPI_EXPECTED_APP_DATA_SOURCE:-/opt/sub2api/data}" \
       POSTGRES_SOURCE="${EXAPI_EXPECTED_POSTGRES_DATA_SOURCE:-/opt/sub2api/postgres_data}" \
@@ -131,6 +139,8 @@ network=json.loads(subprocess.check_output(["docker","network","inspect",os.envi
 attached={item["Name"] for item in network.get("Containers",{}).values()}
 if attached!=set(names): raise SystemExit("production network membership mismatch")
 expected_ids={os.environ["APP"]:os.environ["APP_ID"],os.environ["POSTGRES"]:os.environ["POSTGRES_ID"],os.environ["REDIS"]:os.environ["REDIS_ID"]}
+expected_started={os.environ["POSTGRES"]:os.environ["POSTGRES_STARTED_AT"],os.environ["REDIS"]:os.environ["REDIS_STARTED_AT"]}
+expected_restarts={os.environ["POSTGRES"]:int(os.environ["POSTGRES_RESTART_COUNT"]),os.environ["REDIS"]:int(os.environ["REDIS_RESTART_COUNT"])}
 expected_mounts={os.environ["APP"]:("/app/data",os.environ["APP_SOURCE"]),os.environ["POSTGRES"]:("/var/lib/postgresql/data",os.environ["POSTGRES_SOURCE"]),os.environ["REDIS"]:("/data",os.environ["REDIS_SOURCE"])}
 result={}
 for name in names:
@@ -139,6 +149,9 @@ for name in names:
  if d.get("Config",{}).get("Labels",{}).get("com.docker.compose.project")!=os.environ["PROJECT"]: raise SystemExit(f"production Compose project mismatch: {name}")
  if set(d.get("NetworkSettings",{}).get("Networks",{}))!={os.environ["NETWORK"]}: raise SystemExit(f"production network mismatch: {name}")
  if d.get("State",{}).get("Running") is not True: raise SystemExit(f"production container is not running: {name}")
+ if d.get("State",{}).get("Health",{}).get("Status") not in (None,"healthy"): raise SystemExit(f"production container is unhealthy: {name}")
+ if name in expected_started and d["State"].get("StartedAt")!=expected_started[name]: raise SystemExit(f"production dependency start time changed: {name}")
+ if name in expected_restarts and d.get("RestartCount")!=expected_restarts[name]: raise SystemExit(f"production dependency restart count changed: {name}")
  destination,source=expected_mounts[name]
  mounts=[m for m in d.get("Mounts",[]) if m.get("Destination")==destination]
  if len(mounts)!=1 or mounts[0].get("Source")!=source: raise SystemExit(f"production data mount mismatch: {name}")

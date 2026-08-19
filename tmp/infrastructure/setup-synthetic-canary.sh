@@ -3,12 +3,16 @@ set -euo pipefail
 umask 077
 
 SRC=${SRC:-/home/opc/src/exapi-release-3bc462731e1d}
-PRODUCTION_ENV=${PRODUCTION_ENV:-/opt/sub2api/.env.v0.2.0}
+: "${PRODUCTION_ENV:?PRODUCTION_ENV must identify the reviewed production environment}"
 CANARY_ENV=${CANARY_ENV:-/protected/exapi-canary-synthetic.env}
 REPORT_KEY=${REPORT_KEY:-/protected/keys/exapi-canary-synthetic-report.key}
 PROOF_FILE=${PROOF_FILE:-/protected/monitoring/synthetic-provider-proof.json}
 ROLLOUT_ID=${ROLLOUT_ID:-exapi-v021-synthetic-20260819a}
-RUNTIME_DIR=${RUNTIME_DIR:-/protected/synthetic-runtime/$ROLLOUT_ID}
+RUNTIME_DIR=/protected/synthetic-runtime/$ROLLOUT_ID
+: "${CONFIRMATION_TOKEN:?CONFIRMATION_TOKEN is required}"
+[[ "$CONFIRMATION_TOKEN" == DROP-SAAS-DATA-KEEP-USER-1 ]] || {
+  printf 'synthetic canary setup failed: confirmation token mismatch\n' >&2; exit 1;
+}
 IMAGE=${IMAGE:-ghcr.io/immortal-autumn/sub2api2personal@sha256:53d8032bfaa812c0fc84ec4f57741317a6e01906b8afafd6f0c4d8e332c6736f}
 PROVIDER_IMAGE=${PROVIDER_IMAGE:-python:3.12-alpine@sha256:d09d15e60962ca365d1cd544a48773bac9d33f2fb1b00f2aa0deec78ade7dc31}
 OVERLAY=$SRC/tmp/infrastructure/docker-compose.synthetic.yml
@@ -26,13 +30,42 @@ docker compose version >/dev/null 2>&1 || die 'Docker Compose v2 is required'
 [[ -r "$PRODUCTION_ENV" && -x "$GENERATOR" && -r "$OVERLAY" && -r "$PROVIDER_SOURCE" ]] || die 'required input is missing'
 [[ "$IMAGE" =~ @sha256:[0-9a-f]{64}$ ]] || die 'IMAGE must be digest pinned'
 [[ "$PROVIDER_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]] || die 'PROVIDER_IMAGE must be digest pinned'
-[[ ! -e "$CANARY_ENV" && ! -e "$REPORT_KEY" ]] || die 'protected synthetic inputs already exist'
+[[ ! -e "$CANARY_ENV" && ! -e "$REPORT_KEY" && ! -e "$PROOF_FILE" && ! -e "$RUNTIME_DIR" ]] || die 'protected synthetic inputs already exist'
 
-# The provider source is non-secret, but the release worktree is intentionally
-# private on OPC. Docker's provider container must be able to traverse the bind
-# source while its credential remains exclusively in the protected env file.
-chmod a+rx "$SRC/tmp" "$SRC/tmp/infrastructure"
-chmod 0644 "$PROVIDER_SOURCE"
+setup_complete=false
+cleanup_failed_setup() {
+  local rc=$?
+  if [[ $rc -ne 0 && "$setup_complete" != true ]]; then
+    local project=${PROJECT:-} app=${APP:-} postgres=${POSTGRES:-} redis=${REDIS:-} provider=${PROVIDER:-}
+    if [[ -z "$project" && -r "$CANARY_ENV" ]]; then
+      project=$(env_value COMPOSE_PROJECT_NAME || true)
+      app=$(env_value EXAPI_CONTAINER_NAME || true)
+      postgres=$(env_value EXAPI_POSTGRES_CONTAINER_NAME || true)
+      redis=$(env_value EXAPI_REDIS_CONTAINER_NAME || true)
+      provider=$(env_value EXAPI_PROVIDER_CONTAINER_NAME || true)
+    fi
+    [[ -z "$app" ]] || docker rm -f "$app" >/dev/null 2>&1 || true
+    [[ -z "$postgres" ]] || docker rm -f "$postgres" >/dev/null 2>&1 || true
+    [[ -z "$redis" ]] || docker rm -f "$redis" >/dev/null 2>&1 || true
+    [[ -z "$provider" ]] || docker rm -f "$provider" >/dev/null 2>&1 || true
+    [[ -z "${secret_volume:-}" ]] || docker volume rm -f "$secret_volume" >/dev/null 2>&1 || true
+    if [[ -n "$project" && "$project" == exapi-syn-* ]]; then
+      docker network rm "${project}_sub2api-network" >/dev/null 2>&1 || true
+      for volume in "${project}_sub2api_data" "${project}_postgres_data" "${project}_redis_data"; do
+        docker volume rm -f "$volume" >/dev/null 2>&1 || true
+      done
+    fi
+    rm -f "$CANARY_ENV" "$REPORT_KEY" "$PROOF_FILE"
+    rm -f "$RUNTIME_DIR/gateway-key" "$RUNTIME_DIR/mock-provider.py"
+    rmdir "$RUNTIME_DIR" >/dev/null 2>&1 || true
+  fi
+  exit "$rc"
+}
+trap cleanup_failed_setup EXIT HUP INT TERM
+
+install -d -o root -g root -m 0700 "$RUNTIME_DIR"
+install -o root -g root -m 0644 "$PROVIDER_SOURCE" "$RUNTIME_DIR/mock-provider.py"
+PROVIDER_SOURCE="$RUNTIME_DIR/mock-provider.py"
 
 python3 "$GENERATOR" "$PRODUCTION_ENV" "$CANARY_ENV" "$IMAGE" "$PROVIDER_IMAGE" "$ROLLOUT_ID"
 chown root:root "$CANARY_ENV"
@@ -66,7 +99,7 @@ compose=(docker compose --project-directory "$SRC" --env-file "$CANARY_ENV" -p "
 COMPOSE_ENV_FILE="$CANARY_ENV" REQUIRE_INTERNAL_NETWORK=true \
   "$SRC/deploy/ops/validate-immutable-compose.sh" --project-directory "$SRC" -p "$PROJECT" "${COMPOSE_FILES[@]}" >/dev/null
 
-config_json=$(mktemp)
+config_json=$(mktemp "$SRC/tmp/synthetic-compose-config.XXXXXX")
 "${compose[@]}" config --format json >"$config_json"
 PROJECT="$PROJECT" APP="$APP" POSTGRES="$POSTGRES" REDIS="$REDIS" PROVIDER="$PROVIDER" \
 IMAGE="$IMAGE" PROVIDER_IMAGE="$PROVIDER_IMAGE" python3 - "$config_json" <<'PY'
@@ -125,7 +158,6 @@ jq -e '.verified == true and .sql_rows_remaining == 0 and .provider_jobs_remaini
 
 secret_volume=$(docker volume create --label "exapi.rollout_id=$ROLLOUT_ID")
 cleanup_secret() { docker volume rm -f "$secret_volume" >/dev/null 2>&1 || true; }
-trap cleanup_secret EXIT
 docker run --rm --network none --entrypoint /bin/sh \
   -v "$REPORT_KEY:/source/report.key:ro" \
   -v "$batch_evidence:/source/batch-cleanup-evidence.json:ro" \
@@ -141,7 +173,7 @@ docker run --rm --network none --entrypoint /bin/sh \
   -v "$secret_volume:/run/exapi-private-cutover:ro" \
   sub2api /app/with-migration-report-key.sh /run/exapi-private-cutover/report.key \
     /app/migrate-private-only \
-    --confirm DROP-SAAS-DATA-KEEP-USER-1 \
+    --confirm "$CONFIRMATION_TOKEN" \
     --no-local-backups \
     --batch-cleanup-evidence-file /run/exapi-private-cutover/batch-cleanup-evidence.json \
     --report-file /app/data/private-migration-report.json
@@ -153,7 +185,7 @@ docker run --rm --network none --entrypoint /bin/sh \
     --report-file /app/data/private-migration-report.json \
     --evidence-file /app/data/private-migration-evidence.json
 cleanup_secret
-trap - EXIT
+secret_volume=
 
 "${compose[@]}" up -d --no-deps sub2api >/dev/null
 for _ in $(seq 1 90); do
@@ -254,7 +286,7 @@ fi
 docker exec "$APP" wget -q -T 3 -O /dev/null http://mock-provider:19091/health || die 'synthetic provider is not reachable from app'
 
 counts=$(docker exec "$POSTGRES" sh -ec 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -AtF "|" -c "SELECT (SELECT private_schema_version FROM exapi_private_state WHERE id=true),(SELECT COUNT(*) FROM users),(SELECT COUNT(*) FROM groups WHERE deleted_at IS NULL),(SELECT COUNT(*) FROM accounts WHERE deleted_at IS NULL),(SELECT COUNT(*) FROM api_keys WHERE deleted_at IS NULL),(SELECT COUNT(*) FROM batch_image_jobs)"')
-[[ "$counts" == '2|1|1|1|1|0' ]] || die "unexpected synthetic database counts: $counts"
+[[ "$counts" == '2|1|2|1|1|0' ]] || die "unexpected synthetic database counts: $counts"
 bindings=$(docker exec "$POSTGRES" sh -ec 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -AtF "|" -v account_id="$1" -v group_id="$2" -c "SELECT (SELECT COUNT(*) FROM account_groups WHERE account_id=:'\''account_id'\'' AND group_id=:'\''group_id'\''),(SELECT COUNT(*) FROM api_keys WHERE group_id=:'\''group_id'\'' AND deleted_at IS NULL)"' sh "$account_id" "$group_id")
 [[ "$bindings" == '1|1' ]] || die "synthetic account/key group bindings are incomplete: $bindings"
 
@@ -331,7 +363,7 @@ document={
   "provider_image":os.environ["PROVIDER_IMAGE"],"production_data":False,
   "canary_only_credentials":True,"production_keyroots_reused":False,
   "compared_sensitive_field_count":len(sensitive),"source_fields_reused":["POSTGRES_IMAGE","REDIS_IMAGE"],
-  "database":{"private_schema_version":2,"users":1,"groups":1,"accounts":1,"active_api_keys":1,
+  "database":{"private_schema_version":2,"users":1,"groups":2,"accounts":1,"active_api_keys":1,
     "batch_jobs":0,"synthetic_group_id":int(os.environ["GROUP_ID"]),
     "synthetic_account_id":int(os.environ["ACCOUNT_ID"]),"account_group_bindings":1},
   "network":{"name":os.environ["NETWORK"],"id":network["Id"],"internal":True,
@@ -350,9 +382,8 @@ PY
 install -o root -g root -m 600 "$proof_tmp" "$PROOF_FILE"
 rm -f "$proof_tmp"
 
-EXAPI_CONTAINER_NAME="$APP" EXAPI_OBSERVATION_CLASS=synthetic-provider \
-  EXAPI_SYNTHETIC_PROVIDER_PROOF_FILE="$PROOF_FILE" /protected/adapters/prove-canary-network >/dev/null
-
+setup_complete=true
+trap - EXIT HUP INT TERM
 printf 'synthetic_canary=ready\n'
 printf 'rollout_id=%s\n' "$ROLLOUT_ID"
 printf 'project=%s\n' "$PROJECT"

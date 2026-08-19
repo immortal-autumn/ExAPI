@@ -13,6 +13,9 @@ if d.get("schema_version")!=1 or d.get("delivery_accepted") is not True:
     raise SystemExit("alert delivery was not accepted")
 if d.get("delivery_kind")!="desktop-notification":
     raise SystemExit("unexpected alert delivery channel")
+target="https://sub2api.research.for-immortal.cn/ready"
+if d.get("target_url")!=target:
+    raise SystemExit("alert proof target mismatch")
 if not isinstance(d.get("monitor_host"),str) or not d["monitor_host"] or d["monitor_host"]==sys.argv[2]:
     raise SystemExit("alert delivery did not originate off-host")
 alert=d.get("last_alert")
@@ -20,12 +23,31 @@ if not isinstance(alert,dict) or alert.get("status")!="unhealthy" or alert.get("
     raise SystemExit("a delivered unhealthy transition is missing")
 if alert.get("alert_sent") is not True or alert.get("delivery_kind")!=d["delivery_kind"]:
     raise SystemExit("alert transition is not bound to the delivery channel")
+if alert.get("target_url")!=target or alert.get("monitor_host")!=d["monitor_host"]:
+    raise SystemExit("alert transition is not bound to the monitor target")
+if alert.get("curl_exit_code")!=0 or alert.get("http_status")!=200:
+    raise SystemExit("alert transition probe result is invalid")
+if not isinstance(alert.get("body_sha256"),str) or len(alert["body_sha256"])!=64:
+    raise SystemExit("alert transition body fingerprint is missing")
+try: alert_time=datetime.datetime.fromisoformat(alert["observed_at"].replace("Z","+00:00"))
+except (KeyError,TypeError,ValueError) as exc: raise SystemExit("alert timestamp is invalid") from exc
+now=datetime.datetime.now(datetime.timezone.utc)
+if alert_time<now-datetime.timedelta(hours=24) or alert_time>now+datetime.timedelta(minutes=2):
+    raise SystemExit("alert delivery is stale or from the future")
 recovery=d.get("last_recovery")
 if os.environ["REQUIRE_RECOVERY"]=="true":
     if not isinstance(recovery,dict) or recovery.get("status")!="healthy" or recovery.get("delivery_exit_code")!=0:
         raise SystemExit("a delivered recovery transition is missing")
     if recovery.get("observed_at","")<=alert.get("observed_at",""):
         raise SystemExit("monitor recovery does not follow the alert")
+    if recovery.get("target_url")!=target or recovery.get("monitor_host")!=d["monitor_host"]:
+        raise SystemExit("recovery transition is not bound to the monitor target")
+    if recovery.get("curl_exit_code")!=0 or recovery.get("http_status")!=200 or recovery.get("alert_sent") is not True:
+        raise SystemExit("recovery transition probe/delivery result is invalid")
+    try: recovery_time=datetime.datetime.fromisoformat(recovery["observed_at"].replace("Z","+00:00"))
+    except (KeyError,TypeError,ValueError) as exc: raise SystemExit("recovery timestamp is invalid") from exc
+    if recovery_time<now-datetime.timedelta(minutes=5) or recovery_time>now+datetime.timedelta(minutes=2):
+        raise SystemExit("recovery delivery is stale or from the future")
 print(json.dumps({"verified":True,"monitor_host":d["monitor_host"],"delivery_kind":d["delivery_kind"],
  "alert_delivered_at":alert["observed_at"],"recovery_required":os.environ["REQUIRE_RECOVERY"]=="true",
  "recovery_delivered_at":recovery.get("observed_at") if isinstance(recovery,dict) else None},sort_keys=True))

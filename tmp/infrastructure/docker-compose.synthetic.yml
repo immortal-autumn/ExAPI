@@ -29,7 +29,7 @@ services:
       - SYNTHETIC_UPSTREAM_KEY=${SYNTHETIC_UPSTREAM_KEY:?SYNTHETIC_UPSTREAM_KEY is required}
       - SYNTHETIC_ROLLOUT_ID=${SYNTHETIC_ROLLOUT_ID:?SYNTHETIC_ROLLOUT_ID is required}
     volumes:
-      - ./tmp/infrastructure/mock-provider.py:/opt/exapi/mock-provider.py:ro
+      - ${SYNTHETIC_PROVIDER_SOURCE:?SYNTHETIC_PROVIDER_SOURCE is required}:/opt/exapi/mock-provider.py:ro
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=8m
     networks:

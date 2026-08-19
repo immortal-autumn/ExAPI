@@ -50,6 +50,7 @@ values = {
     "SYNTHETIC_ROLLOUT_ID": rollout_id,
     "EXAPI_IMAGE": image,
     "SYNTHETIC_PROVIDER_IMAGE": provider_image,
+    "SYNTHETIC_PROVIDER_SOURCE": f"/protected/synthetic-runtime/{rollout_id}/mock-provider.py",
     "SYNTHETIC_PROVIDER_ARM64_DIGEST": "sha256:c95cd47204b8f236725fc8cf94726abe3f32755a062393597efadd9a5d24fbe1",
     "EXAPI_CONTAINER_NAME": f"{project}-app",
     "EXAPI_POSTGRES_CONTAINER_NAME": f"{project}-postgres",

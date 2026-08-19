@@ -16,10 +16,15 @@ if d.get("target_url")!="https://sub2api.research.for-immortal.cn/ready":
 probe=d.get("last_probe")
 if not isinstance(probe,dict) or probe.get("monitor_host")!=d["monitor_host"]:
     raise SystemExit("off-host monitor omitted its latest probe")
+if probe.get("target_url")!=d["target_url"] or probe.get("curl_exit_code")!=0:
+    raise SystemExit("off-host probe is not bound to the configured target")
+if probe.get("status") not in ("healthy","unhealthy") or probe.get("http_status") not in (200,503):
+    raise SystemExit("off-host probe has an invalid readiness result")
 try: observed=datetime.datetime.fromisoformat(probe["observed_at"].replace("Z","+00:00"))
 except (KeyError,TypeError,ValueError) as exc: raise SystemExit("off-host probe timestamp is invalid") from exc
 now=datetime.datetime.now(datetime.timezone.utc)
 if observed<now-datetime.timedelta(minutes=5) or observed>now+datetime.timedelta(minutes=2):
     raise SystemExit("off-host readiness probe is stale or from the future")
-print(json.dumps({"configured":True,"monitor_host":d["monitor_host"],"target_url":d["target_url"],"last_probe_at":probe["observed_at"]},sort_keys=True))
+print(json.dumps({"configured":True,"monitor_host":d["monitor_host"],"target_url":d["target_url"],
+ "last_probe_at":probe["observed_at"],"last_probe_status":probe["status"],"last_http_status":probe["http_status"]},sort_keys=True))
 PY

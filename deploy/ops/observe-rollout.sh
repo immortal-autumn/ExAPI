@@ -121,15 +121,16 @@ if [[ "$OBSERVATION_CLASS" == synthetic-provider ]]; then
 fi
 while (( $(date +%s) - start_epoch < duration )); do
   ready_checks=$((ready_checks + 1))
+  probe_request_id="rollout-$rollout_id-ready-$ready_checks"
   headers="$OPS_TMP_DIR/ready.headers"
   body="$OPS_TMP_DIR/ready.json"
   rm -f "$headers" "$body"
   set +e
-  curl_meta=$(curl --fail --silent --show-error --max-time 10 -D "$headers" -o "$body" \
+  curl_meta=$(curl --fail --silent --show-error --max-time 10 -H "X-Request-Id: $probe_request_id" -D "$headers" -o "$body" \
     -w '%{http_code}|%{time_total}' "${TARGET_BASE_URL%/}/ready")
   curl_rc=$?
   set -e
-  if ! PROBE_EPOCH="$(date +%s)" CURL_RC="$curl_rc" CURL_META="$curl_meta" \
+  if ! PROBE_EPOCH="$(date +%s)" PROBE_REQUEST_ID="$probe_request_id" CURL_RC="$curl_rc" CURL_META="$curl_meta" \
     python3 - "$headers" "$body" "$probe_trace" <<'PY'
 import datetime, hashlib, json, os, pathlib, sys
 
@@ -152,6 +153,7 @@ success=curl_rc==0 and status_code==200 and content_type_json and json_object
 epoch=int(os.environ["PROBE_EPOCH"])
 entry={
     "epoch":epoch,"observed_at":datetime.datetime.fromtimestamp(epoch,datetime.timezone.utc).isoformat().replace("+00:00","Z"),
+    "request_id":os.environ["PROBE_REQUEST_ID"],
     "curl_exit_code":curl_rc,"http_status":status_code,"latency_ms":round(latency_ms,3),
     "content_type_json":content_type_json,"json_object":json_object,
     "body_sha256":hashlib.sha256(body).hexdigest(),"success":success,

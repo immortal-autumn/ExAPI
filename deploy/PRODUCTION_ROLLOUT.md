@@ -384,11 +384,18 @@ synthetic canaries each run for at least 30 minutes; readiness is checked every
 
 ```bash
 export OBSERVATION_CLASS=restored-data # then synthetic-provider
-export TARGET_BASE_URL=http://127.0.0.1:18080
+# Use the exact IP captured from docker inspect; the observer rejects an
+# unrelated loopback/public URL even when it happens to be healthy.
+export TARGET_BASE_URL=http://RESTORED_CONTAINER_IP:8080
 export CONTAINER_NAME=exapi-canary-restored
 export IMAGE_DIGEST=${EXAPI_IMAGE##*@}
 export METRICS_COMMAND=/protected/adapters/query-rollout-metrics
-export NETWORK_PROOF_COMMAND=/protected/adapters/prove-canary-network
+export NETWORK_PROOF_COMMAND=/protected/adapters/prove-rollout-network
+export EXAPI_RESTORED_POSTGRES_EXPECTED_ID=FULL_RESTORED_POSTGRES_CONTAINER_ID
+export EXAPI_RESTORED_POSTGRES_EXPECTED_DATA_SOURCE=VERIFIED_RESTORED_DATA_MOUNT
+# Synthetic observations additionally require a protected, non-secret-output
+# exercise adapter that makes a provider request inside the observation window.
+# export EXAPI_OBSERVATION_EXERCISE_COMMAND=/protected/adapters/exercise-synthetic-provider
 deploy/ops/observe-rollout.sh
 ```
 
