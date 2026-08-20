@@ -17,8 +17,8 @@ docker pull "$EXAPI_IMAGE"
 docker image inspect "$EXAPI_IMAGE" --format \
   '{{ index .Config.Labels "org.opencontainers.image.revision" }} {{ index .Config.Labels "org.opencontainers.image.source" }} {{ index .Config.Labels "org.opencontainers.image.version" }}'
 gh attestation verify "oci://$EXAPI_IMAGE" \
-  --repo immortal-autumn/Sub2API2Personal \
-  --signer-workflow immortal-autumn/Sub2API2Personal/.github/workflows/release.yml
+  --repo immortal-autumn/ExAPI \
+  --signer-workflow immortal-autumn/ExAPI/.github/workflows/release.yml
 ```
 
 The revision label must equal `REVIEWED_COMMIT`, the source must be this fork,
@@ -99,7 +99,7 @@ the previous versioned environment and Compose file if any gate fails.
 
 ## Links
 
-- [GitHub repository](https://github.com/immortal-autumn/Sub2API2Personal)
-- [GitHub releases](https://github.com/immortal-autumn/Sub2API2Personal/releases)
+- [GitHub repository](https://github.com/immortal-autumn/ExAPI)
+- [GitHub releases](https://github.com/immortal-autumn/ExAPI/releases)
 - [Current project status](../docs/PROJECT_STATUS.md)
 - [Deployment guide](README.md)

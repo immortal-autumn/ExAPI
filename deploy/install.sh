@@ -2,7 +2,7 @@
 #
 # ExAPI Installation Script
 # ExAPI 安装脚本
-# Usage: curl -sSL https://raw.githubusercontent.com/immortal-autumn/Sub2API2Personal/main/deploy/install.sh | bash
+# Usage: curl -sSL https://raw.githubusercontent.com/immortal-autumn/ExAPI/main/deploy/install.sh | bash
 #
 
 set -e
@@ -31,7 +31,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuration
-GITHUB_REPO="immortal-autumn/Sub2API2Personal"
+GITHUB_REPO="immortal-autumn/ExAPI"
 INSTALL_DIR="/opt/sub2api"
 SERVICE_NAME="sub2api"
 SERVICE_USER="sub2api"
@@ -915,7 +915,7 @@ install_service() {
     cat > /etc/systemd/system/sub2api.service << EOF
 [Unit]
 Description=ExAPI - AI API Gateway Platform
-Documentation=https://github.com/immortal-autumn/Sub2API2Personal
+Documentation=https://github.com/immortal-autumn/ExAPI
 After=network.target postgresql.service redis.service
 Wants=postgresql.service redis.service
 

@@ -227,8 +227,8 @@ docker pull "$EXAPI_IMAGE"
 docker image inspect "$EXAPI_IMAGE" --format \
   '{{ index .Config.Labels "org.opencontainers.image.revision" }} {{ index .Config.Labels "org.opencontainers.image.source" }} {{ index .Config.Labels "org.opencontainers.image.version" }}'
 gh attestation verify "oci://$EXAPI_IMAGE" \
-  --repo immortal-autumn/Sub2API2Personal \
-  --signer-workflow immortal-autumn/Sub2API2Personal/.github/workflows/release.yml
+  --repo immortal-autumn/ExAPI \
+  --signer-workflow immortal-autumn/ExAPI/.github/workflows/release.yml
 COMPOSE_ENV_FILE=/protected/exapi-production.env \
   deploy/ops/validate-immutable-compose.sh -f deploy/docker-compose.yml
 ```
@@ -444,7 +444,7 @@ python3 tools/check_rollout_manifest.py tmp/rollouts/ROLLOUT/manifest.json
 export ROLLOUT_MANIFEST=tmp/rollouts/ROLLOUT/manifest.json
 export ROLLOUT_MANIFEST_S3_URI=s3://exapi-rollout-records/ROLLOUT
 export ROLLOUT_MANIFEST_RETENTION_UNTIL=2027-08-05T00:00:00Z
-export COSIGN_CERTIFICATE_IDENTITY_REGEXP='^https://github\.com/immortal-autumn/Sub2API2Personal/\.github/workflows/release\.yml@'
+export COSIGN_CERTIFICATE_IDENTITY_REGEXP='^https://github\.com/immortal-autumn/ExAPI/\.github/workflows/release\.yml@'
 export COSIGN_CERTIFICATE_OIDC_ISSUER=https://token.actions.githubusercontent.com
 deploy/ops/publish-rollout-manifest.sh
 ```

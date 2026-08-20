@@ -317,14 +317,14 @@ observation = {
 }
 manifest = {
     "schema_version": 1, "rollout_id": "rollout-test", "generated_at": "2026-08-05T12:00:00Z",
-    "source": {"commit": commit, "repository": "immortal-autumn/Sub2API2Personal", "workflow": ".github/workflows/release.yml"},
+    "source": {"commit": commit, "repository": "immortal-autumn/ExAPI", "workflow": ".github/workflows/release.yml"},
     "artifact": {
         "image": "ghcr.io/immortal-autumn/sub2api2personal@" + digest,
         "manifest_digest": digest,
         "platform_digests": [{"platform": "linux/amd64", "digest": "sha256:" + "c" * 64}],
-        "oci_labels": {"revision": commit, "source": "https://github.com/immortal-autumn/Sub2API2Personal", "version": "1.0.0"},
+        "oci_labels": {"revision": commit, "source": "https://github.com/immortal-autumn/ExAPI", "version": "1.0.0"},
         "sbom": {"format": "SPDX-JSON", "sha256": "sha256:" + "d" * 64},
-        "provenance": {"verified": True, "issuer": "https://token.actions.githubusercontent.com", "repository": "immortal-autumn/Sub2API2Personal", "workflow": ".github/workflows/release.yml", "subject_digest": digest},
+        "provenance": {"verified": True, "issuer": "https://token.actions.githubusercontent.com", "repository": "immortal-autumn/ExAPI", "workflow": ".github/workflows/release.yml", "subject_digest": digest},
     },
     "recovery": {
         "logical": {

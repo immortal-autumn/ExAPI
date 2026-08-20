@@ -15,12 +15,12 @@ from typing import Any
 
 SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
-CANONICAL_REPOSITORY = "immortal-autumn/Sub2API2Personal"
+CANONICAL_REPOSITORY = "immortal-autumn/ExAPI"
 CANONICAL_WORKFLOW = ".github/workflows/release.yml"
 CANONICAL_OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 CANONICAL_IMAGE_REPOSITORY = "ghcr.io/immortal-autumn/sub2api2personal"
 CANONICAL_WORKFLOW_IDENTITY_REGEXP = (
-    r"^https://github\.com/immortal-autumn/Sub2API2Personal/\.github/workflows/release\.yml@"
+    r"^https://github\.com/immortal-autumn/ExAPI/\.github/workflows/release\.yml@"
 )
 
 

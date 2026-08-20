@@ -4,7 +4,7 @@
   "generated_at": "REPLACE_RFC3339_UTC",
   "source": {
     "commit": "REPLACE_40_HEX_COMMIT",
-    "repository": "immortal-autumn/Sub2API2Personal",
+    "repository": "immortal-autumn/ExAPI",
     "workflow": ".github/workflows/release.yml"
   },
   "artifact": {
@@ -15,14 +15,14 @@
     ],
     "oci_labels": {
       "revision": "REPLACE_40_HEX_COMMIT",
-      "source": "https://github.com/immortal-autumn/Sub2API2Personal",
+      "source": "https://github.com/immortal-autumn/ExAPI",
       "version": "REPLACE"
     },
     "sbom": {"format": "SPDX-JSON", "sha256": "sha256:REPLACE"},
     "provenance": {
       "verified": false,
       "issuer": "https://token.actions.githubusercontent.com",
-      "repository": "immortal-autumn/Sub2API2Personal",
+      "repository": "immortal-autumn/ExAPI",
       "workflow": ".github/workflows/release.yml",
       "subject_digest": "sha256:REPLACE"
     }

@@ -33,7 +33,7 @@ PY
 )
 [[ "$oci_image" =~ @sha256:[0-9a-f]{64}$ ]] || die 'manifest artifact image is not an exact OCI digest'
 canonical_oidc_issuer=https://token.actions.githubusercontent.com
-canonical_workflow_identity='^https://github\.com/immortal-autumn/Sub2API2Personal/\.github/workflows/release\.yml@'
+canonical_workflow_identity='^https://github\.com/immortal-autumn/ExAPI/\.github/workflows/release\.yml@'
 cosign verify-attestation \
   --type https://slsa.dev/provenance/v1 \
   --certificate-identity-regexp "$canonical_workflow_identity" \

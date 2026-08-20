@@ -12,13 +12,20 @@ Last reviewed: **2026-08-20 (Europe/London)**
 | Item | Current value |
 |---|---|
 | Product version | `0.2.5` |
+| GitHub repository | `immortal-autumn/ExAPI` |
 | Git tag | `v0.2.5` |
 | Release branch | `revision/exapi-v0.2.1` |
 | Reviewed commit | `14a7c412a17971b160de356baaab7a3555fb90fa` |
 | OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:2fc5b6c06ba8e118302ce00f1778064fd5ac253f46c60d90cffb51c350953cfe` |
-| GitHub release | <https://github.com/immortal-autumn/Sub2API2Personal/releases/tag/v0.2.5> |
-| Release workflow | <https://github.com/immortal-autumn/Sub2API2Personal/actions/runs/32358414952> |
+| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.5> |
+| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/32358414952> |
 | Upstream baseline | Sub2API `v0.1.171`, constrained by `upstream.lock.json` |
+
+The GitHub repository was renamed from `Sub2API2Personal` to `ExAPI` on
+2026-08-20. The existing v0.2.5 GHCR package path remains
+`sub2api2personal` for image and deployment compatibility; future release work
+must keep that compatibility decision explicit or publish a separately
+verified package migration.
 
 The release workflow passed the Go module-tidy check, backend unit and
 integration suites, race detector, frontend tests/type checks/build audit,

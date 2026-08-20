@@ -25,7 +25,7 @@ container --version
 ## Quick Start
 
 ```bash
-git clone https://github.com/immortal-autumn/Sub2API2Personal.git
+git clone https://github.com/immortal-autumn/ExAPI.git
 cd sub2api/deploy
 
 # Creates .env with random PostgreSQL, JWT, and TOTP secrets.

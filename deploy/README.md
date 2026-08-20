@@ -68,7 +68,7 @@ Use the automated preparation script for the easiest setup:
 ```bash
 # Use the exact reviewed tag from docs/PROJECT_STATUS.md.
 EXAPI_RELEASE_TAG=vX.Y.Z
-GITHUB_RAW_URL="https://raw.githubusercontent.com/immortal-autumn/Sub2API2Personal/${EXAPI_RELEASE_TAG}/deploy"
+GITHUB_RAW_URL="https://raw.githubusercontent.com/immortal-autumn/ExAPI/${EXAPI_RELEASE_TAG}/deploy"
 curl -fsSL "${GITHUB_RAW_URL}/docker-deploy.sh" -o docker-deploy.sh
 chmod +x docker-deploy.sh
 GITHUB_RAW_URL="$GITHUB_RAW_URL" ./docker-deploy.sh
@@ -107,7 +107,7 @@ If you prefer manual control:
 ```bash
 # Clone repository
 EXAPI_RELEASE_TAG=vX.Y.Z
-git clone --branch "$EXAPI_RELEASE_TAG" --depth 1 https://github.com/immortal-autumn/Sub2API2Personal.git
+git clone --branch "$EXAPI_RELEASE_TAG" --depth 1 https://github.com/immortal-autumn/ExAPI.git
 cd sub2api/deploy
 
 # Configure environment
@@ -443,7 +443,7 @@ For production servers using systemd.
 
 ```bash
 EXAPI_RELEASE_TAG=vX.Y.Z
-curl -fsSL "https://raw.githubusercontent.com/immortal-autumn/Sub2API2Personal/${EXAPI_RELEASE_TAG}/deploy/install.sh" -o install.sh
+curl -fsSL "https://raw.githubusercontent.com/immortal-autumn/ExAPI/${EXAPI_RELEASE_TAG}/deploy/install.sh" -o install.sh
 sudo bash install.sh
 ```
 
@@ -455,7 +455,7 @@ it up separately from PostgreSQL; losing it makes encrypted roots unrecoverable.
 
 1. Download the reviewed tag identified in
    [`../docs/PROJECT_STATUS.md`](../docs/PROJECT_STATUS.md) from
-   [GitHub Releases](https://github.com/immortal-autumn/Sub2API2Personal/releases)
+   [GitHub Releases](https://github.com/immortal-autumn/ExAPI/releases)
 2. Extract and copy the binary to `/opt/sub2api/`
 3. Create the mandatory root-only keyring file:
    ```bash

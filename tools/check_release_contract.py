@@ -56,7 +56,7 @@ require("deploy/Dockerfile", "corepack prepare pnpm@9.15.9 --activate")
 
 for path in ("Dockerfile", "deploy/Dockerfile", "Dockerfile.goreleaser"):
     require(path, "org.opencontainers.image.title=\"ExAPI\"")
-    require(path, "org.opencontainers.image.source=\"https://github.com/immortal-autumn/Sub2API2Personal\"")
+    require(path, "org.opencontainers.image.source=\"https://github.com/immortal-autumn/ExAPI\"")
     require(path, "http://localhost:${SERVER_PORT:-8080}/ready")
     require(path, "/app/migrate-private-only")
     require(path, "/app/verify-private-cutover-report")
@@ -239,7 +239,7 @@ require("deploy/ops/observe-rollout.sh", "minimum_seconds=3600")
 require("deploy/ops/publish-rollout-manifest.sh", "cosign")
 require("deploy/ops/publish-rollout-manifest.sh", "cosign verify-attestation")
 require("deploy/ops/publish-rollout-manifest.sh", "oci-provenance-verification.json")
-require("deploy/ops/publish-rollout-manifest.sh", "immortal-autumn/Sub2API2Personal/\\.github/workflows/release\\.yml@")
+require("deploy/ops/publish-rollout-manifest.sh", "immortal-autumn/ExAPI/\\.github/workflows/release\\.yml@")
 require("deploy/ops/rollout-manifest.example.json", '"independent_restore_paths": false')
 require("deploy/ops/rollout-manifest.example.json", '"postgres_volume": "REPLACE_VERIFIED_EXTERNAL_POSTGRES_VOLUME"')
 
