@@ -63,6 +63,40 @@ func isOpenAIImageModel(model string) bool {
 	return strings.HasPrefix(strings.ToLower(model), "gpt-image-")
 }
 
+func resolveAccountTestProbeModel(account *Account, modelID, mode string) string {
+	model := strings.TrimSpace(modelID)
+	if model == "" {
+		switch {
+		case account != nil && account.IsOpenAI():
+			model = openai.DefaultTestModel
+		case account != nil && account.IsGemini():
+			model = geminicli.DefaultTestModel
+		case account != nil && account.Platform == PlatformGrok:
+			model = grokDefaultResponsesModel
+		case account != nil && account.Platform == PlatformAntigravity:
+			model = "claude-sonnet-4-5"
+		default:
+			model = claude.DefaultTestModel
+		}
+	}
+	if account == nil {
+		return model
+	}
+	if account.IsOpenAI() {
+		model = account.GetMappedModel(model)
+		if normalizeAccountTestMode(mode) == AccountTestModeCompact {
+			model = resolveOpenAICompactForwardModel(account, model)
+		}
+	} else if account.IsGemini() && (account.Type == AccountTypeAPIKey || account.Type == AccountTypeServiceAccount) {
+		if mapped, ok := account.GetModelMapping()[model]; ok {
+			model = mapped
+		}
+	} else if account.Platform == PlatformGrok || account.Platform == PlatformAntigravity || account.Type == AccountTypeAPIKey {
+		model = account.GetMappedModel(model)
+	}
+	return model
+}
+
 // AccountTestService handles account testing operations
 type AccountTestService struct {
 	accountRepo               AccountRepository
@@ -178,6 +212,10 @@ func createTestPayload(modelID string) (map[string]any, error) {
 // modelID is optional - if empty, defaults to claude.DefaultTestModel
 // mode is optional - "compact" routes OpenAI accounts to the /responses/compact probe path
 func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int64, modelID string, prompt string, mode string) error {
+	return s.testAccountConnection(c, accountID, modelID, prompt, mode, true)
+}
+
+func (s *AccountTestService) testAccountConnection(c *gin.Context, accountID int64, modelID string, prompt string, mode string, persistManualProbe bool) error {
 	ctx := c.Request.Context()
 
 	// Get account
@@ -197,27 +235,33 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 		s.sendEvent(c, TestEvent{Type: "test_start", Model: testModelID})
 		s.sendEvent(c, TestEvent{Type: "content", Text: "Synthetic Anthropic OAuth account is healthy and interactive."})
 		s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
+		if persistManualProbe {
+			s.persistAccountTestProbe(ctx, account, testModelID, nil)
+		}
 		return nil
 	}
+	probeModelID := resolveAccountTestProbeModel(account, modelID, mode)
 
-	// Route to platform-specific test method
+	// Route to platform-specific test method. Persist a separate probe snapshot
+	// after the request completes so a failed provider test is visible in the
+	// account table without changing scheduler eligibility.
+	var testErr error
 	if account.IsOpenAI() {
-		return s.testOpenAIAccountConnection(c, account, modelID, prompt, normalizeAccountTestMode(mode))
+		testErr = s.testOpenAIAccountConnection(c, account, modelID, prompt, normalizeAccountTestMode(mode))
+	} else if account.IsGemini() {
+		testErr = s.testGeminiAccountConnection(c, account, modelID, prompt)
+	} else if account.Platform == PlatformGrok {
+		testErr = s.testGrokAccountConnection(c, account, modelID)
+	} else if account.Platform == PlatformAntigravity {
+		testErr = s.routeAntigravityTest(c, account, modelID, prompt)
+	} else {
+		testErr = s.testClaudeAccountConnection(c, account, modelID)
 	}
 
-	if account.IsGemini() {
-		return s.testGeminiAccountConnection(c, account, modelID, prompt)
+	if persistManualProbe {
+		s.persistAccountTestProbe(ctx, account, probeModelID, testErr)
 	}
-
-	if account.Platform == PlatformGrok {
-		return s.testGrokAccountConnection(c, account, modelID)
-	}
-
-	if account.Platform == PlatformAntigravity {
-		return s.routeAntigravityTest(c, account, modelID, prompt)
-	}
-
-	return s.testClaudeAccountConnection(c, account, modelID)
+	return testErr
 }
 
 // testClaudeAccountConnection tests an Anthropic Claude account's connection
@@ -1949,7 +1993,9 @@ func (s *AccountTestService) RunTestBackground(ctx context.Context, accountID in
 	ginCtx, _ := gin.CreateTestContext(w)
 	ginCtx.Request = (&http.Request{}).WithContext(ctx)
 
-	testErr := s.TestAccountConnection(ginCtx, accountID, modelID, "", AccountTestModeDefault)
+	// Scheduled/background checks have their own history and must not overwrite
+	// the administrator's latest explicit manual probe badge.
+	testErr := s.testAccountConnection(ginCtx, accountID, modelID, "", AccountTestModeDefault, false)
 
 	finishedAt := time.Now()
 	body := w.Body.String()

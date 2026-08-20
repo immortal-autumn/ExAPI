@@ -188,6 +188,34 @@ describe('AccountStatusIndicator', () => {
     expect(wrapper.text()).toContain('admin.accounts.status.creditsExhausted')
   })
 
+  it('latest provider probe failure is visible without changing active scheduler status', () => {
+    const wrapper = mount(AccountStatusIndicator, {
+      props: {
+        account: makeAccount({
+          extra: {
+            account_test_probe: {
+              status: 'failed',
+              checked_at: '2026-08-19T16:00:00Z',
+              http_status: 429,
+              reason: 'quota_exhausted'
+            }
+          }
+        })
+      },
+      global: {
+        stubs: {
+          Icon: true
+        }
+      }
+    })
+
+    expect(wrapper.text()).toContain('admin.accounts.status.probeFailed')
+    expect(wrapper.text()).toContain('admin.accounts.status.probeQuotaExhausted')
+    expect(wrapper.text()).toContain('admin.accounts.status.active')
+    expect(wrapper.get('button[aria-label*="admin.accounts.status.probeFailed"]').exists()).toBe(true)
+    expect(wrapper.get('[role="tooltip"]').classes()).toContain('group-focus-within/probe:opacity-100')
+  })
+
   it('模型限流 + overages 启用 + AICredits key 生效 → 普通限流样式（积分耗尽，无 ⚡）', () => {
     const wrapper = mount(AccountStatusIndicator, {
       props: {

@@ -335,6 +335,28 @@
         💳 {{ t('admin.accounts.aiCreditsBalance') }}: {{ aiCreditsDisplay }}
       </div>
       <div v-else class="text-xs text-gray-400">-</div>
+      <button
+        type="button"
+        class="mt-1 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+        :disabled="activeQueryLoading"
+        @click="loadActiveUsage"
+      >
+        <svg
+          class="h-2.5 w-2.5"
+          :class="{ 'animate-spin': activeQueryLoading }"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+          />
+        </svg>
+        {{ t('admin.accounts.usageWindow.activeQuery') }}
+      </button>
     </template>
 
     <!-- Grok OAuth accounts: passive xAI quota headers + local ExAPI usage -->
@@ -1273,7 +1295,7 @@ const isAnthropicOAuthOrSetupToken = computed(() => {
   return props.account.platform === 'anthropic' && (props.account.type === 'oauth' || props.account.type === 'setup-token')
 })
 
-const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?: boolean }) => {
+const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?: boolean; force?: boolean }) => {
   if (!shouldFetchUsage.value) return
 
   // Check cache
@@ -1290,8 +1312,8 @@ const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?
   error.value = null
 
   try {
-    const fetchFn = () => options?.source
-      ? adminAPI.accounts.getUsage(props.account.id, options.source)
+    const fetchFn = () => options?.source || options?.force
+      ? adminAPI.accounts.getUsage(props.account.id, options?.source, options?.force)
       : adminAPI.accounts.getUsage(props.account.id)
     const result = await enqueueUsageRequest(props.account, fetchFn)
     if (!unmounted.value) {
@@ -1554,7 +1576,8 @@ watch(
 
     const source = isAnthropicOAuthOrSetupToken.value ? 'passive' : undefined
     _usageCache.delete(props.account.id)
-    loadUsage({ source, bypassCache: true }).catch((e) => {
+    const force = props.account.platform === 'antigravity'
+    loadUsage({ source, bypassCache: true, force }).catch((e) => {
       console.error('Failed to refresh usage after manual refresh:', e)
     })
   }

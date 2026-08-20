@@ -145,6 +145,11 @@ export default {
         modelCreditOveragesUntil: '{model} using AI Credits until {time}',
         creditsExhausted: 'Credits Exhausted',
         creditsExhaustedUntil: 'AI Credits exhausted, expected recovery at {time}',
+        probeFailed: 'Probe Failed',
+        probeQuotaExhausted: 'The provider reported quota/resource exhaustion.',
+        probeAuthenticationFailed: 'The provider rejected the account credentials.',
+        probeRequestFailed: 'The provider connectivity probe failed.',
+        probeLastChecked: 'last checked {time}',
         overloadedUntil: 'Overloaded until {time}',
         viewTempUnschedDetails: 'View temp unschedulable details'
       },

@@ -348,6 +348,11 @@ export default {
         modelCreditOveragesUntil: '{model} 正在使用 AI Credits，至 {time}',
         creditsExhausted: '积分已用尽',
         creditsExhaustedUntil: 'AI Credits 已用尽，预计 {time} 恢复',
+        probeFailed: '探测失败',
+        probeQuotaExhausted: '上游报告额度或资源已耗尽。',
+        probeAuthenticationFailed: '上游拒绝了账号凭据。',
+        probeRequestFailed: '上游连通性探测失败。',
+        probeLastChecked: '最近探测：{time}',
         overloadedUntil: '负载过重，重置时间：{time}',
         viewTempUnschedDetails: '查看临时不可调度详情'
       },

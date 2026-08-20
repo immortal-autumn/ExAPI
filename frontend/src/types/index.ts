@@ -1090,6 +1090,13 @@ export interface Account {
   ollama_cloud_usage?: OllamaCloudUsageState
   // Extra fields including Codex usage, OpenAI compact capability, and model-level rate limits.
   extra?: (CodexUsageSnapshot & OpenAICompactState & {
+    account_test_probe?: {
+      status?: 'success' | 'failed'
+      checked_at?: string
+      model?: string
+      http_status?: number
+      reason?: 'ok' | 'quota_exhausted' | 'authentication_failed' | 'request_failed' | string
+    }
     model_rate_limits?: Record<string, { rate_limited_at: string; rate_limit_reset_at: string }>
     antigravity_credits_overages?: Record<string, { activated_at: string; active_until: string }>
     upstream_billing_probe_enabled?: boolean

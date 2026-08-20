@@ -368,7 +368,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 			extra = mergeMap(existing.Extra, extra)
 			credentials = mergeMap(existing.Credentials, credentials)
 		}
-		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformAnthropic, targetType, credentials, extra)
+		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformAnthropic, targetType, credentials, extra, proxyID)
 
 		if existing == nil {
 			if !shouldCreateAccount(src.ID, selectedSet) {
@@ -504,7 +504,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 			extra = mergeMap(existing.Extra, extra)
 			credentials = mergeMap(existing.Credentials, credentials)
 		}
-		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformAnthropic, AccountTypeAPIKey, credentials, extra)
+		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformAnthropic, AccountTypeAPIKey, credentials, extra, proxyID)
 
 		if existing == nil {
 			if !shouldCreateAccount(src.ID, selectedSet) {
@@ -659,7 +659,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		if existing != nil {
 			credentials = mergeMap(existing.Credentials, credentials)
 		}
-		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformOpenAI, AccountTypeOAuth, credentials, extra)
+		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformOpenAI, AccountTypeOAuth, credentials, extra, proxyID)
 
 		if existing == nil {
 			if !shouldCreateAccount(src.ID, selectedSet) {
@@ -810,7 +810,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		if existing != nil {
 			credentials = mergeMap(existing.Credentials, credentials)
 		}
-		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformOpenAI, AccountTypeAPIKey, credentials, extra)
+		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformOpenAI, AccountTypeAPIKey, credentials, extra, proxyID)
 
 		if existing == nil {
 			if !shouldCreateAccount(src.ID, selectedSet) {
@@ -940,7 +940,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 			extra = mergeMap(existing.Extra, extra)
 			credentials = mergeMap(existing.Credentials, credentials)
 		}
-		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformGemini, AccountTypeOAuth, credentials, extra)
+		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformGemini, AccountTypeOAuth, credentials, extra, proxyID)
 
 		if existing == nil {
 			if !shouldCreateAccount(src.ID, selectedSet) {
@@ -1070,7 +1070,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 			extra = mergeMap(existing.Extra, extra)
 			credentials = mergeMap(existing.Credentials, credentials)
 		}
-		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformGemini, AccountTypeAPIKey, credentials, extra)
+		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformGemini, AccountTypeAPIKey, credentials, extra, proxyID)
 
 		if existing == nil {
 			if !shouldCreateAccount(src.ID, selectedSet) {
@@ -1159,11 +1159,13 @@ func reconcileCRSUpstreamBillingProbeExtra(
 	targetPlatform, targetType string,
 	targetCredentials map[string]any,
 	extra map[string]any,
+	targetProxyID ...*int64,
 ) {
 	for _, key := range []string{
 		UpstreamBillingProbeEnabledExtraKey,
 		UpstreamBillingRateSyncEnabledExtraKey,
 		UpstreamBillingProbeExtraKey,
+		AccountTestProbeExtraKey,
 		OllamaCloudUsageSessionExtraKey,
 		OllamaCloudUsageAutoRefreshExtraKey,
 		OllamaCloudUsageSnapshotExtraKey,
@@ -1174,6 +1176,9 @@ func reconcileCRSUpstreamBillingProbeExtra(
 		return
 	}
 	target := &Account{Platform: targetPlatform, Type: targetType, Credentials: targetCredentials}
+	if len(targetProxyID) > 0 {
+		target.ProxyID = targetProxyID[0]
+	}
 	if IsUpstreamBillingProbeIdentity(targetPlatform, targetType) {
 		probeEnabled := false
 		if enabled, ok := existing.Extra[UpstreamBillingProbeEnabledExtraKey]; ok {
@@ -1187,6 +1192,11 @@ func reconcileCRSUpstreamBillingProbeExtra(
 			if snapshot, ok := existing.Extra[UpstreamBillingProbeExtraKey]; ok {
 				extra[UpstreamBillingProbeExtraKey] = snapshot
 			}
+		}
+	}
+	if reflect.DeepEqual(accountTestProbeSyncIdentity(existing), accountTestProbeSyncIdentity(target)) {
+		if snapshot, ok := existing.Extra[AccountTestProbeExtraKey]; ok {
+			extra[AccountTestProbeExtraKey] = snapshot
 		}
 	}
 	if IsOllamaCloudUsageAccount(existing) && IsOllamaCloudUsageAccount(target) &&

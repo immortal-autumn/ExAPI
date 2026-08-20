@@ -2016,7 +2016,15 @@ const handleExportData = async () => {
   }
 }
 const accountExportStepUp = useStepUp()
-const closeTestModal = () => { showTest.value = false; testingAcc.value = null }
+const closeTestModal = () => {
+  showTest.value = false
+  testingAcc.value = null
+  // The test persists a provider probe snapshot independently of scheduler
+  // status. Refresh the row when the modal closes so the new badge is visible.
+  void reload().catch((error) => {
+    appStore.showError(extractApiErrorMessage(error, t('admin.accounts.failedToLoad')))
+  })
+}
 const closeStatsModal = () => { showStats.value = false; statsAcc.value = null }
 const closeReAuthModal = () => { showReAuth.value = false; reAuthAcc.value = null }
 const handleTest = (a: Account) => { testingAcc.value = a; showTest.value = true }

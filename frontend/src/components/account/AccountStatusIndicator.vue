@@ -28,6 +28,23 @@
       </span>
     </template>
 
+    <!-- Manual provider probe state is separate from scheduler eligibility. -->
+    <div v-if="hasProbeFailure" class="group/probe relative">
+      <button
+        type="button"
+        class="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-1 dark:bg-amber-900/30 dark:text-amber-400 dark:focus:ring-offset-gray-900"
+        :aria-label="`${t('admin.accounts.status.probeFailed')}: ${probeReasonText}`"
+      >
+        <Icon name="exclamationTriangle" size="xs" :stroke-width="2" />
+        {{ t('admin.accounts.status.probeFailed') }}
+      </button>
+      <div role="tooltip" class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-60 -translate-x-1/2 whitespace-normal rounded bg-gray-900 px-3 py-2 text-center text-xs leading-relaxed text-white opacity-0 transition-opacity group-hover/probe:opacity-100 group-focus-within/probe:opacity-100 dark:bg-gray-700">
+        {{ probeReasonText }}
+        <span v-if="probeCheckedAt"> · {{ t('admin.accounts.status.probeLastChecked', { time: formatDateTime(probeCheckedAt) }) }}</span>
+        <div class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></div>
+      </div>
+    </div>
+
     <!-- Error Info Indicator -->
     <div v-if="hasError && account.error_message" class="group/error relative">
       <svg
@@ -275,6 +292,20 @@ const isTempUnschedulable = computed(() => {
 // Computed: has error status
 const hasError = computed(() => {
   return props.account.status === 'error'
+})
+
+const accountTestProbe = computed(() => props.account.extra?.account_test_probe)
+const hasProbeFailure = computed(() => accountTestProbe.value?.status === 'failed')
+const probeCheckedAt = computed(() => accountTestProbe.value?.checked_at || '')
+const probeReasonText = computed(() => {
+  switch (accountTestProbe.value?.reason) {
+    case 'quota_exhausted':
+      return t('admin.accounts.status.probeQuotaExhausted')
+    case 'authentication_failed':
+      return t('admin.accounts.status.probeAuthenticationFailed')
+    default:
+      return t('admin.accounts.status.probeRequestFailed')
+  }
 })
 
 const isQuotaExceeded = computed(() => {

@@ -56,6 +56,8 @@ type accountRepository struct {
 	schedulerCache service.SchedulerCache
 }
 
+var _ service.AccountTestProbeRepository = (*accountRepository)(nil)
+
 var schedulerNeutralExtraKeyPrefixes = []string{
 	"codex_primary_",
 	"codex_secondary_",
@@ -732,7 +734,7 @@ func (r *accountRepository) lockAndMergeAccountProbeExtra(ctx context.Context, c
 }
 
 func (r *accountRepository) UpdateCredentials(ctx context.Context, id int64, credentials map[string]any) error {
-	plainPayload, err := json.Marshal(normalizeJSONMap(credentials))
+	plainPayload, err := json.Marshal(normalizeJSONMap(service.AccountTestProbeCredentialIdentity(credentials)))
 	if err != nil {
 		return err
 	}
@@ -740,7 +742,7 @@ func (r *accountRepository) UpdateCredentials(ctx context.Context, id int64, cre
 	if err != nil {
 		return err
 	}
-	currentPayload, err := json.Marshal(normalizeJSONMap(current.Credentials))
+	currentPayload, err := json.Marshal(normalizeJSONMap(service.AccountTestProbeCredentialIdentity(current.Credentials)))
 	if err != nil {
 		return err
 	}
@@ -783,19 +785,22 @@ func (r *accountRepository) UpdateCredentials(ctx context.Context, id int64, cre
 		UPDATE accounts
 		SET
 			credentials = $1::jsonb,
-			extra = CASE
+				extra = CASE
 				WHEN $4
-				THEN (CASE
+					THEN (CASE
 						WHEN platform = 'openai' THEN COALESCE(extra, '{}'::jsonb) - 'upstream_billing_probe'
 						ELSE COALESCE(extra, '{}'::jsonb)
 					END)
+					- 'account_test_probe'
 					- 'ollama_cloud_usage_session'
 					- 'ollama_cloud_usage_auto_refresh'
 					- 'ollama_cloud_usage_snapshot'
 				WHEN platform = 'openai'
 					AND type = 'apikey'
 					AND $3
-				THEN COALESCE(extra, '{}'::jsonb) - 'upstream_billing_probe'
+				THEN COALESCE(extra, '{}'::jsonb) - 'upstream_billing_probe' - 'account_test_probe'
+				WHEN $3
+				THEN COALESCE(extra, '{}'::jsonb) - 'account_test_probe'
 				ELSE extra
 			END,
 			updated_at = NOW()
@@ -2528,6 +2533,104 @@ func (r *accountRepository) UpdateExtra(ctx context.Context, id int64, updates m
 	return nil
 }
 
+// UpdateAccountTestProbe stores the latest manual connectivity result only if
+// the credentials and outbound routing identity used by the test are still
+// current. This prevents an in-flight test from restoring stale state after a
+// concurrent reauthorization, proxy edit, or account-type change.
+func (r *accountRepository) UpdateAccountTestProbe(ctx context.Context, expected *service.Account, snapshot map[string]any) error {
+	if expected == nil || snapshot == nil {
+		return service.ErrAccountNilInput
+	}
+	if r == nil || r.protector == nil {
+		return errors.New("data-encryption keyring is required for account credential comparison")
+	}
+	if dbent.TxFromContext(ctx) == nil {
+		tx, err := r.client.Tx(ctx)
+		if errors.Is(err, dbent.ErrTxStarted) {
+			return r.updateAccountTestProbeInTx(ctx, expected, snapshot)
+		}
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback() }()
+
+		if err := r.updateAccountTestProbeInTx(dbent.NewTxContext(ctx, tx), expected, snapshot); err != nil {
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		r.syncSchedulerAccountSnapshot(ctx, expected.ID)
+		return nil
+	}
+	return r.updateAccountTestProbeInTx(ctx, expected, snapshot)
+}
+
+func (r *accountRepository) updateAccountTestProbeInTx(ctx context.Context, expected *service.Account, snapshot map[string]any) error {
+	client := clientFromContext(ctx, r.client)
+	// Lock the proxy first, matching proxyRepository's proxy -> account lock
+	// order and preventing an account/proxy deadlock during concurrent edits.
+	proxyMatches, err := lockAndMatchProbeProxyIdentity(ctx, client, expected)
+	if err != nil {
+		return err
+	}
+	if !proxyMatches {
+		return service.ErrAccountTestProbeIdentityChanged
+	}
+	storedCredentials, found, err := loadLockedAccountCredentials(ctx, client, expected.ID)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return service.ErrAccountTestProbeIdentityChanged
+	}
+	currentCredentials, _, err := r.protector.openLegacy(expected.ID, storedCredentials)
+	if err != nil {
+		return err
+	}
+	credentialsMatch, err := normalizedCredentialMapsEqual(
+		service.AccountTestProbeCredentialIdentity(currentCredentials),
+		service.AccountTestProbeCredentialIdentity(expected.Credentials),
+	)
+	if err != nil {
+		return err
+	}
+	if !credentialsMatch {
+		return service.ErrAccountTestProbeIdentityChanged
+	}
+
+	payload, err := json.Marshal(map[string]any{service.AccountTestProbeExtraKey: snapshot})
+	if err != nil {
+		return err
+	}
+	var proxyID any
+	if expected.ProxyID != nil {
+		proxyID = *expected.ProxyID
+	}
+
+	result, err := client.ExecContext(ctx, `
+		UPDATE accounts
+		SET extra = COALESCE(extra, '{}'::jsonb) || $1::jsonb,
+			updated_at = NOW()
+		WHERE id = $2
+			AND platform = $3
+			AND type = $4
+			AND proxy_id IS NOT DISTINCT FROM $5
+			AND deleted_at IS NULL
+	`, string(payload), expected.ID, expected.Platform, expected.Type, proxyID)
+	if err != nil {
+		return err
+	}
+	applied, err := rowsAffected(result)
+	if err != nil {
+		return err
+	}
+	if !applied {
+		return service.ErrAccountTestProbeIdentityChanged
+	}
+	return nil
+}
+
 // UpdateUpstreamBillingProbeSnapshot stores a probe result only while the
 // network identity used by that probe is still current.
 func (r *accountRepository) UpdateUpstreamBillingProbeSnapshot(
@@ -2666,7 +2769,7 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 	return enqueueSchedulerOutbox(ctx, client, service.SchedulerOutboxEventAccountChanged, &account.ID, nil, nil)
 }
 
-func lockAndMatchProbeProxyIdentity(ctx context.Context, client *dbent.Client, account *service.Account) (bool, error) {
+func lockAndMatchProbeProxyIdentity(ctx context.Context, client sqlExecutor, account *service.Account) (bool, error) {
 	if account.ProxyID == nil {
 		return true, nil
 	}
@@ -2836,6 +2939,7 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 	}
 	// JSONB 需要合并而非覆盖，使用 raw SQL 保持旧行为。
 	ollamaGroupIdentityChangedIDs := make([]int64, 0, len(ids))
+	accountTestProbeIdentityChanged := len(updates.Credentials) > 0 || updates.ProxyID != nil
 	if len(updates.Credentials) > 0 {
 		accounts, err := r.GetByIDs(ctx, ids)
 		if err != nil {
@@ -2882,7 +2986,7 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 			setClauses = append(setClauses, "credentials = CASE id "+joinClauses(caseParts, " ")+" ELSE credentials END")
 		}
 	}
-	if len(updates.Extra) > 0 || len(ollamaGroupIdentityChangedIDs) > 0 || ollamaProxyIdentityChanged != "" {
+	if len(updates.Extra) > 0 || len(ollamaGroupIdentityChangedIDs) > 0 || ollamaProxyIdentityChanged != "" || accountTestProbeIdentityChanged {
 		extraExpression := "COALESCE(extra, '{}'::jsonb)"
 		if len(updates.Extra) > 0 {
 			payload, err := json.Marshal(updates.Extra)
@@ -2898,6 +3002,9 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 			if ollamaCloudUsageSnapshotClearRequested(updates.Extra) {
 				extraExpression = "(" + extraExpression + ") - 'ollama_cloud_usage_snapshot'"
 			}
+		}
+		if accountTestProbeIdentityChanged {
+			extraExpression = "(" + extraExpression + ") - 'account_test_probe'"
 		}
 
 		eligibleAccount := "platform IN ('openai', 'anthropic') AND type = 'apikey'"

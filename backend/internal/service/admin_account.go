@@ -121,6 +121,7 @@ var duplicateAccountDiscardedExtraKeys = map[string]struct{}{
 	"openai_compact_checked_at":              {},
 	"openai_compact_last_status":             {},
 	"openai_compact_last_error":              {},
+	AccountTestProbeExtraKey:                 {},
 	"antigravity_credits_overages":           {},
 	"antigravity_force_token_refresh":        {},
 	"antigravity_force_token_refresh_at":     {},
@@ -457,6 +458,7 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
 	delete(accountExtra, UpstreamBillingProbeEnabledExtraKey)
 	delete(accountExtra, UpstreamBillingRateSyncEnabledExtraKey)
 	delete(accountExtra, UpstreamBillingProbeExtraKey)
+	delete(accountExtra, AccountTestProbeExtraKey)
 	delete(accountExtra, OllamaCloudUsageSessionExtraKey)
 	delete(accountExtra, OllamaCloudUsageAutoRefreshExtraKey)
 	delete(accountExtra, OllamaCloudUsageSnapshotExtraKey)
@@ -612,6 +614,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		}
 	}
 	previousProbeIdentity := upstreamBillingProbeIdentity(account)
+	previousAccountTestProbeIdentity := accountTestProbeIdentity(account)
 	previousOllamaUsageIdentity := ollamaCloudUsageIdentity(account)
 	// 安全/身份不变量(影子账号):通用更新路径被 edit/re-auth/refresh/batch 共用,
 	// 必须在此守住,否则仅在创建时的保证可被这些路径绕过。
@@ -681,6 +684,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		delete(normalizedExtra, UpstreamBillingProbeEnabledExtraKey)
 		delete(normalizedExtra, UpstreamBillingRateSyncEnabledExtraKey)
 		delete(normalizedExtra, UpstreamBillingProbeExtraKey)
+		delete(normalizedExtra, AccountTestProbeExtraKey)
 		delete(normalizedExtra, OllamaCloudUsageSessionExtraKey)
 		delete(normalizedExtra, OllamaCloudUsageAutoRefreshExtraKey)
 		delete(normalizedExtra, OllamaCloudUsageSnapshotExtraKey)
@@ -695,6 +699,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 			UpstreamBillingProbeEnabledExtraKey,
 			UpstreamBillingRateSyncEnabledExtraKey,
 			UpstreamBillingProbeExtraKey,
+			AccountTestProbeExtraKey,
 			OllamaCloudUsageSessionExtraKey,
 			OllamaCloudUsageAutoRefreshExtraKey,
 			OllamaCloudUsageSnapshotExtraKey,
@@ -768,6 +773,12 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 			delete(account.Extra, UpstreamBillingProbeEnabledExtraKey)
 			delete(account.Extra, UpstreamBillingRateSyncEnabledExtraKey)
 		}
+	}
+	if !reflect.DeepEqual(previousAccountTestProbeIdentity, accountTestProbeIdentity(account)) && account.Extra != nil {
+		// The previous connectivity result no longer describes the edited
+		// credentials, routing, or account type. Leave it absent until the next
+		// explicit test instead of showing a stale success/failure badge.
+		delete(account.Extra, AccountTestProbeExtraKey)
 	}
 	if account.Extra != nil {
 		if !IsOllamaCloudUsageAccount(account) {
@@ -907,6 +918,7 @@ func (s *adminServiceImpl) UpdateAccountExtra(ctx context.Context, id int64, upd
 	delete(updates, UpstreamBillingProbeEnabledExtraKey)
 	delete(updates, UpstreamBillingRateSyncEnabledExtraKey)
 	delete(updates, UpstreamBillingProbeExtraKey)
+	delete(updates, AccountTestProbeExtraKey)
 	delete(updates, OllamaCloudUsageSessionExtraKey)
 	delete(updates, OllamaCloudUsageAutoRefreshExtraKey)
 	delete(updates, OllamaCloudUsageSnapshotExtraKey)
@@ -932,6 +944,7 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	delete(input.Extra, UpstreamBillingProbeEnabledExtraKey)
 	delete(input.Extra, UpstreamBillingRateSyncEnabledExtraKey)
 	delete(input.Extra, UpstreamBillingProbeExtraKey)
+	delete(input.Extra, AccountTestProbeExtraKey)
 	delete(input.Extra, OllamaCloudUsageSessionExtraKey)
 	delete(input.Extra, OllamaCloudUsageAutoRefreshExtraKey)
 	delete(input.Extra, OllamaCloudUsageSnapshotExtraKey)
@@ -1095,6 +1108,12 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 		// next enabled runner cycle probe the new upstream identity immediately.
 		repoUpdates.Extra[UpstreamBillingProbeExtraKey] = nil
 	}
+	if len(input.Credentials) > 0 || input.ProxyID != nil {
+		if repoUpdates.Extra == nil {
+			repoUpdates.Extra = make(map[string]any)
+		}
+		repoUpdates.Extra[AccountTestProbeExtraKey] = nil
+	}
 	if input.Name != "" {
 		repoUpdates.Name = &input.Name
 	}
@@ -1189,6 +1208,22 @@ func upstreamBillingProbeIdentity(account *Account) map[string]any {
 		if value, ok := account.Credentials[key]; ok {
 			identity[key] = value
 		}
+	}
+	return identity
+}
+
+func accountTestProbeIdentity(account *Account) map[string]any {
+	if account == nil {
+		return nil
+	}
+	identity := map[string]any{
+		"platform":    account.Platform,
+		"type":        account.Type,
+		"proxy_id":    nil,
+		"credentials": account.Credentials,
+	}
+	if account.ProxyID != nil {
+		identity["proxy_id"] = *account.ProxyID
 	}
 	return identity
 }

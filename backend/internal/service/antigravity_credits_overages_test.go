@@ -21,6 +21,11 @@ func TestClassifyAntigravity429(t *testing.T) {
 		require.Equal(t, antigravity429QuotaExhausted, classifyAntigravity429(body))
 	})
 
+	t.Run("Google check quota message is quota exhaustion", func(t *testing.T) {
+		body := []byte(`{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"Resource has been exhausted (e.g. check quota)."}}`)
+		require.Equal(t, antigravity429QuotaExhausted, classifyAntigravity429(body))
+	})
+
 	t.Run("结构化限流", func(t *testing.T) {
 		body := []byte(`{
 			"error": {

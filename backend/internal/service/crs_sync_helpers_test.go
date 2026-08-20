@@ -119,6 +119,7 @@ func TestReconcileCRSUpstreamBillingProbeExtra(t *testing.T) {
 		UpstreamBillingProbeEnabledExtraKey:    true,
 		UpstreamBillingRateSyncEnabledExtraKey: true,
 		UpstreamBillingProbeExtraKey:           map[string]any{"status": "remote"},
+		AccountTestProbeExtraKey:               map[string]any{"status": "remote"},
 	}
 
 	t.Run("create drops remote managed fields", func(t *testing.T) {
@@ -127,6 +128,7 @@ func TestReconcileCRSUpstreamBillingProbeExtra(t *testing.T) {
 		require.NotContains(t, extra, UpstreamBillingProbeEnabledExtraKey)
 		require.NotContains(t, extra, UpstreamBillingRateSyncEnabledExtraKey)
 		require.NotContains(t, extra, UpstreamBillingProbeExtraKey)
+		require.NotContains(t, extra, AccountTestProbeExtraKey)
 	})
 
 	existing := &Account{
@@ -137,6 +139,7 @@ func TestReconcileCRSUpstreamBillingProbeExtra(t *testing.T) {
 			UpstreamBillingProbeEnabledExtraKey:    false,
 			UpstreamBillingRateSyncEnabledExtraKey: false,
 			UpstreamBillingProbeExtraKey:           map[string]any{"status": "local"},
+			AccountTestProbeExtraKey:               map[string]any{"status": "local"},
 		},
 	}
 
@@ -146,6 +149,7 @@ func TestReconcileCRSUpstreamBillingProbeExtra(t *testing.T) {
 		require.Equal(t, false, extra[UpstreamBillingProbeEnabledExtraKey])
 		require.Equal(t, false, extra[UpstreamBillingRateSyncEnabledExtraKey])
 		require.Equal(t, map[string]any{"status": "local"}, extra[UpstreamBillingProbeExtraKey])
+		require.Equal(t, map[string]any{"status": "local"}, extra[AccountTestProbeExtraKey])
 	})
 
 	t.Run("same identity preserves enabled rate sync", func(t *testing.T) {
@@ -166,6 +170,27 @@ func TestReconcileCRSUpstreamBillingProbeExtra(t *testing.T) {
 		require.Equal(t, false, extra[UpstreamBillingProbeEnabledExtraKey])
 		require.Equal(t, false, extra[UpstreamBillingRateSyncEnabledExtraKey])
 		require.NotContains(t, extra, UpstreamBillingProbeExtraKey)
+		require.NotContains(t, extra, AccountTestProbeExtraKey)
+	})
+
+	t.Run("oauth access token rotation preserves local manual snapshot", func(t *testing.T) {
+		oauth := &Account{
+			Platform: PlatformAntigravity,
+			Type:     AccountTypeOAuth,
+			Credentials: map[string]any{
+				"access_token":  "old-access",
+				"refresh_token": "stable-refresh",
+				"project_id":    "project",
+			},
+			Extra: map[string]any{AccountTestProbeExtraKey: map[string]any{"status": "local"}},
+		}
+		extra := map[string]any{AccountTestProbeExtraKey: map[string]any{"status": "remote"}}
+		reconcileCRSUpstreamBillingProbeExtra(oauth, oauth.Platform, oauth.Type, map[string]any{
+			"access_token":  "new-access",
+			"refresh_token": "stable-refresh",
+			"project_id":    "project",
+		}, extra)
+		require.Equal(t, map[string]any{"status": "local"}, extra[AccountTestProbeExtraKey])
 	})
 
 	// API-key 平台间切换：探测资格保留（放宽后不再限 OpenAI），开关沿用本地值，

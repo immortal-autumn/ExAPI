@@ -31,6 +31,10 @@ var (
 	antigravityQuotaExhaustedKeywords = []string{
 		"quota_exhausted",
 		"quota exhausted",
+		// Google commonly reports the free-tier exhaustion form as
+		// "Resource has been exhausted (e.g. check quota)." rather than
+		// the machine-readable QUOTA_EXHAUSTED token.
+		"resource has been exhausted",
 	}
 
 	creditsExhaustedKeywords = []string{

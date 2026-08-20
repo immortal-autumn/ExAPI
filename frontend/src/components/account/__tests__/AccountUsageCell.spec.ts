@@ -384,6 +384,34 @@ describe('AccountUsageCell', () => {
     expect(wrapper.text()).toContain('5h|18|900')
   })
 
+  it('Antigravity explicit refresh bypasses the backend cache', async () => {
+    getUsage.mockResolvedValue({ antigravity_quota: {} })
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({ id: 2022, platform: 'antigravity', type: 'oauth' }),
+        manualRefreshToken: 0
+      },
+      global: {
+        stubs: {
+          UsageProgressBar: true,
+          AccountQuotaInfo: true
+        }
+      }
+    })
+
+    await flushPromises()
+    getUsage.mockClear()
+
+    await wrapper.setProps({ manualRefreshToken: 1 })
+    await flushPromises()
+    expect(getUsage).toHaveBeenCalledWith(2022, undefined, true)
+
+    getUsage.mockClear()
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    expect(getUsage).toHaveBeenCalledWith(2022, 'active', true)
+  })
+
   it('OpenAI OAuth 在无 codex 快照时会回退显示 usage 接口窗口', async () => {
 	getUsage.mockResolvedValue({
 	  five_hour: {
