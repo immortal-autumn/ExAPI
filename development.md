@@ -1,12 +1,25 @@
 # ExAPI Development Plan
 
-This document records the active refactor direction for the ExAPI fork and the mandatory quality gates between phases.
+This document records the active development direction for the ExAPI fork and
+the mandatory quality gates between phases. The dated release/deployment
+baseline lives in [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md).
 
 ## Current Goal
 
-Continue the conservative whole-project refactor while preserving runtime compatibility, deployment compatibility, API compatibility, and private-control-plane security.
+Build on the deployed v0.2.5 baseline while preserving runtime compatibility,
+deployment compatibility, API compatibility, and private-control-plane
+security.
 
-The immediate focus is `frontend/src/views/admin/SettingsView.vue`, currently the largest hand-maintained frontend file. The refactor should turn it into a coordinator component while moving tab content, repeated section shells, and panel logic into smaller tested modules.
+The settings extraction described by the older Phase 1.2–1.7 plan has landed:
+the reusable section shell, all major tab components, security/gateway/payment
+panels, and focused tests now exist. `SettingsView.vue` is substantially smaller
+but remains a coordinator with additional extraction opportunities. Do not
+repeat completed phases.
+
+The immediate focus is provider diagnostics and operator clarity: keep manual
+probe state independent from scheduling, make live usage queries truthfully
+reach providers, select currently advertised models for diagnostics, and make
+provider-vs-deployment failures easy to distinguish.
 
 ## Compatibility Boundaries
 
@@ -19,76 +32,45 @@ Do not rename or remove these during the refactor unless a separate migration pl
 - Existing API routes, gateway-compatible endpoints, and database schema semantics
 - Private-control-plane behavior: public domains expose AI gateway endpoints only; admin/control UI stays localhost/WireGuard-only
 
-## Next Refactor Phases
+## Next Development Phases
 
-### Phase 1.2 — Extract reusable settings card shell
+### Phase 2.1 — Provider model-aware diagnostics
 
-Create a reusable settings section wrapper:
+- Derive diagnostic model choices from a fresh provider capability/quota result
+  when one exists.
+- Keep an explicit operator-selected model authoritative.
+- Distinguish unsupported/stale model IDs from real account-wide quota
+  exhaustion when the provider supplies enough evidence.
+- Keep raw provider bodies out of account metadata, UI tooltips, and logs shown
+  to ordinary operators.
+- Add Antigravity, Gemini, Claude, and OpenAI-compatible regression cases.
 
-- `frontend/src/views/admin/settings/SettingsSectionCard.vue`
+### Phase 2.2 — Probe and quota observability
 
-Use it first on only one or two low-risk settings sections. Do not perform a broad markup rewrite in one commit.
+- Add bounded metrics for manual probe outcome/reason and forced-usage outcome.
+- Preserve the separation between provider diagnostics and scheduler state.
+- Document and test retry/backoff behavior so an operator refresh cannot create
+  a provider retry storm.
+- Keep account identity, token material, and raw upstream payloads out of
+  metrics labels.
 
-### Phase 1.3 — Extract General settings tab
+### Phase 2.3 — Finish coordinator reductions
 
-Create:
+- Continue reducing `SettingsView.vue` and other large coordinators only where
+  behavior can be extracted behind focused tests.
+- Do not rename settings keys, API fields, routes, or retained `sub2api`
+  compatibility identifiers as part of structural work.
+- Prefer one panel/composable extraction per reviewed commit.
 
-- `frontend/src/views/admin/settings/tabs/GeneralSettingsTab.vue`
+### Phase 2.4 — Release and documentation discipline
 
-Move general/site-identity settings out of `SettingsView.vue`, including site name, logo, documentation URL, subtitle, and home content fields.
-
-Keep parent form state and save payload unchanged at first. This phase is a structural extraction, not a behavior change.
-
-### Phase 1.4 — Extract Agreement and Feature settings tabs
-
-Create:
-
-- `frontend/src/views/admin/settings/tabs/AgreementSettingsTab.vue`
-- `frontend/src/views/admin/settings/tabs/FeatureSettingsTab.vue`
-
-Move existing markup and wiring only. Do not rename settings keys or alter API payload structure.
-
-### Phase 1.5 — Split Security tab
-
-Split the existing `security` tab into smaller panels while keeping the visible tab key unchanged:
-
-- Admin API key panel
-- Registration / email verification / invitation settings panel
-- CAPTCHA / Turnstile panel
-- Third-party login / OAuth / OIDC panel
-
-Suggested paths:
-
-- `frontend/src/views/admin/settings/security/AdminApiKeyPanel.vue`
-- `frontend/src/views/admin/settings/security/RegistrationSecurityPanel.vue`
-- `frontend/src/views/admin/settings/security/ThirdPartyAuthPanel.vue`
-- `frontend/src/views/admin/settings/tabs/SecuritySettingsTab.vue`
-
-### Phase 1.6 — Split Gateway tab
-
-Split the existing `gateway` tab into smaller panels while keeping the visible tab key unchanged:
-
-- Gateway runtime behavior, cooldowns, timeout, and retry settings
-- Protocol/client compatibility options such as Claude/Codex/OpenAI behavior
-- Scheduler and routing settings
-
-Suggested paths:
-
-- `frontend/src/views/admin/settings/gateway/GatewayRuntimePanel.vue`
-- `frontend/src/views/admin/settings/gateway/GatewayProtocolPanel.vue`
-- `frontend/src/views/admin/settings/gateway/GatewaySchedulerPanel.vue`
-- `frontend/src/views/admin/settings/tabs/GatewaySettingsTab.vue`
-
-### Phase 1.7 — Extract remaining settings tabs
-
-Extract the remaining tabs after the heavier security/gateway work is stable:
-
-- `UserSettingsTab.vue`
-- `PaymentSettingsTab.vue`
-- `EmailSettingsTab.vue`
-- `BackupSettingsTab.vue`
-
-The target is for `SettingsView.vue` to become a small coordinator component rather than an 11k-line implementation file.
+- Update `docs/PROJECT_STATUS.md` for every release and production promotion.
+- Keep deploy examples digest-pinned and keep mutable current-state facts out of
+  generic procedures.
+- Run the upstream-lock, release-contract, deployment-contract, backend, and
+  frontend gates before tagging.
+- Preserve historical OpenSpec evidence rather than rewriting it to match the
+  current release.
 
 ## Mandatory Gate Between Every Phase
 
@@ -222,12 +204,14 @@ A phase is done only when:
 
 ## Current Recommended Next Step
 
-Proceed with **Phase 1.2**:
+Proceed with **Phase 2.1**:
 
-1. Add `SettingsSectionCard.vue`.
-2. Replace only one or two obvious repeated settings cards.
-3. Review the diff.
-4. Run the mandatory phase gate.
-5. Commit and push.
-
-Then continue to Phase 1.3 only after the gate passes.
+1. Reproduce the case where forced Antigravity quota metadata succeeds but
+   inference for an advertised model returns 429.
+2. Capture only sanitized evidence and determine whether the provider exposes a
+   reliable unsupported-model vs quota-exhausted discriminator.
+3. Write failing focused tests before changing classification or model
+   selection.
+4. Run the mandatory phase gate and independent review.
+5. Update `docs/ACCOUNT_PROBES.md` and `docs/PROJECT_STATUS.md` with any changed
+   contract before committing.

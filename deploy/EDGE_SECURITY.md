@@ -27,6 +27,36 @@ legitimately occupy it for many minutes. Apply connection and unauthenticated
 request controls at the edge; authenticated user/API-key concurrency remains
 the application's responsibility.
 
+## Public and control listeners
+
+Private ExAPI deployments have independent trust boundaries:
+
+- `EXAPI_PUBLIC_LISTEN_ADDR` serves gateway routes and public readiness. The
+  public reverse proxy must not expose the operator UI or `/api/v1/*` control
+  APIs. In private mode those paths are hidden with 404.
+- `EXAPI_CONTROL_LISTEN_ADDR` serves the operator UI and APIs directly on a
+  loopback or WireGuard-bound host port. It must not sit behind the public CDN,
+  Caddy, or Nginx virtual host.
+- `EXAPI_CONTROL_HOSTS` is an exact Host allowlist.
+- `EXAPI_OPERATOR_PEER_IPS` is an exact direct-peer allowlist. Forwarded client
+  headers are deliberately ignored on this listener.
+
+Every control API request must include `X-ExAPI-Control-Request: 1`. Unsafe
+requests additionally need a matching HTTP `Origin`; conflicting Fetch
+Metadata is rejected when present. Unknown Host/peer combinations receive 404
+so the private control surface is not discoverable.
+
+Validate the boundary from an actual configured operator peer. A request from
+the server itself has the server/bridge source address, not the operator's
+WireGuard address, and may correctly receive 404. Conversely, a 200 response to
+`/ready` on the public listener proves only public readiness—it does not prove
+that the control UI is reachable from an operator workstation.
+
+The production Compose configuration binds the container listener to a
+wildcard only inside its isolated namespace. This requires the explicit
+`EXAPI_ALLOW_CONTAINER_WILDCARD_CONTROL_BIND=true` acknowledgement while the
+published host port remains bound to the intended WireGuard address.
+
 ## Trusted client IPs
 
 `security.trust_forwarded_ip_for_api_key_acl` is enabled by default for upgrade

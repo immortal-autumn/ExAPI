@@ -1,6 +1,10 @@
 # ExAPI Upstream Compatibility Notes
 
-ExAPI is a fork of `Wei-Shaw/sub2api`. The product-facing name is ExAPI, but a number of internal identifiers intentionally remain `sub2api` in the first rebrand pass.
+ExAPI is a fork of `Wei-Shaw/sub2api`. The product-facing name is ExAPI, but a
+number of internal identifiers intentionally remain `sub2api` as a durable
+compatibility contract. This is not unfinished branding work. The current fork
+release and upstream baseline are recorded in
+[`PROJECT_STATUS.md`](PROJECT_STATUS.md) and [`UPSTREAM_LOCK.md`](UPSTREAM_LOCK.md).
 
 ## Intentionally retained identifiers
 
@@ -16,9 +20,9 @@ ExAPI is a fork of `Wei-Shaw/sub2api`. The product-facing name is ExAPI, but a n
 
 These names are kept to avoid breaking existing deployments, volumes, databases, browser storage, and generated code.
 
-## Safe first-pass rebrand scope
+## Safe product-brand scope
 
-The first ExAPI rebrand changes:
+ExAPI product branding may change:
 
 - visible UI defaults and browser titles;
 - onboarding/setup copy;

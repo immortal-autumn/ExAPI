@@ -5,6 +5,10 @@ This directory contains files for deploying ExAPI on Linux servers.
 Production promotion and rollback gates are documented in
 [`PRODUCTION_ROLLOUT.md`](PRODUCTION_ROLLOUT.md). The runbook uses an isolated,
 digest-pinned Compose project for canary validation before production changes.
+The currently reviewed release, image digest, deployed state, and dated
+provider conditions are recorded once in
+[`../docs/PROJECT_STATUS.md`](../docs/PROJECT_STATUS.md); do not copy those
+mutable facts into generic procedures.
 
 ## Deployment Methods
 
@@ -24,7 +28,7 @@ digest-pinned Compose project for canary validation before production changes.
 | `apple-container.sh` | Native Apple `container` lifecycle script |
 | `APPLE_CONTAINER.md` | Apple `container` deployment and operations guide |
 | `.env.example` | Container environment variables template |
-| `DOCKER.md` | Docker Hub documentation |
+| `DOCKER.md` | GHCR image verification and digest-pinned Compose guidance |
 | `install.sh` | One-click binary installation script |
 | `install-datamanagementd.sh` | datamanagementd 一键安装脚本 |
 | `sub2api.service` | Systemd service unit file |
@@ -62,14 +66,17 @@ See [APPLE_CONTAINER.md](./APPLE_CONTAINER.md) for configuration, upgrades, pers
 Use the automated preparation script for the easiest setup:
 
 ```bash
-# Download and run the preparation script
-curl -sSL https://raw.githubusercontent.com/immortal-autumn/Sub2API2Personal/main/deploy/docker-deploy.sh | bash
-
-# Or download first, then run
-curl -sSL https://raw.githubusercontent.com/immortal-autumn/Sub2API2Personal/main/deploy/docker-deploy.sh -o docker-deploy.sh
+# Use the exact reviewed tag from docs/PROJECT_STATUS.md.
+EXAPI_RELEASE_TAG=vX.Y.Z
+GITHUB_RAW_URL="https://raw.githubusercontent.com/immortal-autumn/Sub2API2Personal/${EXAPI_RELEASE_TAG}/deploy"
+curl -fsSL "${GITHUB_RAW_URL}/docker-deploy.sh" -o docker-deploy.sh
 chmod +x docker-deploy.sh
-./docker-deploy.sh
+GITHUB_RAW_URL="$GITHUB_RAW_URL" ./docker-deploy.sh
 ```
+
+Do not pipe an unpinned `main` script directly into a shell for a reviewed
+deployment. Inspect the downloaded script and resolve the corresponding image
+digest from the signed release before starting services.
 
 **What the script does:**
 - Downloads `docker-compose.local.yml` and `.env.example`
@@ -99,7 +106,8 @@ If you prefer manual control:
 
 ```bash
 # Clone repository
-git clone https://github.com/immortal-autumn/Sub2API2Personal.git
+EXAPI_RELEASE_TAG=vX.Y.Z
+git clone --branch "$EXAPI_RELEASE_TAG" --depth 1 https://github.com/immortal-autumn/Sub2API2Personal.git
 cd sub2api/deploy
 
 # Configure environment
@@ -156,6 +164,22 @@ When using Docker Compose with `AUTO_SETUP=true`:
    docker compose logs sub2api | grep "admin password"
    ```
 
+### Private control-plane access
+
+Private deployments use separate public and control listeners. The public
+listener serves gateway traffic and `/ready`; the control listener serves the
+operator UI and control APIs only to exact hosts and WireGuard peers configured
+with `EXAPI_CONTROL_HOSTS` and `EXAPI_OPERATOR_PEER_IPS`.
+
+Control API requests require `X-ExAPI-Control-Request: 1`. Unsafe browser/API
+mutations also require an `Origin` whose authority matches the control Host.
+Unknown hosts or peers receive 404 deliberately. In particular, a request made
+from the server itself is not proof that an external operator peer is allowed;
+run the final UI/API checks from an allowlisted WireGuard peer.
+
+Never publish the control port through the public reverse proxy. See
+[`EDGE_SECURITY.md`](EDGE_SECURITY.md) for the full boundary.
+
 ### Database Migration Notes (PostgreSQL)
 
 - Migrations are applied in lexicographic order (e.g. `001_...sql`, `002_...sql`).
@@ -205,9 +229,10 @@ docker compose -f docker-compose.local.yml logs -f sub2api
 # Restart ExAPI only
 docker compose -f docker-compose.local.yml restart sub2api
 
-# Update to latest version
-docker compose -f docker-compose.local.yml pull
-docker compose -f docker-compose.local.yml up -d
+# Update to a reviewed immutable digest already written to .env
+docker compose --env-file .env -f docker-compose.local.yml config --images
+docker compose --env-file .env -f docker-compose.local.yml pull
+docker compose --env-file .env -f docker-compose.local.yml up -d
 
 # Remove all data (caution!)
 docker compose -f docker-compose.local.yml down
@@ -229,9 +254,10 @@ docker compose logs -f sub2api
 # Restart ExAPI only
 docker compose restart sub2api
 
-# Update to latest version
-docker compose pull
-docker compose up -d
+# Update to a reviewed immutable digest already written to .env
+docker compose --env-file .env config --images
+docker compose --env-file .env pull
+docker compose --env-file .env up -d
 
 # Remove all data (caution!)
 docker compose down -v
@@ -241,6 +267,9 @@ docker compose down -v
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
+| `EXAPI_IMAGE` | **Production: yes** | - | Immutable ExAPI GHCR digest reference |
+| `POSTGRES_IMAGE` | **Production: yes** | - | Reviewed immutable PostgreSQL digest reference |
+| `REDIS_IMAGE` | **Production: yes** | - | Reviewed immutable Redis digest reference |
 | `POSTGRES_PASSWORD` | **Yes** | - | PostgreSQL password |
 | `SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID` | **Yes** | - | Active external data-encryption key ID |
 | `SUB2API_DATA_ENCRYPTION_KEYS_JSON` | **Yes** | - | JSON keyring of base64-encoded 32-byte data keys; keep outside PostgreSQL/backups |
@@ -251,6 +280,12 @@ docker compose down -v
 | `ADMIN_EMAIL` | No | `admin@sub2api.local` | Admin email |
 | `ADMIN_PASSWORD` | No | *(auto-generated)* | Admin password |
 | `TZ` | No | `Asia/Shanghai` | Timezone |
+| `EXAPI_PUBLIC_LISTEN_ADDR` | Private mode: yes | `0.0.0.0:8080` | Container/public gateway listener |
+| `EXAPI_CONTROL_LISTEN_ADDR` | Private mode: yes | `0.0.0.0:8027` | Container/private operator listener |
+| `EXAPI_CONTROL_BIND_HOST` | Private mode: yes | `127.0.0.1` | Host address used to publish the control port; use the host WireGuard address for remote operators |
+| `EXAPI_CONTROL_HOSTS` | Private mode: yes | loopback hosts | Exact allowed Host authorities for the control listener |
+| `EXAPI_OPERATOR_PEER_IPS` | Private mode: yes | loopback peers | Exact direct WireGuard/operator peer IPs |
+| `EXAPI_ALLOW_CONTAINER_WILDCARD_CONTROL_BIND` | Bridge Compose: yes | `false` | Explicit acknowledgement that wildcard binding is confined to the container namespace |
 | `UPDATE_GITHUB_TOKEN` | No | *(empty)* | Token for `api.github.com` release checks only; asset downloads remain anonymous. |
 | `GEMINI_OAUTH_CLIENT_ID` | No | *(builtin)* | Google OAuth client ID (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |
 | `GEMINI_OAUTH_CLIENT_SECRET` | No | *(builtin)* | Google OAuth client secret (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |
@@ -258,6 +293,11 @@ docker compose down -v
 | `GEMINI_QUOTA_POLICY` | No | *(empty)* | JSON overrides for Gemini local quota simulation (Code Assist only). |
 
 See `.env.example` for all available options.
+
+Production `EXAPI_IMAGE`, `POSTGRES_IMAGE`, and `REDIS_IMAGE` values must be
+digest references. Verify release labels and attestations as described in
+[`DOCKER.md`](DOCKER.md); do not replace them with `latest` or another mutable
+tag.
 
 > **Note:** `docker-deploy.sh` also generates the required external data-encryption keyring. Preserve `.env` securely: losing every retained data key makes protected secrets unrecoverable. During rotation, add the new key alongside old keys, switch the active ID, and remove old keys only after rewrap verification.
 
@@ -399,10 +439,12 @@ GEMINI_OAUTH_CLIENT_SECRET=GOCSPX-your-client-secret
 
 For production servers using systemd.
 
-### One-Line Installation
+### Pinned installation script
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/immortal-autumn/Sub2API2Personal/main/deploy/install.sh | sudo bash
+EXAPI_RELEASE_TAG=vX.Y.Z
+curl -fsSL "https://raw.githubusercontent.com/immortal-autumn/Sub2API2Personal/${EXAPI_RELEASE_TAG}/deploy/install.sh" -o install.sh
+sudo bash install.sh
 ```
 
 The installer generates `/etc/sub2api.env` as `root:root` mode `0600`, loads it
@@ -411,7 +453,9 @@ it up separately from PostgreSQL; losing it makes encrypted roots unrecoverable.
 
 ### Manual Installation
 
-1. Download the latest release from [GitHub Releases](https://github.com/immortal-autumn/Sub2API2Personal/releases)
+1. Download the reviewed tag identified in
+   [`../docs/PROJECT_STATUS.md`](../docs/PROJECT_STATUS.md) from
+   [GitHub Releases](https://github.com/immortal-autumn/Sub2API2Personal/releases)
 2. Extract and copy the binary to `/opt/sub2api/`
 3. Create the mandatory root-only keyring file:
    ```bash
@@ -547,6 +591,10 @@ The main config file is at `/etc/sub2api/config.yaml` (created by Setup Wizard).
 ---
 
 ## Troubleshooting
+
+For account-test failures and Antigravity live quota refresh, follow
+[`../docs/ACCOUNT_PROBES.md`](../docs/ACCOUNT_PROBES.md). A successful usage
+query and a successful inference probe are independent signals.
 
 ### Docker
 

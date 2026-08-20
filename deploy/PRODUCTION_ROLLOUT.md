@@ -5,9 +5,14 @@ recovery, artifact, canary, monitoring, and observation record for the exact
 image digest has passed and the final manifest has been signed and copied
 off-host.
 
+This runbook is version-neutral. Resolve the currently reviewed release,
+commit, and digest from [`../docs/PROJECT_STATUS.md`](../docs/PROJECT_STATUS.md),
+then replace every placeholder below. Do not edit generic examples to mirror a
+single live deployment.
+
 ## ExAPI private-only preflight
 
-ExAPI v0.2.0 runs two independent listeners. Set
+ExAPI v0.2.0 and later run two independent listeners. Set
 `EXAPI_PUBLIC_LISTEN_ADDR` for the API-key gateway and
 `EXAPI_CONTROL_LISTEN_ADDR`, `EXAPI_ALLOW_CONTAINER_WILDCARD_CONTROL_BIND`, `EXAPI_CONTROL_BIND_HOST`,
 `EXAPI_CONTROL_HOSTS`, and `EXAPI_OPERATOR_PEER_IPS` for the direct WireGuard
@@ -31,7 +36,7 @@ export EXAPI_IMAGE=ghcr.io/immortal-autumn/sub2api2personal@sha256:RELEASE_DIGES
 export EXAPI_REVIEWED_COMMIT=<40-character-tagged-commit>
 export COMPOSE_ENV_FILE=/protected/exapi-production.env
 export COMPOSE_PROJECT_NAME=exapi-production
-export EXAPI_ROLLOUT_ID=exapi-v0.2.0-<change-ticket>
+export EXAPI_ROLLOUT_ID=exapi-vX.Y.Z-<change-ticket>
 export EXAPI_MIGRATION_REPORT_KEY_FILE=/protected/exapi-migration-report.key
 export EXAPI_CONFIRMATION=DROP-SAAS-DATA-KEEP-USER-<lowest-active-admin-id>
 export EXAPI_CONTROL_BIND_HOST=<server-wireguard-address>
@@ -169,7 +174,7 @@ retained application container to remain stopped and repeats the idempotent
 cutover finalizer, verification, and archive gates:
 
 ```bash
-export EXAPI_ROLLOUT_ID=exapi-v0.2.0-<same-change-ticket>
+export EXAPI_ROLLOUT_ID=exapi-vX.Y.Z-<same-change-ticket>
 export EXAPI_RESUME_PRIVATE_CUTOVER=true
 deploy/ops/run-private-cutover.sh
 ```

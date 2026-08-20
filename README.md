@@ -4,12 +4,25 @@ ExAPI 是一个面向个人/私有基础设施的 AI API 网关，用于把本�
 
 本项目 fork 自 `Wei-Shaw/sub2api`。为了兼容已有部署，部分内部模块、数据库、缓存、服务名仍保留 `sub2api` 标识；但本 fork 的产品方向是私有控制面、配额可见性、多账号韧性和本地集成体验。
 
+## 当前状态
+
+当前已审阅并部署的版本是 **ExAPI v0.2.5**，对应提交
+`14a7c412a17971b160de356baaab7a3555fb90fa`。生产环境只使用经过发布工作流验证、
+带 SBOM/来源证明的不可变 OCI digest，不使用 `latest` 等可变标签。
+
+- 当前发布、镜像 digest、部署验证和已知上游账号状态：
+  [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)
+- 文档导航与维护规则：[`docs/README.md`](docs/README.md)
+- 生产发布与回滚门禁：[`deploy/PRODUCTION_ROLLOUT.md`](deploy/PRODUCTION_ROLLOUT.md)
+
 ## 主要特性
 
 - OpenAI 兼容 `/v1` 网关。
 - 继承上游的 Claude / Codex / Gemini / Antigravity 等客户端兼容路由。
 - 适合单用户部署的 localhost / WireGuard 私有控制面。
 - 上游账号池、定时账号测试、配额窗口、用量日志。
+- 手动账号探测与调度状态相互独立，失败结果可见但不会静默停用账号。
+- Antigravity 强制实时配额刷新、按模型配额展示和 Google 429 分类。
 - 面向 IDE、Agent、自动化脚本的 API Key 管理。
 - 保留上游多用户、订阅、支付、兑换码等可选能力，但不作为本 fork 的默认重点。
 
@@ -57,6 +70,19 @@ which generate and permission it automatically; see [`deploy/README.md`](deploy/
 for manual generation, rotation, migration, and recovery guidance.
 
 公网只放行 AI 网关路径，`/admin`、`/login`、`/api/v1/*` 控制面 API 应保持私有。
+控制面必须从显式允许的 WireGuard peer 验证；服务器自身或未授权 peer 收到 404
+是预期的隐藏行为，不代表控制进程未启动。详细边界见
+[`deploy/EDGE_SECURITY.md`](deploy/EDGE_SECURITY.md)。
+
+## 账号探测与配额诊断
+
+管理员手动测试账号时，最新结果保存在
+`account.extra.account_test_probe`，但不会直接修改 `account.status` 或
+`schedulable`。定时测试不会覆盖手动结果；凭据、路由或代理发生实质变化时旧结果会失效。
+
+Antigravity 的“实时查询”使用 `force=true` 绕过后端配额缓存。配额查询成功只说明
+配额接口可达，不等价于推理请求一定可用；仍需选择上游当前公布的模型执行手动探测。
+完整运维流程见 [`docs/ACCOUNT_PROBES.md`](docs/ACCOUNT_PROBES.md)。
 
 ## 安全声明
 
