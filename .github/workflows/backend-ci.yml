@@ -41,6 +41,7 @@ jobs:
           "$BASH_BIN" deploy/test-install-purge.sh
           "$BASH_BIN" deploy/test-keyring-contract.sh
           "$BASH_BIN" deploy/test-production-rollout-contract.sh
+          python3 deploy/ops/test_validate_snapshot_evidence.py
           "$BASH_BIN" deploy/tests/apple-container-test.sh
           /bin/sh deploy/tests/docker-compose-security-test.sh
           /bin/sh deploy/tests/docker-runtime-resources-test.sh

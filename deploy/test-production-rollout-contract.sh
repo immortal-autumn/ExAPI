@@ -226,7 +226,7 @@ grep -Fq 'RESTORED_POSTGRES_DATABASE' deploy/docker-compose.canary-restored.yml 
   fail 'restored-data canary config/up must use its protected env file'
 grep -Fq 'database and secret recovery objects must have disjoint age recipients' deploy/ops/create-recovery-set.sh || \
   fail 'database and secrets age recipient sets are not required to be disjoint'
-grep -Fq 'snapshot retention_until is shorter than RECOVERY_RETENTION_UNTIL' deploy/ops/create-recovery-set.sh || \
+grep -Fq 'snapshot retention_until is shorter than RECOVERY_RETENTION_UNTIL' deploy/ops/validate-snapshot-evidence.py || \
   fail 'snapshot retention can be shorter than requested'
 grep -Fq 'cosign verify-attestation' deploy/ops/publish-rollout-manifest.sh || fail 'OCI provenance is not verified before publication'
 grep -Fq -- '--type https://slsa.dev/provenance/v1' deploy/ops/publish-rollout-manifest.sh || fail 'current SLSA provenance predicate type is not selected'

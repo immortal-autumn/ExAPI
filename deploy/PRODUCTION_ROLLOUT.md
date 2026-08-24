@@ -252,11 +252,21 @@ secret values.
 The executable `SNAPSHOT_CREATE_COMMAND` receives these environment values:
 
 - `EXAPI_ROLLOUT_ID`
+- `EXAPI_SNAPSHOT_SCHEMA_VERSION=1`
 - `EXAPI_WRITER_QUIESCED=true`
 - `EXAPI_CHECKPOINT_COMPLETED=true`
+- `EXAPI_CHECKPOINT_AT`
+- `EXAPI_SNAPSHOT_SOURCE_CONTAINER_ID`
+- `EXAPI_SNAPSHOT_SOURCE_IMAGE_ID`
+- `EXAPI_SNAPSHOT_SOURCE_MOUNTS_SHA256`
 
-It must print one JSON object containing `provider`, `snapshot_id`, `target`,
-`created_at`, and `retention_until`. Times are RFC3339 UTC.
+It must print one schema-versioned JSON object containing `provider`,
+`snapshot_id`, `target`,
+`created_at`, `retention_until`, the exact rollout/checkpoint/quiescence fields,
+and a `source` object containing `container_id`, `image_id`, and
+`mounts_sha256`. Times are RFC3339 UTC. The recovery script rejects stale
+evidence or any value not bound to the database container that was actually
+checkpointed.
 
 ```bash
 export COMPOSE_PROJECT_NAME=exapi-production

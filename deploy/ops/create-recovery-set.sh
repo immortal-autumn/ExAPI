@@ -119,27 +119,36 @@ COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" docker compose --env-file "$COMPOSE
 app_stopped=true
 COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" exec -T "$EXAPI_DB_SERVICE" \
   psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c 'CHECKPOINT' >/dev/null
+checkpoint_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+db_container_id=$(COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" ps -q "$EXAPI_DB_SERVICE")
+[[ -n "$db_container_id" ]] || die 'database container identity is unavailable'
+readarray -t snapshot_source < <(docker inspect "$db_container_id" | python3 -c '
+import hashlib, json, sys
+items=json.load(sys.stdin)
+if len(items)!=1: raise SystemExit("database inspect returned an unexpected object count")
+item=items[0]
+mounts=[]
+for mount in item.get("Mounts",[]):
+    mounts.append({key:mount.get(key) for key in ("Type","Name","Source","Destination","RW")})
+encoded=json.dumps(sorted(mounts,key=lambda value:(str(value.get("Destination")),str(value.get("Source")))),sort_keys=True,separators=(",",":")).encode()
+print(item.get("Id", ""))
+print(item.get("Image", ""))
+print(hashlib.sha256(encoded).hexdigest())
+')
+(( ${#snapshot_source[@]} == 3 )) || die 'database source identity is incomplete'
+[[ "${snapshot_source[0]}" == "$db_container_id" && -n "${snapshot_source[1]}" && "${snapshot_source[2]}" =~ ^[0-9a-f]{64}$ ]] || \
+  die 'database source identity is invalid'
 
-EXAPI_ROLLOUT_ID="$ROLLOUT_ID" EXAPI_WRITER_QUIESCED=true EXAPI_CHECKPOINT_COMPLETED=true \
+EXAPI_SNAPSHOT_SCHEMA_VERSION=1 EXAPI_ROLLOUT_ID="$ROLLOUT_ID" \
+EXAPI_WRITER_QUIESCED=true EXAPI_CHECKPOINT_COMPLETED=true EXAPI_CHECKPOINT_AT="$checkpoint_at" \
+EXAPI_SNAPSHOT_SOURCE_CONTAINER_ID="${snapshot_source[0]}" \
+EXAPI_SNAPSHOT_SOURCE_IMAGE_ID="${snapshot_source[1]}" \
+EXAPI_SNAPSHOT_SOURCE_MOUNTS_SHA256="${snapshot_source[2]}" \
   "$SNAPSHOT_CREATE_COMMAND" >"$snapshot_json"
-RECOVERY_RETENTION_UNTIL="$RECOVERY_RETENTION_UNTIL" python3 - "$snapshot_json" <<'PY'
-import json, os, sys
-from datetime import datetime, timezone
-data = json.load(open(sys.argv[1], encoding="utf-8"))
-for key in ("provider", "snapshot_id", "target", "created_at", "retention_until"):
-    if not isinstance(data.get(key), str) or not data[key].strip():
-        raise SystemExit(f"snapshot adapter omitted {key}")
-parsed = {}
-for key in ("created_at", "retention_until"):
-    if not data[key].endswith("Z"):
-        raise SystemExit(f"snapshot {key} is not RFC3339 UTC")
-    parsed[key] = datetime.fromisoformat(data[key][:-1] + "+00:00")
-requested = datetime.fromisoformat(os.environ["RECOVERY_RETENTION_UNTIL"][:-1] + "+00:00")
-if parsed["retention_until"] <= datetime.now(timezone.utc):
-    raise SystemExit("snapshot retention_until must be in the future")
-if parsed["retention_until"] < requested:
-    raise SystemExit("snapshot retention_until is shorter than RECOVERY_RETENTION_UNTIL")
-PY
+RECOVERY_RETENTION_UNTIL="$RECOVERY_RETENTION_UNTIL" ROLLOUT_ID="$ROLLOUT_ID" \
+CHECKPOINT_AT="$checkpoint_at" SOURCE_CONTAINER_ID="${snapshot_source[0]}" \
+SOURCE_IMAGE_ID="${snapshot_source[1]}" SOURCE_MOUNTS_SHA256="${snapshot_source[2]}" \
+python3 deploy/ops/validate-snapshot-evidence.py "$snapshot_json"
 
 # Stream encrypted bytes directly off host; only small checksums/evidence use tmp/.
 COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" exec -T "$EXAPI_DB_SERVICE" \
