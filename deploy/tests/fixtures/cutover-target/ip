@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ "$*" == '-j addr show dev wg0' ]] || {
+  printf 'unexpected fake ip invocation: %s\n' "$*" >&2
+  exit 1
+}
+printf '[{"ifindex":7,"ifname":"wg0","addr_info":[{"family":"inet","local":"100.97.17.1","prefixlen":24}]}]\n'

@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+
+if [ "${1:-}" = -u ]; then
+  printf '%s\n' "${ENTRYPOINT_TEST_UID:?ENTRYPOINT_TEST_UID is required}"
+  exit 0
+fi
+exec /usr/bin/id "$@"

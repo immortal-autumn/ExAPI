@@ -270,9 +270,20 @@ jobs:
           test "$(docker image inspect "$IMAGE_REFERENCE" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$EXPECTED_COMMIT"
           test "$(docker image inspect "$IMAGE_REFERENCE" --format '{{ index .Config.Labels "org.opencontainers.image.source" }}')" = 'https://github.com/immortal-autumn/ExAPI'
           test "$(docker image inspect "$IMAGE_REFERENCE" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')" = "$VERSION"
+          test "$(docker image inspect "$IMAGE_REFERENCE" --format '{{.Config.User}}')" = 'sub2api:sub2api'
           docker run --rm --network none --entrypoint /bin/sh "$IMAGE_REFERENCE" -ec \
             'test -x /app/migrate-private-only && test -x /app/verify-private-cutover-report && test -x /app/with-migration-report-key.sh'
-          docker run --rm --network none "$IMAGE_REFERENCE" --version 2>&1 | grep -F "ExAPI $VERSION (commit: $EXPECTED_COMMIT,"
+          docker run --rm --network none --read-only \
+            --tmpfs /app/data:rw,nosuid,nodev,size=64m,uid=1000,gid=1000,mode=0750 \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,uid=1000,gid=1000,mode=1777 \
+            "$IMAGE_REFERENCE" --version 2>&1 | grep -F "ExAPI $VERSION (commit: $EXPECTED_COMMIT,"
+          if docker run --rm --network none --read-only --user 0:0 \
+            --tmpfs /app/data:rw,nosuid,nodev,size=64m,mode=0750 \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777 \
+            "$IMAGE_REFERENCE" --version; then
+            echo 'release image accepted root startup' >&2
+            exit 1
+          fi
 
       - name: Attest SLSA build provenance
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1

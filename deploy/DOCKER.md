@@ -54,11 +54,39 @@ SUB2API_DATA_ENCRYPTION_KEYS_JSON={"data-v1":"<base64-32-byte-key>"}
 Then render and inspect the exact configuration before starting it:
 
 ```bash
+# The release image is permanently non-root and never recursively chowns live
+# data. For a new deployment-local installation, prepare empty directories once.
+sudo install -d -m 0750 -o 1000 -g 1000 data
+sudo install -d -m 0700 -o 70 -g 70 postgres_data
+sudo install -d -m 0750 -o 999 -g 1000 redis_data
+# Existing deployments must pass these checks; investigate any printed path.
+test -z "$(find data -xdev ! -uid 1000 -print -quit)"
+test -z "$(find postgres_data -xdev ! -uid 70 -print -quit)"
+test -z "$(find redis_data -xdev ! -uid 999 -print -quit)"
+
 docker compose --env-file .env -f docker-compose.local.yml config --images
 docker compose --env-file .env -f docker-compose.local.yml pull
 docker compose --env-file .env -f docker-compose.local.yml up -d
 docker compose --env-file .env -f docker-compose.local.yml ps
 ```
+
+Every service has a read-only root filesystem, drops all Linux capabilities,
+uses explicit writable data mounts and bounded `tmpfs` paths, and has CPU,
+memory, PID, and Docker log-retention limits. The application is fixed to
+UID/GID 1000 in both the image and Compose. PostgreSQL 18 Alpine uses UID/GID
+70; Redis 8 Alpine uses UID 999/GID 1000. Do not restore the old startup-time recursive
+`chown`: correct an ownership problem as a separately reviewed maintenance
+operation after identifying why the stored owner changed.
+
+For an existing installation, an application-only `up -d --no-deps sub2api`
+does not recreate or change PostgreSQL/Redis and is compatible with the
+`/opt/sub2api` rolling heuristic. Older Compose files launched Redis through a
+shell and may therefore have root-owned Redis files. Do not recreate Redis
+with the hardened file until a snapshot exists, Redis is stopped, and those
+specific files have been migrated once to UID 999/GID 1000 in a reviewed
+maintenance window. PostgreSQL data must remain UID 70. The same ownership
+preflight applies to named volumes; inspect them through a one-shot container
+before the first non-root start instead of adding a recursive startup `chown`.
 
 Never place real passwords or keyrings in a Compose YAML file. Keep `.env` mode
 `0600`, back it up separately from PostgreSQL, and retain old encryption-key IDs
@@ -96,6 +124,12 @@ COMPOSE_PROJECT_NAME=sub2api \
 Verify the running image reference, revision/version labels, health, public
 boundary, and control plane from an allowlisted operator peer. Roll back with
 the previous versioned environment and Compose file if any gate fails.
+This rolling heuristic intentionally means the new application container's
+Compose provenance label names the versioned release file while retained
+PostgreSQL and Redis containers may still name `docker-compose.local.yml`.
+The cutover target report records and hashes each container's own provenance;
+do not rewrite those labels or recreate the stateful services merely to make
+their filenames match.
 
 ## Links
 

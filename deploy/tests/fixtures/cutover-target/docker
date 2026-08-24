@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+app_id=${CUTOVER_APP_ID:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+db_id=${CUTOVER_DB_ID:-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb}
+
+if [[ "${1:-}" == compose && "${2:-}" == version ]]; then
+  printf 'Docker Compose version v2.test\n'
+  exit 0
+fi
+if [[ "${1:-}" == compose ]]; then
+  if [[ "$*" == *' config --format json' ]]; then
+    CANDIDATE_IMAGE=${EXAPI_IMAGE:?} python3 - <<'PY'
+import json
+import os
+print(json.dumps({"services": {
+    "sub2api": {"image": os.environ["CANDIDATE_IMAGE"], "environment": {"SECRET": "redacted-by-hash"}},
+    "postgres": {"image": "postgres@sha256:" + "c" * 64, "environment": {"POSTGRES_DB": "sub2api"}},
+    "redis": {"image": "redis@sha256:" + "d" * 64, "environment": {}},
+}}))
+PY
+    exit 0
+  fi
+  if [[ "$*" == *' ps --all -q sub2api' ]]; then
+    printf '%s\n' "$app_id"
+    exit 0
+  fi
+  if [[ "$*" == *' ps --all -q postgres' ]]; then
+    printf '%s\n' "$db_id"
+    exit 0
+  fi
+fi
+if [[ "${1:-}" == inspect ]]; then
+  APP_ID="$app_id" DB_ID="$db_id" python3 - <<'PY'
+import json
+import os
+
+def container(container_id, name, service, compose_file, environment_file, image, mount_source, mount_target):
+    labels = {
+        "com.docker.compose.config-hash": ("1" if service == "sub2api" else "2") * 64,
+        "com.docker.compose.oneoff": "False",
+        "com.docker.compose.project": os.environ["COMPOSE_PROJECT_NAME"],
+        "com.docker.compose.project.config_files": compose_file,
+        "com.docker.compose.project.working_dir": os.path.dirname(compose_file),
+        "com.docker.compose.service": service,
+    }
+    # Older Compose versions did not label the env file. The retained OPC
+    # database deliberately exercises that mixed-generation provenance.
+    if environment_file:
+        labels["com.docker.compose.project.environment_file"] = environment_file
+    return {
+        "Id": container_id,
+        "Name": "/" + name,
+        "Image": "sha256:" + ("e" if service == "sub2api" else "f") * 64,
+        "Config": {
+            "Image": image,
+            "Labels": labels,
+        },
+        "Mounts": [{
+            "Destination": mount_target,
+            "Driver": "local",
+            "Name": "",
+            "Propagation": "rprivate",
+            "RW": True,
+            "Source": mount_source,
+            "Type": "bind",
+        }],
+    }
+
+print(json.dumps([
+    container(
+        os.environ["APP_ID"], "sub2api", "sub2api",
+        os.environ["CUTOVER_APP_PROVENANCE_COMPOSE"],
+        os.environ["CUTOVER_APP_PROVENANCE_ENV"],
+        "ghcr.io/example/exapi@sha256:" + "9" * 64,
+        "/opt/sub2api/data", "/app/data",
+    ),
+    container(
+        os.environ["DB_ID"], "sub2api-postgres", "postgres",
+        os.environ["CUTOVER_DB_PROVENANCE_COMPOSE"],
+        "",
+        "postgres:18-alpine", "/opt/sub2api/postgres_data", "/var/lib/postgresql/data",
+    ),
+]))
+PY
+  exit 0
+fi
+if [[ "${1:-}" == exec ]]; then
+  printf 'sub2api|sub2api|local-socket|local-socket|7429012345678901234\n'
+  exit 0
+fi
+
+printf 'unexpected fake docker invocation: %s\n' "$*" >&2
+exit 1

@@ -15,20 +15,69 @@ die() { printf 'private cutover orchestration failed: %s\n' "$*" >&2; exit 1; }
 require_env() { [[ -n "${!1:-}" ]] || die "$1 is required"; }
 require_command() { command -v "$1" >/dev/null 2>&1 || die "$1 is required"; }
 
+dry_run=false
+if [[ "${1:-}" == --dry-run && $# -eq 1 ]]; then
+  dry_run=true
+elif [[ $# -ne 0 ]]; then
+  die 'usage: run-private-cutover.sh [--dry-run]'
+fi
+
 for command_name in docker python3; do require_command "$command_name"; done
 docker compose version >/dev/null 2>&1 || die 'Docker Compose v2 is required'
 
-for name in EXAPI_IMAGE COMPOSE_ENV_FILE EXAPI_MIGRATION_REPORT_KEY_FILE \
-  EXAPI_CONFIRMATION EXAPI_REVIEWED_COMMIT EXAPI_REPORT_ARCHIVE_COMMAND \
-  EXAPI_REPORT_ARCHIVE_VERIFY_COMMAND EXAPI_MAINTENANCE_VERIFY_COMMAND EXAPI_CONTROL_BIND_HOST \
-  EXAPI_CONTROL_LISTEN_ADDR EXAPI_CONTROL_HOSTS EXAPI_OPERATOR_PEER_IPS \
-  EXAPI_WIREGUARD_INTERFACE EXAPI_BATCH_CLEANUP_VERIFY_COMMAND; do
+for name in EXAPI_IMAGE COMPOSE_ENV_FILE COMPOSE_FILE COMPOSE_PROJECT_NAME \
+  EXAPI_CONTROL_BIND_HOST EXAPI_WIREGUARD_INTERFACE; do
   require_env "$name"
 done
 
 [[ "$EXAPI_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]] || die 'EXAPI_IMAGE must be immutable by digest'
-[[ "$EXAPI_REVIEWED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || die 'EXAPI_REVIEWED_COMMIT must be a full lowercase Git commit'
 [[ -r "$COMPOSE_ENV_FILE" ]] || die 'COMPOSE_ENV_FILE must be readable'
+
+compose_project=$COMPOSE_PROJECT_NAME
+compose_file=$COMPOSE_FILE
+app_service=${EXAPI_APP_SERVICE:-sub2api}
+db_service=${EXAPI_DB_SERVICE:-postgres}
+target_report=${EXAPI_CUTOVER_TARGET_REPORT:-"$ROOT_DIR/tmp/cutover-targets/private-cutover-target.json"}
+mkdir -p "$ROOT_DIR/tmp/cutover-targets"
+report_cutover_target() {
+  COMPOSE_FILE="$compose_file" COMPOSE_ENV_FILE="$COMPOSE_ENV_FILE" \
+    COMPOSE_PROJECT_NAME="$compose_project" EXAPI_IMAGE="$EXAPI_IMAGE" \
+    EXAPI_CONTROL_BIND_HOST="$EXAPI_CONTROL_BIND_HOST" \
+    EXAPI_WIREGUARD_INTERFACE="$EXAPI_WIREGUARD_INTERFACE" \
+    EXAPI_APP_SERVICE="$app_service" EXAPI_DB_SERVICE="$db_service" \
+    EXAPI_CUTOVER_TARGET_REPORT="$target_report" \
+    deploy/ops/report-private-cutover-target.sh
+}
+target_sha256=$(report_cutover_target) || die 'cutover target identity report failed'
+[[ "$target_sha256" =~ ^[0-9a-f]{64}$ ]] || die 'cutover target report returned an invalid digest'
+if [[ "$dry_run" == true ]]; then
+  printf 'private cutover target report: %s\n' "$target_report"
+  printf 'EXAPI_EXPECTED_CUTOVER_TARGET_SHA256=%s\n' "$target_sha256"
+  exit 0
+fi
+
+for name in EXAPI_MIGRATION_REPORT_KEY_FILE EXAPI_CONFIRMATION EXAPI_REVIEWED_COMMIT \
+  EXAPI_REPORT_ARCHIVE_COMMAND EXAPI_REPORT_ARCHIVE_VERIFY_COMMAND \
+  EXAPI_MAINTENANCE_VERIFY_COMMAND EXAPI_CONTROL_LISTEN_ADDR EXAPI_CONTROL_HOSTS \
+  EXAPI_OPERATOR_PEER_IPS EXAPI_BATCH_CLEANUP_VERIFY_COMMAND \
+  EXAPI_EXPECTED_CUTOVER_TARGET_SHA256; do
+  require_env "$name"
+done
+[[ "$EXAPI_EXPECTED_CUTOVER_TARGET_SHA256" =~ ^[0-9a-f]{64}$ ]] || \
+  die 'EXAPI_EXPECTED_CUTOVER_TARGET_SHA256 must be a lowercase SHA-256 digest'
+[[ "$target_sha256" == "$EXAPI_EXPECTED_CUTOVER_TARGET_SHA256" ]] || \
+  die 'cutover target identity changed after dry-run review'
+target_container_ids=$(python3 - "$target_report" <<'PY'
+import json
+import sys
+report = json.load(open(sys.argv[1], encoding="utf-8"))
+print(report["current"]["application"]["container_id"], report["current"]["database"]["container_id"])
+PY
+)
+read -r target_app_container_id target_db_container_id extra_container_id <<<"$target_container_ids"
+[[ -z "${extra_container_id:-}" && "$target_app_container_id" =~ ^[0-9a-f]{64}$ && \
+  "$target_db_container_id" =~ ^[0-9a-f]{64}$ ]] || die 'cannot parse reviewed target container IDs'
+[[ "$EXAPI_REVIEWED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || die 'EXAPI_REVIEWED_COMMIT must be a full lowercase Git commit'
 [[ "$EXAPI_MIGRATION_REPORT_KEY_FILE" = /* ]] || \
   die 'EXAPI_MIGRATION_REPORT_KEY_FILE must be an absolute path'
 [[ -x "$EXAPI_REPORT_ARCHIVE_COMMAND" ]] || die 'EXAPI_REPORT_ARCHIVE_COMMAND must be executable'
@@ -60,20 +109,6 @@ for value in peers:
         raise SystemExit("EXAPI_OPERATOR_PEER_IPS must contain non-loopback peer addresses")
 PY
 
-if command -v ip >/dev/null 2>&1; then
-  ip -o addr show dev "$EXAPI_WIREGUARD_INTERFACE" | awk '{print $4}' | cut -d/ -f1 | \
-    grep -Fxq "$EXAPI_CONTROL_BIND_HOST" || die 'EXAPI_CONTROL_BIND_HOST is not assigned to EXAPI_WIREGUARD_INTERFACE'
-elif command -v ifconfig >/dev/null 2>&1; then
-  ifconfig "$EXAPI_WIREGUARD_INTERFACE" | grep -Fq "$EXAPI_CONTROL_BIND_HOST" || \
-    die 'EXAPI_CONTROL_BIND_HOST is not assigned to EXAPI_WIREGUARD_INTERFACE'
-else
-  die 'ip or ifconfig is required to verify the WireGuard bind address'
-fi
-
-compose_project=${COMPOSE_PROJECT_NAME:-exapi-production}
-compose_file=${COMPOSE_FILE:-deploy/docker-compose.yml}
-app_service=${EXAPI_APP_SERVICE:-sub2api}
-db_service=${EXAPI_DB_SERVICE:-postgres}
 report_path=${EXAPI_REPORT_FILE:-/app/data/private-migration-report.json}
 verification_path=${EXAPI_REPORT_EVIDENCE_FILE:-/app/data/private-migration-evidence.json}
 key_container_path=/run/exapi-private-cutover/report.key
@@ -241,7 +276,7 @@ image_revision=$(docker image inspect "$EXAPI_IMAGE" --format '{{ index .Config.
 # after the image entrypoint drops to UID 1000. Copy the already-staged bytes
 # into an ephemeral Docker volume as UID 1000 and always destroy that volume.
 secret_volume=$(docker volume create)
-docker run --rm --network none --entrypoint /bin/sh \
+docker run --rm --network none --user 0:0 --entrypoint /bin/sh \
   -v "$staged_key:/source/report.key:ro" \
   -v "$batch_cleanup_evidence:/source/batch-cleanup-evidence.json:ro" \
   -v "$secret_volume:/target" \
@@ -281,9 +316,11 @@ service_count() {
 }
 
 service_healthy() {
-  local container_id health
+  local container_id health expected_container_id
+  expected_container_id=${2:-}
   container_id=$(compose ps -q "$1" | head -n 1)
   [[ -n "$container_id" ]] || return 1
+  [[ -z "$expected_container_id" || "$container_id" == "$expected_container_id" ]] || return 1
   health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container_id")
   [[ "$health" == healthy ]]
 }
@@ -292,7 +329,7 @@ service_running "$db_service" || die "$db_service must remain running for the of
 # The private readiness gate is intentionally false before cutover, so the
 # application healthcheck may report unhealthy even while its process is alive.
 # PostgreSQL, which remains online for the migration, must be healthy.
-service_healthy "$db_service" || die "$db_service must be healthy before the offline cutover"
+service_healthy "$db_service" "$target_db_container_id" || die "$db_service must be the reviewed healthy database before the offline cutover"
 [[ "$(service_count "$app_service")" -eq 1 ]] || die "expected exactly one retained $app_service container"
 if [[ "$resume" == true ]]; then
   ! service_running "$app_service" || die "$app_service must remain stopped in resume mode"
@@ -307,21 +344,28 @@ fi
 EXAPI_ROLLOUT_ID="$rollout_id" EXAPI_EXPECTED_APP_REPLICAS="$maintenance_expected_replicas" \
   "$EXAPI_MAINTENANCE_VERIFY_COMMAND" || die 'maintenance/ingress/replica gate failed'
 
+# Re-resolve every bound target immediately before downtime. Long-running
+# provider cleanup or preflight work must not leave a window in which Compose
+# can replace a reviewed container unnoticed.
+final_target_sha256=$(report_cutover_target) || die 'final cutover target identity report failed'
+[[ "$final_target_sha256" == "$EXAPI_EXPECTED_CUTOVER_TARGET_SHA256" ]] || \
+  die 'cutover target identity changed immediately before stop'
+
 # The application is intentionally never restarted by this script. A failed
 # migration, verification, archive, or operator interruption therefore leaves
 # admission stopped instead of silently returning to a partially cut-over DB.
 if [[ "$resume" == false ]]; then
-  compose stop -t "${EXAPI_STOP_TIMEOUT_SECONDS:-60}" "$app_service" >/dev/null
+  docker stop --time "${EXAPI_STOP_TIMEOUT_SECONDS:-60}" "$target_app_container_id" >/dev/null
 fi
 if service_running "$app_service"; then
   die "$app_service is still running after stop"
 fi
 service_running "$db_service" || die "$db_service stopped unexpectedly; refusing cutover"
-service_healthy "$db_service" || die "$db_service is not healthy after application stop"
+service_healthy "$db_service" "$target_db_container_id" || die "$db_service is not the reviewed healthy database after application stop"
 EXAPI_ROLLOUT_ID="$rollout_id" EXAPI_EXPECTED_APP_REPLICAS=0 \
   "$EXAPI_MAINTENANCE_VERIFY_COMMAND" || die 'post-stop maintenance/ingress/replica gate failed'
 
-database_clients=$(compose exec -T "$db_service" sh -ec \
+database_clients=$(docker exec "$target_db_container_id" sh -ec \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atqc "SELECT COUNT(*) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid() AND backend_type = '\''client backend'\''"')
 [[ "$database_clients" == 0 ]] || die "unexpected PostgreSQL client sessions remain after app stop: $database_clients"
 
@@ -347,8 +391,8 @@ archive_verification="$evidence_dir/private-migration-archive-verification.json"
 # The named data volume is mounted by the stopped production service. Copy only
 # the signed report and verification evidence to a protected local staging area;
 # the archive adapter must encrypt and upload both plus the HMAC key.
-compose cp "$app_service:$report_path" "$staged_report"
-compose cp "$app_service:$verification_path" "$staged_verification"
+docker cp "$target_app_container_id:$report_path" "$staged_report"
+docker cp "$target_app_container_id:$verification_path" "$staged_verification"
 chmod 600 "$staged_report" "$staged_verification"
 
 archive_json=$(EXAPI_ROLLOUT_ID="$rollout_id" \

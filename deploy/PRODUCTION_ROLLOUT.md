@@ -26,7 +26,7 @@ WireGuard interface and that the firewall permits only the listed operator
 peer addresses before promotion.
 
 After the final recovery set and canary evidence are complete, run the checked-in
-host-side orchestrator below. It stops and verifies the application container,
+host-side orchestrator below. It stops and verifies the exact reviewed application container ID,
 keeps PostgreSQL running, runs the release-image migration and report verifier
 as one-shot containers, archives the signed report/key/evidence through the
 required encrypted adapter, and leaves the application stopped for inspection:
@@ -34,8 +34,9 @@ required encrypted adapter, and leaves the application stopped for inspection:
 ```bash
 export EXAPI_IMAGE=ghcr.io/immortal-autumn/sub2api2personal@sha256:RELEASE_DIGEST
 export EXAPI_REVIEWED_COMMIT=<40-character-tagged-commit>
-export COMPOSE_ENV_FILE=/protected/exapi-production.env
-export COMPOSE_PROJECT_NAME=exapi-production
+export COMPOSE_FILE=/opt/sub2api/docker-compose.vX.Y.Z.yml
+export COMPOSE_ENV_FILE=/opt/sub2api/.env.vX.Y.Z
+export COMPOSE_PROJECT_NAME=sub2api
 export EXAPI_ROLLOUT_ID=exapi-vX.Y.Z-<change-ticket>
 export EXAPI_MIGRATION_REPORT_KEY_FILE=/protected/exapi-migration-report.key
 export EXAPI_CONFIRMATION=DROP-SAAS-DATA-KEEP-USER-<lowest-active-admin-id>
@@ -52,8 +53,37 @@ export EXAPI_BATCH_CLEANUP_VERIFY_COMMAND=/protected/adapters/verify-batch-clean
 # Use exactly one of these two policies:
 export EXAPI_LEGACY_LOCAL_BACKUP_DIR=/app/data/legacy-backups
 # export EXAPI_NO_LOCAL_BACKUPS=true
+deploy/ops/run-private-cutover.sh --dry-run
+```
+
+Dry-run mode is read-only. It resolves exactly one retained application and
+database container in the explicit `sub2api` project, verifies their Compose
+project/service labels, records each container ID and image digest, hashes the
+candidate Compose file, protected environment, fully rendered environment,
+actual mounts, and database cluster identity, and verifies that the control
+address belongs to the selected WireGuard interface. The secret-free mode-0600
+report defaults to `tmp/cutover-targets/private-cutover-target.json`. Review
+both its content and the printed digest, then bind the real run to it:
+
+```bash
+export EXAPI_EXPECTED_CUTOVER_TARGET_SHA256=<digest-printed-by-dry-run>
 deploy/ops/run-private-cutover.sh
 ```
+
+Any container recreation, image, mount, Compose/environment input, database
+cluster, project, or WireGuard identity change between those commands aborts
+before provider cleanup, key staging, image pull, or application downtime.
+`COMPOSE_FILE`, `COMPOSE_ENV_FILE`, and `COMPOSE_PROJECT_NAME` are deliberately
+mandatory; there is no production default that could select a similarly named
+project. `COMPOSE_FILE` is exactly one reviewed candidate file for this
+private-production cutover; restored-canary overlay lists use their separate
+workflow and are not accepted here. The normal `/opt/sub2api` rolling heuristic is supported: the retained
+application may name the versioned release Compose/environment in its labels
+while PostgreSQL and Redis retain `docker-compose.local.yml` and `.env`. Each
+container's own labelled files are resolved and hashed independently. A
+retained container created by an older Compose version may lack the optional
+environment-file provenance label; that absence is recorded explicitly while
+the mandatory candidate environment is still resolved and hashed.
 
 The script must be run while the normal application container process is
 running (its `/ready` healthcheck may be intentionally false before cutover)
@@ -63,7 +93,8 @@ invoke `/app/migrate-private-only` from the online container or a different
 database. It intentionally does not restart the application if migration,
 verification, or evidence archival fails.
 
-Before downtime, the orchestrator pulls the digest, checks its revision label,
+Before downtime, the orchestrator rechecks the approved target digest, pulls
+the release digest, checks its revision label,
 opens the protected source key exactly once without following any path
 symlinks, rejects hardlink aliases, and copies those bytes into a protected
 single-link `0600` staging file under this checkout's `tmp/` directory. It then
@@ -122,7 +153,9 @@ infer the choice from S3 `backup_records`:
 ```bash
 unset EXAPI_LEGACY_LOCAL_BACKUP_DIR
 export EXAPI_NO_LOCAL_BACKUPS=true
-deploy/ops/run-private-cutover.sh
+deploy/ops/run-private-cutover.sh --dry-run
+# Review the report, export its printed EXAPI_EXPECTED_CUTOVER_TARGET_SHA256,
+# then run deploy/ops/run-private-cutover.sh without --dry-run.
 ```
 
 The command takes a serializable transaction/advisory lock, retains the
@@ -183,11 +216,11 @@ After the archive evidence is copied off-host and independently reviewed, start
 only the reviewed digest explicitly:
 
 ```bash
-COMPOSE_PROJECT_NAME=exapi-production \
-COMPOSE_ENV_FILE=/protected/exapi-production.env \
+COMPOSE_PROJECT_NAME=sub2api \
+COMPOSE_ENV_FILE=/opt/sub2api/.env.vX.Y.Z \
   EXAPI_IMAGE=ghcr.io/immortal-autumn/sub2api2personal@sha256:RELEASE_DIGEST \
-  docker compose --env-file /protected/exapi-production.env \
-  -f deploy/docker-compose.yml up -d --no-deps sub2api
+  docker compose --env-file /opt/sub2api/.env.vX.Y.Z \
+  -f /opt/sub2api/docker-compose.vX.Y.Z.yml up -d --no-deps sub2api
 ```
 
 Then verify `/ready`, the WireGuard-bound control listener, and the external

@@ -14,10 +14,24 @@ services:
   sub2api:
     image: ${EXAPI_IMAGE:?Set EXAPI_IMAGE to an immutable ghcr.io/immortal-autumn/sub2api2personal@sha256:<digest> reference}
     container_name: ${EXAPI_CONTAINER_NAME:-sub2api}
+    user: "${EXAPI_RUNTIME_UID:-1000}:${EXAPI_RUNTIME_GID:-1000}"
     restart: unless-stopped
     stop_grace_period: ${EXAPI_STOP_GRACE_PERIOD:-50s}
+    read_only: true
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: ${EXAPI_APP_PIDS_LIMIT:-512}
+    mem_limit: ${EXAPI_APP_MEMORY_LIMIT:-2g}
+    cpus: ${EXAPI_APP_CPUS:-2.0}
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=${EXAPI_APP_TMPFS_SIZE:-64m},mode=1777
+    logging:
+      driver: json-file
+      options:
+        max-size: ${EXAPI_LOG_MAX_SIZE:-10m}
+        max-file: "${EXAPI_LOG_MAX_FILES:-5}"
     ulimits:
       nofile:
         soft: 100000

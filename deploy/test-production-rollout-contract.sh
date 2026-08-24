@@ -17,6 +17,7 @@ done
 bash -n deploy/ops/validate-immutable-compose.sh || fail 'immutable Compose validator has invalid shell syntax'
 sh -n deploy/ops/with-migration-report-key.sh || fail 'migration report key wrapper has invalid POSIX shell syntax'
 bash -n deploy/ops/run-private-cutover.sh || fail 'offline cutover orchestrator has invalid shell syntax'
+bash -n deploy/ops/report-private-cutover-target.sh || fail 'cutover target reporter has invalid shell syntax'
 
 grep -Fq 'restore-checks.required.sql' deploy/ops/verify-logical-restore.sh || \
   fail 'logical restore can bypass the repository-owned validator'
@@ -41,14 +42,22 @@ grep -Fq '(umask 077; set -C; openssl rand -hex 32 >"$key_file")' deploy/PRODUCT
   fail 'offline cutover does not use no-clobber report-key generation'
 grep -Fq 'deploy/ops/run-private-cutover.sh' deploy/PRODUCTION_ROLLOUT.md || \
   fail 'runbook does not use the checked-in offline cutover orchestrator'
-grep -Fq 'export COMPOSE_PROJECT_NAME=exapi-production' deploy/PRODUCTION_ROLLOUT.md || \
+grep -Fq 'export COMPOSE_PROJECT_NAME=sub2api' deploy/PRODUCTION_ROLLOUT.md || \
   fail 'runbook does not pin the cutover Compose project name'
+grep -Fq 'export COMPOSE_FILE=/opt/sub2api/docker-compose.vX.Y.Z.yml' deploy/PRODUCTION_ROLLOUT.md || \
+  fail 'runbook does not pin the versioned OPC Compose file'
+grep -Fq 'EXAPI_EXPECTED_CUTOVER_TARGET_SHA256' deploy/ops/run-private-cutover.sh || \
+  fail 'offline cutover is not bound to a reviewed target report'
+grep -Fq 'deploy/ops/report-private-cutover-target.sh' deploy/ops/run-private-cutover.sh || \
+  fail 'offline cutover does not inspect the live target identity'
+grep -Fq -- '--dry-run' deploy/ops/run-private-cutover.sh || \
+  fail 'offline cutover does not expose a target-report dry run'
 grep -Fq 'EXAPI_LEGACY_LOCAL_BACKUP_DIR' deploy/ops/run-private-cutover.sh || \
   fail 'offline cutover does not expose an explicit legacy-local-backup mode'
 grep -Fq 'EXAPI_NO_LOCAL_BACKUPS' deploy/ops/run-private-cutover.sh || \
   fail 'offline cutover does not expose an explicit no-local-backups mode'
-grep -Fq 'compose stop -t' deploy/ops/run-private-cutover.sh || \
-  fail 'offline cutover does not stop the application service'
+grep -Fq 'docker stop --time' deploy/ops/run-private-cutover.sh || \
+  fail 'offline cutover does not stop the exact reviewed application container'
 grep -Fq 'keeps PostgreSQL running' deploy/PRODUCTION_ROLLOUT.md || \
   fail 'runbook does not require PostgreSQL to remain available'
 grep -Fq 'EXAPI_REPORT_ARCHIVE_COMMAND' deploy/ops/run-private-cutover.sh || \
@@ -104,6 +113,8 @@ grep -Fq 'SELECT COUNT(*) FROM batch_image_jobs' deploy/ops/run-private-cutover.
   fail 'offline cutover does not fail before downtime when provider cleanup references remain'
 grep -Fq 'chown 1000:1000 /target/report.key' deploy/ops/run-private-cutover.sh || \
   fail 'offline cutover does not hand the key safely to the image runtime UID'
+grep -Fq -- '--network none --user 0:0' deploy/ops/run-private-cutover.sh || \
+  fail 'offline cutover secret staging does not explicitly isolate its root-only copy step'
 grep -Fq 'stage-private-cutover-report-key.py' deploy/ops/run-private-cutover.sh || \
   fail 'offline cutover does not take a protected single-read key snapshot'
 grep -Fq 'EXAPI_MIGRATION_REPORT_KEY_FILE="$staged_key"' deploy/ops/run-private-cutover.sh || \
@@ -114,12 +125,21 @@ grep -Fq 'EXAPI_ALLOW_CONTAINER_WILDCARD_CONTROL_BIND=true' deploy/docker-compos
   fail 'bridge Compose does not explicitly authorize its container-only wildcard control listener'
 
 pull_line=$(grep -nF 'docker pull "$EXAPI_IMAGE"' deploy/ops/run-private-cutover.sh | cut -d: -f1)
-stop_line=$(grep -nF 'compose stop -t' deploy/ops/run-private-cutover.sh | cut -d: -f1)
+stop_line=$(grep -nF 'docker stop --time' deploy/ops/run-private-cutover.sh | cut -d: -f1)
 [[ -n "$pull_line" && -n "$stop_line" && "$pull_line" -lt "$stop_line" ]] || \
   fail 'immutable image pull must complete before application downtime'
 preflight_line=$(grep -nF 'test -x /app/migrate-private-only' deploy/ops/run-private-cutover.sh | head -n1 | cut -d: -f1)
 [[ -n "$preflight_line" && "$preflight_line" -lt "$stop_line" ]] || \
   fail 'real entrypoint/binary/key/database preflight must complete before application downtime'
+target_line=$(grep -nF 'deploy/ops/report-private-cutover-target.sh' deploy/ops/run-private-cutover.sh | head -n1 | cut -d: -f1)
+[[ -n "$target_line" && "$target_line" -lt "$pull_line" && "$target_line" -lt "$stop_line" ]] || \
+  fail 'target identity must be verified before image pull and application downtime'
+grep -Fq 'cutover target identity changed immediately before stop' deploy/ops/run-private-cutover.sh || \
+  fail 'target identity is not rechecked immediately before downtime'
+grep -Fq 'docker cp "$target_app_container_id:$report_path"' deploy/ops/run-private-cutover.sh || \
+  fail 'cutover evidence is not copied from the reviewed application container ID'
+
+deploy/tests/private-cutover-target-test.sh || fail 'cutover target identity mutation tests failed'
 
 mkdir -p "$ROOT_DIR/tmp"
 secure_tmp=
@@ -239,6 +259,12 @@ grep -Fq 'GORELEASER_CURRENT_TAG: ${{ env.RELEASE_TAG }}' .github/workflows/rele
   fail 'GoReleaser is not bound to the validated requested tag'
 grep -Fq 'gh release upload "$RELEASE_TAG" image.spdx.json --clobber' .github/workflows/release.yml || \
   fail 'manual releases do not attach the image SBOM explicitly'
+grep -Fq -- "--format '{{.Config.User}}')\" = 'sub2api:sub2api'" .github/workflows/release.yml || \
+  fail 'release verification does not require the non-root image user'
+grep -Fq -- '--tmpfs /app/data:rw,nosuid,nodev,size=64m,uid=1000,gid=1000,mode=0750' .github/workflows/release.yml || \
+  fail 'release verification does not exercise writable non-root data on a read-only image'
+grep -Fq -- '--read-only --user 0:0' .github/workflows/release.yml || \
+  fail 'release verification does not prove root startup is rejected'
 grep -Fq 'bool(parsed.netloc)' deploy/ops/run-private-cutover.sh || \
   fail 'private cutover accepts an S3 URI without a bucket'
 grep -Fq 'bool(parsed.path.strip("/"))' deploy/ops/run-private-cutover.sh || \

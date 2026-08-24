@@ -18,10 +18,24 @@ services:
   sub2api:
     image: ${EXAPI_IMAGE:?Set EXAPI_IMAGE to an immutable ghcr.io/immortal-autumn/sub2api2personal@sha256:<digest> reference}
     container_name: ${EXAPI_CONTAINER_NAME:-sub2api}
+    user: "${EXAPI_RUNTIME_UID:-1000}:${EXAPI_RUNTIME_GID:-1000}"
     restart: unless-stopped
     stop_grace_period: ${EXAPI_STOP_GRACE_PERIOD:-50s}
+    read_only: true
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: ${EXAPI_APP_PIDS_LIMIT:-512}
+    mem_limit: ${EXAPI_APP_MEMORY_LIMIT:-2g}
+    cpus: ${EXAPI_APP_CPUS:-2.0}
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=${EXAPI_APP_TMPFS_SIZE:-64m},mode=1777
+    logging:
+      driver: json-file
+      options:
+        max-size: ${EXAPI_LOG_MAX_SIZE:-10m}
+        max-file: "${EXAPI_LOG_MAX_FILES:-5}"
     ulimits:
       nofile:
         soft: 100000
@@ -233,9 +247,24 @@ services:
   postgres:
     image: ${POSTGRES_IMAGE:?Set POSTGRES_IMAGE to an immutable postgres@sha256:<digest> reference}
     container_name: ${EXAPI_POSTGRES_CONTAINER_NAME:-sub2api-postgres}
+    user: "${EXAPI_POSTGRES_UID:-70}:${EXAPI_POSTGRES_GID:-70}"
     restart: unless-stopped
+    read_only: true
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: ${EXAPI_POSTGRES_PIDS_LIMIT:-256}
+    mem_limit: ${EXAPI_POSTGRES_MEMORY_LIMIT:-2g}
+    cpus: ${EXAPI_POSTGRES_CPUS:-2.0}
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=${EXAPI_POSTGRES_TMPFS_SIZE:-64m},mode=1777
+      - /var/run/postgresql:rw,nosuid,nodev,size=16m,mode=3770,uid=70,gid=70
+    logging:
+      driver: json-file
+      options:
+        max-size: ${EXAPI_LOG_MAX_SIZE:-10m}
+        max-file: "${EXAPI_LOG_MAX_FILES:-5}"
     ulimits:
       nofile:
         soft: 100000
@@ -281,9 +310,23 @@ services:
   redis:
     image: ${REDIS_IMAGE:?Set REDIS_IMAGE to an immutable redis@sha256:<digest> reference}
     container_name: ${EXAPI_REDIS_CONTAINER_NAME:-sub2api-redis}
+    user: "${EXAPI_REDIS_UID:-999}:${EXAPI_REDIS_GID:-1000}"
     restart: unless-stopped
+    read_only: true
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: ${EXAPI_REDIS_PIDS_LIMIT:-128}
+    mem_limit: ${EXAPI_REDIS_MEMORY_LIMIT:-1g}
+    cpus: ${EXAPI_REDIS_CPUS:-1.0}
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=${EXAPI_REDIS_TMPFS_SIZE:-32m},mode=1777
+    logging:
+      driver: json-file
+      options:
+        max-size: ${EXAPI_LOG_MAX_SIZE:-10m}
+        max-file: "${EXAPI_LOG_MAX_FILES:-5}"
     ulimits:
       nofile:
         soft: 100000

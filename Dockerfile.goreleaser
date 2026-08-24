@@ -25,7 +25,6 @@ RUN apk add --no-cache \
     ca-certificates \
     tzdata \
     curl \
-    su-exec \
     libpq \
     zstd-libs \
     lz4-libs \
@@ -54,18 +53,21 @@ COPY verify-private-cutover-report /app/verify-private-cutover-report
 COPY --chown=sub2api:sub2api backend/resources /app/resources
 COPY --chown=sub2api:sub2api deploy/ops/with-migration-report-key.sh /app/with-migration-report-key.sh
 
-# Create data directory
-RUN mkdir -p /app/data && chown -R sub2api:sub2api /app
+# Named volumes inherit this build-time ownership. Bind mounts are prepared
+# once on the host; startup never recursively changes production data owners.
+RUN install -d -o sub2api -g sub2api -m 0750 /app/data
 
-# Copy entrypoint script (fixes volume permissions then drops to sub2api)
+# Copy the non-root entrypoint and make the image user an explicit invariant.
 COPY deploy/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh /app/with-migration-report-key.sh
+
+USER sub2api:sub2api
 
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl --fail --silent --show-error --max-time 5 http://localhost:${SERVER_PORT:-8080}/ready || exit 1
 
-# Run the application (entrypoint fixes /app/data ownership then execs as sub2api)
+# Run the application as the unprivileged image user.
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["/app/sub2api"]
