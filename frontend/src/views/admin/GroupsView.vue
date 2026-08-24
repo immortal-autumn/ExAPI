@@ -4195,6 +4195,7 @@ import {
 } from "./groupsModelsList";
 import { createModelsListCandidatesTracker } from "./groupsModelsListCandidates";
 import { normalizeSupportedModelScopesForPlatform } from "./groupsSupportedModelScopes";
+import { useGroupsTelemetry } from "./groupsTelemetry";
 import {
   isProfitControlPlatform,
   profitPercentToDecimal,
@@ -4579,26 +4580,21 @@ const copyAccountsGroupOptionsForEdit = computed(() => {
 
 const groups = ref<AdminGroup[]>([]);
 const loading = ref(false);
-type GroupUsageSummary = {
-  today_cost: number;
-  total_cost: number;
-};
-
-const usageMap = ref<Map<number, GroupUsageSummary>>(new Map());
-const usageLoading = ref(false);
-const capacityMap = ref<
-  Map<
-    number,
-    {
-      concurrencyUsed: number;
-      concurrencyMax: number;
-      sessionsUsed: number;
-      sessionsMax: number;
-      rpmUsed: number;
-      rpmMax: number;
-    }
-  >
->(new Map());
+const { usageMap, usageLoading, capacityMap, loadUsageSummary, loadCapacitySummary } =
+  useGroupsTelemetry({
+    isUsageVisible: () => hasVisibleUsageSummaryConsumer.value,
+    isCapacityVisible: () => hasVisibleCapacityColumn.value,
+    fetchUsageSummary: (timezone) => adminAPI.groups.getUsageSummary(timezone),
+    fetchCapacitySummary: () => adminAPI.groups.getCapacitySummary(),
+    onError: (kind, error) => {
+      console.error(
+        kind === "usage"
+          ? "Error loading group usage summary:"
+          : "Error loading group capacity summary:",
+        error,
+      );
+    },
+  });
 const searchQuery = ref("");
 const filters = reactive({
   platform: "",
@@ -5403,63 +5399,6 @@ const getQuotaUsageClass = (
     return "font-semibold text-amber-600 dark:text-amber-400";
   }
   return "font-medium text-gray-700 dark:text-gray-300";
-};
-
-const loadUsageSummary = async () => {
-  if (!hasVisibleUsageSummaryConsumer.value) {
-    usageLoading.value = false;
-    return;
-  }
-  usageLoading.value = true;
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const data = await adminAPI.groups.getUsageSummary(tz);
-    const map = new Map<number, GroupUsageSummary>();
-    for (const item of data) {
-      map.set(item.group_id, {
-        today_cost: item.today_cost,
-        total_cost: item.total_cost,
-      });
-    }
-    usageMap.value = map;
-  } catch (error) {
-    console.error("Error loading group usage summary:", error);
-  } finally {
-    usageLoading.value = false;
-  }
-};
-
-const loadCapacitySummary = async () => {
-  if (!hasVisibleCapacityColumn.value) {
-    return;
-  }
-  try {
-    const data = await adminAPI.groups.getCapacitySummary();
-    const map = new Map<
-      number,
-      {
-        concurrencyUsed: number;
-        concurrencyMax: number;
-        sessionsUsed: number;
-        sessionsMax: number;
-        rpmUsed: number;
-        rpmMax: number;
-      }
-    >();
-    for (const item of data) {
-      map.set(item.group_id, {
-        concurrencyUsed: item.concurrency_used,
-        concurrencyMax: item.concurrency_max,
-        sessionsUsed: item.sessions_used,
-        sessionsMax: item.sessions_max,
-        rpmUsed: item.rpm_used,
-        rpmMax: item.rpm_max,
-      });
-    }
-    capacityMap.value = map;
-  } catch (error) {
-    console.error("Error loading group capacity summary:", error);
-  }
 };
 
 let searchTimeout: ReturnType<typeof setTimeout>;
