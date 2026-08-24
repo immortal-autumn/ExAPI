@@ -7,27 +7,33 @@ fail() { printf 'private cutover target test failed: %s\n' "$*" >&2; exit 1; }
 
 mkdir -p tmp
 test_dir=$(mktemp -d tmp/cutover-target-test.XXXXXX)
+report_file=
+cleanup() {
+  rm -rf "$test_dir"
+  [[ -z "$report_file" ]] || rm -f "$report_file"
+}
+trap cleanup EXIT HUP INT TERM
+
 secure_tmp=
 if [[ -n "${EXAPI_CONTRACT_SECURE_TMP_DIR:-}" ]]; then
-  mkdir -p "$EXAPI_CONTRACT_SECURE_TMP_DIR"
-  secure_tmp=$EXAPI_CONTRACT_SECURE_TMP_DIR
+  mkdir -p "$EXAPI_CONTRACT_SECURE_TMP_DIR" || fail 'cannot create EXAPI_CONTRACT_SECURE_TMP_DIR'
+  candidates=("$EXAPI_CONTRACT_SECURE_TMP_DIR")
 else
-  for candidate in "$ROOT_DIR/tmp" /dev/shm "${TMPDIR:-/tmp}" /tmp; do
-    [[ -d "$candidate" && -w "$candidate" ]] || continue
-    mode_probe=$(mktemp "$candidate/cutover-target-test-mode.XXXXXX") || continue
-    chmod 600 "$mode_probe"
-    mode=$(stat -c '%a' "$mode_probe" 2>/dev/null || stat -f '%Lp' "$mode_probe" 2>/dev/null || true)
-    rm -f "$mode_probe"
-    if [[ "$mode" == 600 ]]; then
-      secure_tmp=$candidate
-      break
-    fi
-  done
+  candidates=("$ROOT_DIR/tmp" /dev/shm "${TMPDIR:-/tmp}" /tmp)
 fi
+for candidate in "${candidates[@]}"; do
+  [[ -d "$candidate" && -w "$candidate" ]] || continue
+  mode_probe=$(mktemp "$candidate/cutover-target-test-mode.XXXXXX") || continue
+  chmod 600 "$mode_probe"
+  mode=$(stat -c '%a' "$mode_probe" 2>/dev/null || stat -f '%Lp' "$mode_probe" 2>/dev/null || true)
+  rm -f "$mode_probe"
+  if [[ "$mode" == 600 ]]; then
+    secure_tmp=$candidate
+    break
+  fi
+done
 [[ -n "$secure_tmp" ]] || fail 'no permission-capable temporary directory; set EXAPI_CONTRACT_SECURE_TMP_DIR'
 report_file=$(mktemp "$secure_tmp/exapi-cutover-target-test.XXXXXX")
-cleanup() { rm -rf "$test_dir"; rm -f "$report_file"; }
-trap cleanup EXIT HUP INT TERM
 
 candidate_compose="$test_dir/docker-compose.v0.2.6.yml"
 legacy_compose="$test_dir/docker-compose.local.yml"
