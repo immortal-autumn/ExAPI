@@ -14,5 +14,8 @@ describe('DashboardView private product boundary', () => {
     expect(source).toContain('v-if="privateGatewayControlPlane"')
     expect(source).toContain('if (privateGatewayControlPlane) return')
     expect(source).toContain('isSingleUserPrivateControlPlaneBrowser')
+    expect(source).not.toContain('@/components/charts/')
+    expect(source).not.toContain("import('chart.js')")
+    expect(source).not.toContain("import('vue-chartjs')")
   })
 })
