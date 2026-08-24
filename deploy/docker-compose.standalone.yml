@@ -107,6 +107,8 @@ services:
       # Setup Configuration
       # =======================================================================
       - SETUP_MIGRATION_TIMEOUT_SECONDS=${SETUP_MIGRATION_TIMEOUT_SECONDS:-0}
+      - EXAPI_MIGRATION_LOCK_TIMEOUT_SECONDS=${EXAPI_MIGRATION_LOCK_TIMEOUT_SECONDS:-60}
+      - EXAPI_MIGRATION_STATEMENT_TIMEOUT_SECONDS=${EXAPI_MIGRATION_STATEMENT_TIMEOUT_SECONDS:-600}
 
       # =======================================================================
       # Timezone Configuration

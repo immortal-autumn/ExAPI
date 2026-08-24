@@ -37,6 +37,77 @@ func TestApplyMigrations_DelegatesToApplyMigrationsFS(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestMigrationRuntimePolicyFromEnv(t *testing.T) {
+	t.Run("accepts bounded overrides", func(t *testing.T) {
+		t.Setenv(migrationLockTimeoutEnv, "17")
+		t.Setenv(migrationStatementTimeoutEnv, "91")
+
+		policy, err := migrationRuntimePolicyFromEnv()
+		require.NoError(t, err)
+		require.Equal(t, 17*time.Second, policy.lockTimeout)
+		require.Equal(t, 91*time.Second, policy.statementTimeout)
+	})
+
+	for _, tc := range []struct {
+		name  string
+		env   string
+		value string
+	}{
+		{name: "zero", env: migrationLockTimeoutEnv, value: "0"},
+		{name: "not an integer", env: migrationStatementTimeoutEnv, value: "1.5"},
+		{name: "lock above maximum", env: migrationLockTimeoutEnv, value: "601"},
+		{name: "statement above maximum", env: migrationStatementTimeoutEnv, value: "3601"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(migrationLockTimeoutEnv, "")
+			t.Setenv(migrationStatementTimeoutEnv, "")
+			t.Setenv(tc.env, tc.value)
+
+			_, err := migrationRuntimePolicyFromEnv()
+			require.ErrorContains(t, err, tc.env)
+		})
+	}
+}
+
+func TestApplyMigrationsFSWithPolicy_BoundsLockWait(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	mock.ExpectQuery("SELECT pg_try_advisory_lock\\(\\$1\\)").
+		WithArgs(migrationsAdvisoryLockID).
+		WillReturnRows(sqlmock.NewRows([]string{"pg_try_advisory_lock"}).AddRow(false))
+
+	policy := defaultMigrationRuntimePolicy()
+	policy.lockTimeout = 5 * time.Millisecond
+	err = applyMigrationsFSWithPolicy(context.Background(), db, fstest.MapFS{}, policy)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Zero(t, db.Stats().OpenConnections, "timed-out lock session must be discarded")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestApplyMigrationsFSWithPolicy_BoundsMigrationStatements(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	mock.ExpectQuery("SELECT pg_try_advisory_lock\\(\\$1\\)").
+		WithArgs(migrationsAdvisoryLockID).
+		WillReturnRows(sqlmock.NewRows([]string{"pg_try_advisory_lock"}).AddRow(true))
+	mock.ExpectExec("CREATE TABLE IF NOT EXISTS schema_migrations").
+		WillDelayFor(50 * time.Millisecond).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery("SELECT pg_advisory_unlock\\(\\$1\\)").
+		WithArgs(migrationsAdvisoryLockID).
+		WillReturnRows(sqlmock.NewRows([]string{"pg_advisory_unlock"}).AddRow(true))
+
+	policy := defaultMigrationRuntimePolicy()
+	policy.statementTimeout = 5 * time.Millisecond
+	err = applyMigrationsFSWithPolicy(context.Background(), db, fstest.MapFS{}, policy)
+	require.ErrorContains(t, err, "create schema_migrations")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestApplyMigrationsReturnsUnlockFailureAndDiscardsSession(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)

@@ -3,10 +3,12 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"io/fs"
 	"testing"
 	"testing/fstest"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/Wei-Shaw/sub2api/migrations"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,14 +43,43 @@ func TestValidateMigrationExecutionMode(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("notx迁移允许幂等并发索引语句", func(t *testing.T) {
+	t.Run("future notx migration requires exactly one operation", func(t *testing.T) {
 		nonTx, err := validateMigrationExecutionMode("001_add_idx_notx.sql", `
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_a ON t(a);
 DROP INDEX CONCURRENTLY IF EXISTS idx_b;
 `)
+		require.False(t, nonTx)
+		require.ErrorContains(t, err, "exactly one")
+	})
+
+	t.Run("reviewed historical migration preserves exact operation count", func(t *testing.T) {
+		nonTx, err := validateMigrationExecutionMode("150_account_group_scheduler_indexes_notx.sql", `
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_a ON t(a);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_b ON t(b);
+`)
 		require.True(t, nonTx)
 		require.NoError(t, err)
+
+		nonTx, err = validateMigrationExecutionMode("150_account_group_scheduler_indexes_notx.sql", `
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_a ON t(a);
+`)
+		require.False(t, nonTx)
+		require.ErrorContains(t, err, "exactly 2")
 	})
+}
+
+func TestValidateAllEmbeddedNonTransactionalMigrations(t *testing.T) {
+	files, err := fs.Glob(migrations.FS, "*_notx.sql")
+	require.NoError(t, err)
+	require.NotEmpty(t, files)
+
+	for _, name := range files {
+		content, err := fs.ReadFile(migrations.FS, name)
+		require.NoError(t, err, name)
+		nonTx, err := validateMigrationExecutionMode(name, string(content))
+		require.NoError(t, err, name)
+		require.True(t, nonTx, name)
+	}
 }
 
 func TestApplyMigrationsFS_NonTransactionalMigration(t *testing.T) {
@@ -60,6 +91,9 @@ func TestApplyMigrationsFS_NonTransactionalMigration(t *testing.T) {
 	mock.ExpectQuery("SELECT checksum FROM schema_migrations WHERE filename = \\$1").
 		WithArgs("001_add_idx_notx.sql").
 		WillReturnError(sql.ErrNoRows)
+	mock.ExpectQuery("SELECT EXISTS \\(").
+		WithArgs("idx_t_a").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
 	mock.ExpectExec("CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_t_a ON t\\(a\\)").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("INSERT INTO schema_migrations \\(filename, checksum\\) VALUES \\(\\$1, \\$2\\)").
@@ -80,7 +114,7 @@ func TestApplyMigrationsFS_NonTransactionalMigration(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestApplyMigrationsFS_NonTransactionalMigration_MultiStatements(t *testing.T) {
+func TestApplyMigrationsFS_NonTransactionalMigration_RejectsFutureMultiStatementFile(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer func() { _ = db.Close() }()
@@ -89,13 +123,6 @@ func TestApplyMigrationsFS_NonTransactionalMigration_MultiStatements(t *testing.
 	mock.ExpectQuery("SELECT checksum FROM schema_migrations WHERE filename = \\$1").
 		WithArgs("001_add_multi_idx_notx.sql").
 		WillReturnError(sql.ErrNoRows)
-	mock.ExpectExec("CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_t_a ON t\\(a\\)").
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec("CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_t_b ON t\\(b\\)").
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec("INSERT INTO schema_migrations \\(filename, checksum\\) VALUES \\(\\$1, \\$2\\)").
-		WithArgs("001_add_multi_idx_notx.sql", sqlmock.AnyArg()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectQuery("SELECT pg_advisory_unlock\\(\\$1\\)").
 		WithArgs(migrationsAdvisoryLockID).
 		WillReturnRows(sqlmock.NewRows([]string{"pg_advisory_unlock"}).AddRow(true))
@@ -112,7 +139,35 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_t_b ON t(b);
 	}
 
 	err = applyMigrationsFS(context.Background(), db, fsys)
+	require.ErrorContains(t, err, "exactly one concurrent-index operation")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestApplyMigrationsFS_NonTransactionalMigration_FailsClosedOnInterruptedIndex(t *testing.T) {
+	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	prepareMigrationsBootstrapExpectations(mock)
+	mock.ExpectQuery("SELECT checksum FROM schema_migrations WHERE filename = \\$1").
+		WithArgs("200_add_idx_notx.sql").
+		WillReturnError(sql.ErrNoRows)
+	mock.ExpectQuery("SELECT EXISTS \\(").
+		WithArgs("idx_t_a").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT pg_advisory_unlock\\(\\$1\\)").
+		WithArgs(migrationsAdvisoryLockID).
+		WillReturnRows(sqlmock.NewRows([]string{"pg_advisory_unlock"}).AddRow(true))
+
+	fsys := fstest.MapFS{
+		"200_add_idx_notx.sql": &fstest.MapFile{
+			Data: []byte("CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_t_a ON t(a);"),
+		},
+	}
+
+	err = applyMigrationsFS(context.Background(), db, fsys)
+	require.ErrorContains(t, err, "invalid concurrent index idx_t_a indicates an interrupted migration")
+	require.ErrorContains(t, err, "DROP INDEX CONCURRENTLY IF EXISTS idx_t_a")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

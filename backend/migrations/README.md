@@ -26,14 +26,20 @@ Execution rules:
 2. `*_notx.sql` files run without a surrounding `BEGIN`/`COMMIT` transaction.
 3. `*_notx.sql` files may contain only concurrent-index statements; do not mix
    transaction-control statements or other DDL/DML into them.
+4. New `*_notx.sql` files must contain exactly one concurrent-index operation.
+   Historical multi-operation files are runner-reviewed and frozen to their
+   existing statement counts; do not use them as templates.
 
 Idempotency is mandatory:
 
 - Create indexes with `CREATE INDEX CONCURRENTLY IF NOT EXISTS ...`.
 - Drop indexes with `DROP INDEX CONCURRENTLY IF EXISTS ...`.
 
-These forms keep disaster-recovery replay and repeated execution from failing
-when the target object already exists or is already absent.
+These forms make replay idempotent, but `IF NOT EXISTS` does not prove that a
+previously interrupted concurrent index is valid. Before replay, the runner
+checks `pg_index.indisvalid` and fails closed with a deterministic repair
+instruction. A small set of historical migrations has an explicitly reviewed
+automatic reconciliation routine.
 
 ## Migration File Structure
 
@@ -75,12 +81,14 @@ Why?
 
 3. **Test locally**
    ```bash
-   # Apply migration
-   make migrate-up
-
-   # Test rollback
-   make migrate-down
+   # Run runner validation and migration tests.
+   go test ./internal/repository -run 'Migration|Migrations'
    ```
+
+   Apply the migration to a disposable PostgreSQL database from a clean schema,
+   then restart and apply it again to verify idempotency. For `_notx.sql`, also
+   interrupt the concurrent operation and verify that replay refuses any
+   invalid index evidence.
 
 4. **Commit and deploy**
    ```bash
@@ -125,11 +133,12 @@ touch migrations/018_your_new_change.sql
 
 1. **Keep migrations small and focused**
    - One logical change per migration
-   - Easier to review and rollback
+   - Easier to review and compensate safely
 
-2. **Write reversible migrations**
-   - Always provide a working Down migration
-   - Test rollback before committing
+2. **Use forward-only compensation**
+   - The runner has no down-migration command or Down section parser
+   - Correct deployed schema or data with a newly numbered migration
+   - Never edit, delete, rename, or reverse an applied migration in place
 
 3. **Use transactions**
    - Wrap DDL statements in transactions when possible
@@ -142,7 +151,7 @@ touch migrations/018_your_new_change.sql
 5. **Test in development first**
    - Apply migration locally
    - Verify data integrity
-   - Test rollback
+   - Reapply to verify idempotency and test any forward compensating migration
 
 ## Example Migration
 
@@ -169,17 +178,24 @@ See "If You Accidentally Modified an Applied Migration" above.
 ```bash
 # Check migration status
 psql -d sub2api -c "SELECT * FROM schema_migrations ORDER BY applied_at DESC;"
-
-# Manually rollback if needed (use with caution)
-# Better to fix the migration and create a new one
 ```
 
-### Need to Skip a Migration (Emergency Only)
-```sql
--- DANGEROUS: Only use in development or with extreme caution
-INSERT INTO schema_migrations (filename, checksum, applied_at)
-VALUES ('NNN_migration.sql', 'calculated_checksum', NOW());
-```
+Do not manually insert a `schema_migrations` row to skip failed work. That can
+record a schema state the runner never established. Repair the underlying
+failure and retry, or add a reviewed forward-only compensating migration.
+
+### Bounded startup waits
+
+The runner enforces finite waits even when its caller supplies an unbounded
+context:
+
+- `EXAPI_MIGRATION_LOCK_TIMEOUT_SECONDS`: advisory-lock acquisition timeout;
+  default 60, allowed range 1–600.
+- `EXAPI_MIGRATION_STATEMENT_TIMEOUT_SECONDS`: timeout for runner statements and
+  each transactional migration unit; default 600, allowed range 1–3600.
+
+Invalid, zero, negative, or above-maximum values stop startup. A caller's
+shorter context deadline always wins.
 
 ## References
 

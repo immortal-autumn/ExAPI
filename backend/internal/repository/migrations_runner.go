@@ -9,7 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,12 +55,42 @@ CREATE TABLE IF NOT EXISTS atlas_schema_revisions (
 const migrationsAdvisoryLockID int64 = 694208311321144027
 const migrationsLockRetryInterval = 500 * time.Millisecond
 const nonTransactionalMigrationSuffix = "_notx.sql"
+
+const (
+	migrationLockTimeoutEnv          = "EXAPI_MIGRATION_LOCK_TIMEOUT_SECONDS"
+	migrationStatementTimeoutEnv     = "EXAPI_MIGRATION_STATEMENT_TIMEOUT_SECONDS"
+	defaultMigrationLockTimeout      = 60 * time.Second
+	maximumMigrationLockTimeout      = 10 * time.Minute
+	defaultMigrationStatementTimeout = 10 * time.Minute
+	maximumMigrationStatementTimeout = 60 * time.Minute
+)
+
 const paymentOrdersOutTradeNoUniqueMigration = "120_enforce_payment_orders_out_trade_no_unique_notx.sql"
 const paymentOrdersOutTradeNoUniqueIndex = "paymentorder_out_trade_no_unique"
 const schedulerOutboxPendingDedupKeyMigration = "153_scheduler_outbox_pending_dedup_key_index_notx.sql"
 const schedulerOutboxPendingDedupKeyIndex = "idx_scheduler_outbox_pending_dedup_key"
 const latestAPIKeyIPIndexMigration = "174_add_usage_logs_api_key_latest_ip_index_notx.sql"
 const latestAPIKeyIPIndex = "idx_usage_logs_api_key_latest_ip"
+
+var createConcurrentIndexPattern = regexp.MustCompile(`(?is)^CREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\s+IF\s+NOT\s+EXISTS\s+([a-z_][a-z0-9_$]*)\s+ON\b`)
+var dropConcurrentIndexPattern = regexp.MustCompile(`(?is)^DROP\s+INDEX\s+CONCURRENTLY\s+IF\s+EXISTS\s+([a-z_][a-z0-9_$]*)\s*$`)
+var transactionControlStatementPattern = regexp.MustCompile(`(?im)(?:^|;)\s*(?:BEGIN|COMMIT|ROLLBACK)(?:\s+(?:WORK|TRANSACTION))?\s*(?:;|$)`)
+
+// reviewedMultiStatementNonTransactionalMigrations freezes the exact statement
+// count of historical _notx files that predate the one-operation rule. New
+// files must contain exactly one concurrent-index operation so a killed runner
+// has one unambiguous object to inspect and reconcile before retrying.
+var reviewedMultiStatementNonTransactionalMigrations = map[string]int{
+	"062_add_scheduler_and_usage_composite_indexes_notx.sql": 4,
+	paymentOrdersOutTradeNoUniqueMigration:                   2,
+	"150_account_group_scheduler_indexes_notx.sql":           2,
+	"154a_account_spark_shadow_indexes_notx.sql":             2,
+}
+
+type migrationRuntimePolicy struct {
+	lockTimeout      time.Duration
+	statementTimeout time.Duration
+}
 
 type migrationChecksumCompatibilityRule struct {
 	fileChecksum       string
@@ -101,7 +134,57 @@ func ApplyMigrations(ctx context.Context, db *sql.DB) error {
 	if db == nil {
 		return errors.New("nil sql db")
 	}
-	return applyMigrationsFS(ctx, db, migrations.FS)
+	policy, err := migrationRuntimePolicyFromEnv()
+	if err != nil {
+		return err
+	}
+	return applyMigrationsFSWithPolicy(ctx, db, migrations.FS, policy)
+}
+
+func defaultMigrationRuntimePolicy() migrationRuntimePolicy {
+	return migrationRuntimePolicy{
+		lockTimeout:      defaultMigrationLockTimeout,
+		statementTimeout: defaultMigrationStatementTimeout,
+	}
+}
+
+func migrationRuntimePolicyFromEnv() (migrationRuntimePolicy, error) {
+	policy := defaultMigrationRuntimePolicy()
+	var err error
+	policy.lockTimeout, err = boundedMigrationTimeoutFromEnv(
+		migrationLockTimeoutEnv,
+		policy.lockTimeout,
+		maximumMigrationLockTimeout,
+	)
+	if err != nil {
+		return migrationRuntimePolicy{}, err
+	}
+	policy.statementTimeout, err = boundedMigrationTimeoutFromEnv(
+		migrationStatementTimeoutEnv,
+		policy.statementTimeout,
+		maximumMigrationStatementTimeout,
+	)
+	if err != nil {
+		return migrationRuntimePolicy{}, err
+	}
+	return policy, nil
+}
+
+func boundedMigrationTimeoutFromEnv(name string, fallback, maximum time.Duration) (time.Duration, error) {
+	raw, configured := os.LookupEnv(name)
+	if !configured || strings.TrimSpace(raw) == "" {
+		return fallback, nil
+	}
+	seconds, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || seconds <= 0 {
+		return 0, fmt.Errorf("%s must be a positive integer number of seconds", name)
+	}
+	maximumSeconds := int(maximum / time.Second)
+	if seconds > maximumSeconds {
+		return 0, fmt.Errorf("%s must not exceed %d seconds", name, int(maximum/time.Second))
+	}
+	duration := time.Duration(seconds) * time.Second
+	return duration, nil
 }
 
 // applyMigrationsFS 是迁移执行的核心实现。
@@ -123,20 +206,34 @@ func ApplyMigrations(ctx context.Context, db *sql.DB) error {
 //   - db: 数据库连接
 //   - fsys: 包含迁移文件的文件系统（通常是 embed.FS）
 func applyMigrationsFS(ctx context.Context, db *sql.DB, fsys fs.FS) (retErr error) {
+	return applyMigrationsFSWithPolicy(ctx, db, fsys, defaultMigrationRuntimePolicy())
+}
+
+func applyMigrationsFSWithPolicy(ctx context.Context, db *sql.DB, fsys fs.FS, policy migrationRuntimePolicy) (retErr error) {
 	if db == nil {
 		return errors.New("nil sql db")
+	}
+	if policy.lockTimeout <= 0 {
+		return errors.New("migration lock timeout must be positive")
+	}
+	if policy.statementTimeout <= 0 {
+		return errors.New("migration statement timeout must be positive")
 	}
 
 	// 获取分布式锁，确保多实例部署时只有一个实例执行迁移。
 	// 这是 PostgreSQL 特有的 Advisory Lock 机制。
-	lockConn, err := db.Conn(ctx)
+	lockCtx, cancelLock := context.WithTimeout(ctx, policy.lockTimeout)
+	lockConn, err := db.Conn(lockCtx)
 	if err != nil {
+		cancelLock()
 		return fmt.Errorf("acquire migrations lock connection: %w", err)
 	}
-	if err := pgAdvisoryLock(ctx, lockConn); err != nil {
+	if err := pgAdvisoryLock(lockCtx, lockConn); err != nil {
+		cancelLock()
 		discardMigrationLockConn(lockConn)
 		return err
 	}
+	cancelLock()
 	defer func() {
 		// Return cleanup failures to startup. A migration cannot be considered
 		// successful while its session-level lock may still block every peer.
@@ -145,12 +242,18 @@ func applyMigrationsFS(ctx context.Context, db *sql.DB, fsys fs.FS) (retErr erro
 
 	// 创建迁移记录表（如果不存在）。
 	// 该表记录所有已应用的迁移及其校验和。
-	if _, err := lockConn.ExecContext(ctx, schemaMigrationsTableDDL); err != nil {
+	statementCtx, cancelStatement := context.WithTimeout(ctx, policy.statementTimeout)
+	_, err = lockConn.ExecContext(statementCtx, schemaMigrationsTableDDL)
+	cancelStatement()
+	if err != nil {
 		return fmt.Errorf("create schema_migrations: %w", err)
 	}
 
 	// 自动对齐 Atlas 基线（如果检测到 legacy schema_migrations 且缺失 atlas_schema_revisions）。
-	if err := ensureAtlasBaselineAligned(ctx, lockConn, fsys); err != nil {
+	statementCtx, cancelStatement = context.WithTimeout(ctx, policy.statementTimeout)
+	err = ensureAtlasBaselineAligned(statementCtx, lockConn, fsys)
+	cancelStatement()
+	if err != nil {
 		return err
 	}
 
@@ -181,7 +284,9 @@ func applyMigrationsFS(ctx context.Context, db *sql.DB, fsys fs.FS) (retErr erro
 
 		// 检查该迁移是否已经应用
 		var existing string
-		rowErr := lockConn.QueryRowContext(ctx, "SELECT checksum FROM schema_migrations WHERE filename = $1", name).Scan(&existing)
+		statementCtx, cancelStatement = context.WithTimeout(ctx, policy.statementTimeout)
+		rowErr := lockConn.QueryRowContext(statementCtx, "SELECT checksum FROM schema_migrations WHERE filename = $1", name).Scan(&existing)
+		cancelStatement()
 		if rowErr == nil {
 			// 迁移已应用，验证校验和是否匹配
 			if existing != checksum {
@@ -213,7 +318,10 @@ func applyMigrationsFS(ctx context.Context, db *sql.DB, fsys fs.FS) (retErr erro
 		}
 
 		if nonTx {
-			if err := prepareNonTransactionalMigration(ctx, lockConn, name); err != nil {
+			statementCtx, cancelStatement = context.WithTimeout(ctx, policy.statementTimeout)
+			err = prepareNonTransactionalMigration(statementCtx, lockConn, name, content)
+			cancelStatement()
+			if err != nil {
 				return fmt.Errorf("prepare migration %s: %w", name, err)
 			}
 
@@ -228,39 +336,51 @@ func applyMigrationsFS(ctx context.Context, db *sql.DB, fsys fs.FS) (retErr erro
 				if stripSQLLineComment(trimmed) == "" {
 					continue
 				}
-				if _, err := lockConn.ExecContext(ctx, trimmed); err != nil {
+				statementCtx, cancelStatement = context.WithTimeout(ctx, policy.statementTimeout)
+				_, err = lockConn.ExecContext(statementCtx, trimmed)
+				cancelStatement()
+				if err != nil {
 					return fmt.Errorf("apply migration %s (non-tx statement %d): %w", name, i+1, err)
 				}
 			}
-			if _, err := lockConn.ExecContext(ctx, "INSERT INTO schema_migrations (filename, checksum) VALUES ($1, $2)", name, checksum); err != nil {
+			statementCtx, cancelStatement = context.WithTimeout(ctx, policy.statementTimeout)
+			_, err = lockConn.ExecContext(statementCtx, "INSERT INTO schema_migrations (filename, checksum) VALUES ($1, $2)", name, checksum)
+			cancelStatement()
+			if err != nil {
 				return fmt.Errorf("record migration %s (non-tx): %w", name, err)
 			}
 			continue
 		}
 
 		// 默认迁移在事务中执行，确保原子性：要么完全成功，要么完全回滚。
-		tx, err := lockConn.BeginTx(ctx, nil)
+		statementCtx, cancelStatement = context.WithTimeout(ctx, policy.statementTimeout)
+		tx, err := lockConn.BeginTx(statementCtx, nil)
 		if err != nil {
+			cancelStatement()
 			return fmt.Errorf("begin migration %s: %w", name, err)
 		}
 
 		// 执行迁移 SQL
-		if _, err := tx.ExecContext(ctx, content); err != nil {
+		if _, err := tx.ExecContext(statementCtx, content); err != nil {
 			_ = tx.Rollback()
+			cancelStatement()
 			return fmt.Errorf("apply migration %s: %w", name, err)
 		}
 
 		// 记录迁移已完成，保存文件名和校验和
-		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations (filename, checksum) VALUES ($1, $2)", name, checksum); err != nil {
+		if _, err := tx.ExecContext(statementCtx, "INSERT INTO schema_migrations (filename, checksum) VALUES ($1, $2)", name, checksum); err != nil {
 			_ = tx.Rollback()
+			cancelStatement()
 			return fmt.Errorf("record migration %s: %w", name, err)
 		}
 
 		// 提交事务
 		if err := tx.Commit(); err != nil {
 			_ = tx.Rollback()
+			cancelStatement()
 			return fmt.Errorf("commit migration %s: %w", name, err)
 		}
+		cancelStatement()
 	}
 
 	return nil
@@ -273,17 +393,47 @@ type migrationConnection interface {
 	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
 }
 
-func prepareNonTransactionalMigration(ctx context.Context, db migrationConnection, name string) error {
+func prepareNonTransactionalMigration(ctx context.Context, db migrationConnection, name, content string) error {
+	reconciledIndexes := make(map[string]struct{})
 	switch name {
 	case paymentOrdersOutTradeNoUniqueMigration:
-		return preparePaymentOrdersOutTradeNoUniqueMigration(ctx, db)
+		if err := preparePaymentOrdersOutTradeNoUniqueMigration(ctx, db); err != nil {
+			return err
+		}
+		reconciledIndexes[paymentOrdersOutTradeNoUniqueIndex] = struct{}{}
 	case schedulerOutboxPendingDedupKeyMigration:
-		return dropInvalidIndexIfPresent(ctx, db, schedulerOutboxPendingDedupKeyIndex)
+		if err := dropInvalidIndexIfPresent(ctx, db, schedulerOutboxPendingDedupKeyIndex); err != nil {
+			return err
+		}
+		reconciledIndexes[schedulerOutboxPendingDedupKeyIndex] = struct{}{}
 	case latestAPIKeyIPIndexMigration:
-		return dropInvalidIndexIfPresent(ctx, db, latestAPIKeyIPIndex)
-	default:
-		return nil
+		if err := dropInvalidIndexIfPresent(ctx, db, latestAPIKeyIPIndex); err != nil {
+			return err
+		}
+		reconciledIndexes[latestAPIKeyIPIndex] = struct{}{}
 	}
+
+	indexNames, err := concurrentCreateIndexNames(content)
+	if err != nil {
+		return err
+	}
+	for _, indexName := range indexNames {
+		if _, reconciled := reconciledIndexes[indexName]; reconciled {
+			continue
+		}
+		invalid, err := indexIsInvalid(ctx, db, indexName)
+		if err != nil {
+			return fmt.Errorf("inspect concurrent index %s before replay: %w", indexName, err)
+		}
+		if invalid {
+			return fmt.Errorf(
+				"invalid concurrent index %s indicates an interrupted migration; review the failed build, then run DROP INDEX CONCURRENTLY IF EXISTS %s and retry",
+				indexName,
+				indexName,
+			)
+		}
+	}
+	return nil
 }
 
 func preparePaymentOrdersOutTradeNoUniqueMigration(ctx context.Context, db migrationConnection) error {
@@ -470,7 +620,8 @@ func isMigrationChecksumCompatible(name, dbChecksum, fileChecksum string) bool {
 
 func validateMigrationExecutionMode(name, content string) (bool, error) {
 	normalizedName := strings.ToLower(strings.TrimSpace(name))
-	upperContent := strings.ToUpper(content)
+	contentWithoutComments := stripSQLLineComment(content)
+	upperContent := strings.ToUpper(contentWithoutComments)
 	nonTx := strings.HasSuffix(normalizedName, nonTransactionalMigrationSuffix)
 
 	if !nonTx {
@@ -480,36 +631,61 @@ func validateMigrationExecutionMode(name, content string) (bool, error) {
 		return false, nil
 	}
 
-	if strings.Contains(upperContent, "BEGIN") || strings.Contains(upperContent, "COMMIT") || strings.Contains(upperContent, "ROLLBACK") {
+	if transactionControlStatementPattern.MatchString(contentWithoutComments) {
 		return false, errors.New("*_notx.sql must not contain transaction control statements (BEGIN/COMMIT/ROLLBACK)")
 	}
 
-	statements := splitSQLStatements(content)
+	statements := splitSQLStatements(contentWithoutComments)
+	operationCount := 0
 	for _, stmt := range statements {
-		normalizedStmt := strings.ToUpper(stripSQLLineComment(strings.TrimSpace(stmt)))
+		normalizedStmt := strings.TrimSpace(stmt)
 		if normalizedStmt == "" {
 			continue
 		}
 
-		if strings.Contains(normalizedStmt, "CONCURRENTLY") {
-			isCreateIndex := strings.Contains(normalizedStmt, "CREATE") && strings.Contains(normalizedStmt, "INDEX")
-			isDropIndex := strings.Contains(normalizedStmt, "DROP") && strings.Contains(normalizedStmt, "INDEX")
-			if !isCreateIndex && !isDropIndex {
-				return false, errors.New("*_notx.sql currently only supports CREATE/DROP INDEX CONCURRENTLY statements")
-			}
-			if isCreateIndex && !strings.Contains(normalizedStmt, "IF NOT EXISTS") {
-				return false, errors.New("CREATE INDEX CONCURRENTLY in *_notx.sql must include IF NOT EXISTS for idempotency")
-			}
-			if isDropIndex && !strings.Contains(normalizedStmt, "IF EXISTS") {
-				return false, errors.New("DROP INDEX CONCURRENTLY in *_notx.sql must include IF EXISTS for idempotency")
-			}
+		upperStmt := strings.ToUpper(normalizedStmt)
+		if strings.HasPrefix(upperStmt, "CREATE") && strings.Contains(upperStmt, "INDEX") && strings.Contains(upperStmt, "CONCURRENTLY") && !strings.Contains(upperStmt, "IF NOT EXISTS") {
+			return false, errors.New("CREATE INDEX CONCURRENTLY in *_notx.sql must include IF NOT EXISTS for idempotency")
+		}
+		if strings.HasPrefix(upperStmt, "DROP") && strings.Contains(upperStmt, "INDEX") && strings.Contains(upperStmt, "CONCURRENTLY") && !strings.Contains(upperStmt, "IF EXISTS") {
+			return false, errors.New("DROP INDEX CONCURRENTLY in *_notx.sql must include IF EXISTS for idempotency")
+		}
+		if createConcurrentIndexPattern.MatchString(normalizedStmt) || dropConcurrentIndexPattern.MatchString(normalizedStmt) {
+			operationCount++
 			continue
 		}
 
-		return false, errors.New("*_notx.sql must not mix non-CONCURRENTLY SQL statements")
+		return false, errors.New("*_notx.sql only supports unqualified CREATE/DROP INDEX CONCURRENTLY statements in the documented idempotent form")
+	}
+
+	if operationCount == 0 {
+		return false, errors.New("*_notx.sql must contain one concurrent-index operation")
+	}
+	if reviewedCount, reviewed := reviewedMultiStatementNonTransactionalMigrations[normalizedName]; reviewed {
+		if operationCount != reviewedCount {
+			return false, fmt.Errorf("reviewed *_notx.sql migration must contain exactly %d concurrent-index operations", reviewedCount)
+		}
+	} else if operationCount != 1 {
+		return false, errors.New("new *_notx.sql migrations must contain exactly one concurrent-index operation")
 	}
 
 	return true, nil
+}
+
+func concurrentCreateIndexNames(content string) ([]string, error) {
+	statements := splitSQLStatements(stripSQLLineComment(content))
+	indexNames := make([]string, 0, len(statements))
+	for _, stmt := range statements {
+		trimmed := strings.TrimSpace(stmt)
+		if trimmed == "" {
+			continue
+		}
+		matches := createConcurrentIndexPattern.FindStringSubmatch(trimmed)
+		if len(matches) == 2 {
+			indexNames = append(indexNames, matches[1])
+		}
+	}
+	return indexNames, nil
 }
 
 func splitSQLStatements(content string) []string {
