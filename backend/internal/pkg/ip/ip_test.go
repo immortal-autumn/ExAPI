@@ -32,6 +32,133 @@ func TestGetTrustedClientIPUsesGinClientIP(t *testing.T) {
 	require.Equal(t, "9.9.9.9", w.Body.String())
 }
 
+func TestGetAPIKeyACLClientIPRequiresTrustedImmediatePeer(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name           string
+		remoteAddr     string
+		trustedProxies []string
+		xff            string
+		realIP         string
+		want           string
+	}{
+		{
+			name:           "direct origin cannot spoof forwarded allowlist",
+			remoteAddr:     "198.51.100.20:12345",
+			trustedProxies: []string{"10.0.0.0/8"},
+			xff:            "203.0.113.9",
+			realIP:         "203.0.113.9",
+			want:           "198.51.100.20",
+		},
+		{
+			name:           "untrusted proxy cannot spoof forwarded allowlist",
+			remoteAddr:     "192.0.2.10:12345",
+			trustedProxies: []string{"10.0.0.0/8"},
+			xff:            "203.0.113.9, 10.0.0.5",
+			want:           "192.0.2.10",
+		},
+		{
+			name:           "trusted proxy uses rightmost untrusted XFF hop",
+			remoteAddr:     "10.0.0.1:12345",
+			trustedProxies: []string{"10.0.0.0/8"},
+			xff:            "203.0.113.9, 10.0.0.2",
+			want:           "203.0.113.9",
+		},
+		{
+			name:           "malformed XFF chain is ignored",
+			remoteAddr:     "10.0.0.1:12345",
+			trustedProxies: []string{"10.0.0.0/8"},
+			xff:            "203.0.113.9, not-an-ip",
+			realIP:         "also-not-an-ip",
+			want:           "10.0.0.1",
+		},
+		{
+			name:           "IPv4 mapped addresses are canonicalized",
+			remoteAddr:     "[::ffff:10.0.0.1]:12345",
+			trustedProxies: []string{"10.0.0.0/8"},
+			xff:            "::ffff:203.0.113.9, ::ffff:10.0.0.2",
+			want:           "203.0.113.9",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			r := gin.New()
+			// The helper receives the deployment allowlist explicitly; this
+			// engine setting is also configured to mirror production wiring.
+			require.NoError(t, r.SetTrustedProxies(test.trustedProxies))
+			r.GET("/t", func(c *gin.Context) {
+				c.String(200, GetAPIKeyACLClientIP(c, true, test.trustedProxies))
+			})
+
+			req := httptest.NewRequest("GET", "/t", nil)
+			req.RemoteAddr = test.remoteAddr
+			if test.xff != "" {
+				req.Header.Set("X-Forwarded-For", test.xff)
+			}
+			if test.realIP != "" {
+				req.Header.Set("X-Real-IP", test.realIP)
+			}
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, 200, w.Code)
+			require.Equal(t, test.want, w.Body.String())
+		})
+	}
+}
+
+func TestGetAPIKeyACLClientIPUsesConfiguredCustomHeaderOnlyBehindTrustedProxy(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	require.NoError(t, r.SetTrustedProxies([]string{"10.0.0.0/8"}))
+	r.GET("/t", func(c *gin.Context) {
+		SetForwardedIPSettings(c, true, []string{"X-CDN-Client-IP"})
+		c.String(200, GetAPIKeyACLClientIP(c, true, []string{"10.0.0.0/8"}))
+	})
+
+	for _, test := range []struct {
+		name       string
+		remoteAddr string
+		value      string
+		want       string
+	}{
+		{name: "trusted single value", remoteAddr: "10.0.0.1:12345", value: "203.0.113.9", want: "203.0.113.9"},
+		{name: "direct spoof", remoteAddr: "198.51.100.20:12345", value: "203.0.113.9", want: "198.51.100.20"},
+		{name: "ambiguous chain ignored", remoteAddr: "10.0.0.1:12345", value: "203.0.113.9, 203.0.113.10", want: "10.0.0.1"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/t", nil)
+			req.RemoteAddr = test.remoteAddr
+			req.Header.Set("X-CDN-Client-IP", test.value)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			require.Equal(t, test.want, w.Body.String())
+		})
+	}
+}
+
+func TestGetAPIKeyACLClientIPRejectsDuplicateForwardingHeader(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	require.NoError(t, r.SetTrustedProxies([]string{"10.0.0.0/8"}))
+	r.GET("/t", func(c *gin.Context) {
+		c.String(200, GetAPIKeyACLClientIP(c, true, []string{"10.0.0.0/8"}))
+	})
+
+	req := httptest.NewRequest("GET", "/t", nil)
+	req.RemoteAddr = "10.0.0.1:12345"
+	req.Header.Add("X-Forwarded-For", "203.0.113.9")
+	req.Header.Add("X-Forwarded-For", "203.0.113.10")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, "10.0.0.1", w.Body.String())
+}
+
 func TestGetClientIPPreservesLegacyDockerForwardedHeaders(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

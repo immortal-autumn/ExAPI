@@ -166,6 +166,204 @@ func GetSecurityClientIP(c *gin.Context, trustForwarded bool) string {
 	return GetTrustedClientIP(c)
 }
 
+// GetAPIKeyACLClientIP returns the address used for public API-key IP
+// allowlists/denylists.  Forwarded headers are considered only when the
+// immediate socket peer is in the deployment's explicitly configured trusted
+// proxy list.  This keeps the legacy setting useful for reverse-proxy
+// deployments while preventing a direct client from spoofing an allowlisted
+// address with X-Forwarded-For (or a custom forwarding header).
+//
+// The control listener does not call this helper; ControlPeerContext snapshots
+// the socket peer directly and therefore remains independent of proxy policy.
+func GetAPIKeyACLClientIP(c *gin.Context, trustForwarded bool, trustedProxies []string) string {
+	if c == nil {
+		return ""
+	}
+	settings, hasRequestSettings := requestForwardedIPSettings(c)
+	if hasRequestSettings {
+		trustForwarded = settings.trustForwarded
+	}
+	if !trustForwarded {
+		return GetTrustedClientIP(c)
+	}
+
+	// Never consult forwarding headers until the immediate peer has been
+	// positively identified as one of the configured proxies.  A malformed or
+	// missing RemoteAddr is treated as untrusted and fails closed.
+	remoteIP := directPeerIP(c)
+	if remoteIP == "" || !matchesTrustedProxy(remoteIP, trustedProxies) {
+		return remoteIP
+	}
+
+	if hasDuplicateForwardedHeader(c, settings.headers) {
+		return remoteIP
+	}
+	customIP, customFallback := resolveTrustedCustomForwardedClientIP(c, settings.headers, trustedProxies)
+	if customIP != "" {
+		return customIP
+	}
+	legacyIP, legacyFallback := resolveTrustedLegacyForwardedClientIP(c, trustedProxies)
+	if legacyIP != "" {
+		return legacyIP
+	}
+	if customFallback != "" {
+		return customFallback
+	}
+	if legacyFallback != "" {
+		return legacyFallback
+	}
+	return remoteIP
+}
+
+func hasDuplicateForwardedHeader(c *gin.Context, customHeaders []string) bool {
+	if c == nil || c.Request == nil {
+		return false
+	}
+	headers := make([]string, 0, len(customHeaders)+3)
+	headers = append(headers, customHeaders...)
+	headers = append(headers, "CF-Connecting-IP", "X-Real-IP", "X-Forwarded-For")
+	seen := make(map[string]struct{}, len(headers))
+	for _, header := range headers {
+		key := strings.ToLower(strings.TrimSpace(header))
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		if len(c.Request.Header.Values(header)) > 1 {
+			return true
+		}
+	}
+	return false
+}
+
+// directPeerIP extracts and canonicalizes the socket peer.  Gin's RemoteIP
+// intentionally returns an empty string for malformed addresses; we retain
+// that fail-closed behavior while accepting the common host-only form used by
+// lightweight test servers.
+func directPeerIP(c *gin.Context) string {
+	if c == nil || c.Request == nil {
+		return ""
+	}
+	peer := strings.TrimSpace(c.Request.RemoteAddr)
+	if host, _, err := net.SplitHostPort(peer); err == nil {
+		peer = host
+	} else {
+		peer = strings.Trim(peer, "[]")
+	}
+	return canonicalIP(peer)
+}
+
+func canonicalIP(raw string) string {
+	parsed := net.ParseIP(strings.TrimSpace(raw))
+	if parsed == nil {
+		return ""
+	}
+	if v4 := parsed.To4(); v4 != nil {
+		return v4.String()
+	}
+	return parsed.String()
+}
+
+func matchesTrustedProxy(ip string, trustedProxies []string) bool {
+	parsed := net.ParseIP(ip)
+	if parsed == nil || len(trustedProxies) == 0 {
+		return false
+	}
+	return matchesCompiledRules(parsed, CompileIPRules(trustedProxies))
+}
+
+// resolveTrustedCustomForwardedClientIP applies the configured custom header
+// precedence after the immediate peer check.  X-Forwarded-For receives the
+// same right-to-left chain validation as Gin; other custom headers are
+// treated as a single authoritative address and comma-separated values are
+// ignored as ambiguous.
+func resolveTrustedCustomForwardedClientIP(c *gin.Context, headers, trustedProxies []string) (string, string) {
+	if c == nil {
+		return "", ""
+	}
+	var fallback string
+	for _, header := range headers {
+		for _, value := range c.Request.Header.Values(header) {
+			if strings.EqualFold(header, "X-Forwarded-For") {
+				if ip, ok := resolveTrustedXForwardedFor(value, trustedProxies); ok {
+					return ip, fallback
+				}
+				continue
+			}
+			if strings.Contains(value, ",") {
+				// A chain in a single-hop header is ambiguous.  Do not select
+				// an attacker-controlled first value.
+				continue
+			}
+			parsed := canonicalIP(value)
+			if parsed == "" {
+				continue
+			}
+			if isPrivateIP(parsed) {
+				if fallback == "" {
+					fallback = parsed
+				}
+				continue
+			}
+			return parsed, fallback
+		}
+	}
+	return "", fallback
+}
+
+func resolveTrustedLegacyForwardedClientIP(c *gin.Context, trustedProxies []string) (string, string) {
+	if c == nil {
+		return "", ""
+	}
+	var fallback string
+	for _, header := range []string{"CF-Connecting-IP", "X-Real-IP"} {
+		value := c.GetHeader(header)
+		if strings.Contains(value, ",") {
+			continue
+		}
+		parsed := canonicalIP(value)
+		if parsed == "" {
+			continue
+		}
+		if fallback == "" {
+			fallback = parsed
+		}
+		if !isPrivateIP(parsed) {
+			return parsed, fallback
+		}
+	}
+	if parsed, ok := resolveTrustedXForwardedFor(c.GetHeader("X-Forwarded-For"), trustedProxies); ok {
+		return parsed, fallback
+	}
+	return "", fallback
+}
+
+// resolveTrustedXForwardedFor validates an X-Forwarded-For chain from the
+// nearest hop to the original client.  Every token must be a syntactically
+// valid IP; malformed chains are rejected in their entirety.  Trusted proxy
+// addresses are skipped from right to left and the first untrusted address is
+// selected, matching Gin's trusted-proxy algorithm.
+func resolveTrustedXForwardedFor(header string, trustedProxies []string) (string, bool) {
+	if strings.TrimSpace(header) == "" {
+		return "", false
+	}
+	items := strings.Split(header, ",")
+	for i := len(items) - 1; i >= 0; i-- {
+		item := strings.TrimSpace(items[i])
+		parsed := net.ParseIP(item)
+		if parsed == nil {
+			return "", false
+		}
+		if i == 0 || !matchesTrustedProxy(canonicalIP(item), trustedProxies) {
+			return canonicalIP(item), true
+		}
+	}
+	return "", false
+}
+
 // normalizeIP 规范化 IP 地址，去除端口号和空格。
 func normalizeIP(ip string) string {
 	ip = strings.TrimSpace(ip)
