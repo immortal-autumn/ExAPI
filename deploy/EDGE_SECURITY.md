@@ -60,14 +60,15 @@ published host port remains bound to the intended WireGuard address.
 ## Trusted client IPs
 
 `security.trust_forwarded_ip_for_api_key_acl` is enabled by default for upgrade
-compatibility. While enabled, raw forwarding headers take over client-IP
-resolution for logs and security-sensitive paths. Custom headers from
+compatibility. For API-key allow/deny lists, forwarding headers are considered
+only when the immediate socket peer matches `server.trusted_proxies`; a direct
+or untrusted peer cannot spoof an allowlisted address. Custom headers from
 `security.forwarded_client_ip_headers` are checked in configured order before
 the built-in `CF-Connecting-IP`, `X-Real-IP`, and `X-Forwarded-For` fallback.
 Header names are case-insensitive, normalized when loaded, de-duplicated, and
-limited to 16 unique valid HTTP field names. Header values must contain IP
-literals; comma-separated values are supported, invalid entries are skipped,
-and public addresses are preferred over private fallback addresses.
+limited to 16 unique valid HTTP field names. X-Forwarded-For is validated as a
+complete chain from right to left; malformed or duplicate chains are ignored.
+Other custom headers must contain one unambiguous IP literal.
 
 The list can be supplied in YAML or with the comma-separated environment
 variable `SECURITY_FORWARDED_CLIENT_IP_HEADERS`; an explicitly empty environment
@@ -90,11 +91,10 @@ the process fails closed to trusted-proxy mode with no custom headers. If a
 migration write fails, the computed mode remains active for the current process
 and startup records a warning.
 
-Compatibility takeover accepts forwarded headers without validating the direct
-peer, including any configured custom header. Protect the origin from direct
-access while it is enabled. A CDN deployment must firewall the origin so only
-the CDN or load balancer can reach it, and that proxy must overwrite every
-trusted client-IP header rather than append an untrusted client value.
+Legacy request metadata and access logs may retain compatibility precedence,
+but they are not authoritative for API-key ACLs or the control boundary. A CDN
+deployment must still firewall the origin and overwrite every authoritative
+client-IP header rather than append an untrusted client value.
 
 Example for a proxy on the same host:
 
@@ -104,6 +104,25 @@ server:
     - 127.0.0.1/32
     - ::1/128
 ```
+
+## Outbound destination security
+
+`SECURITY_OUTBOUND_MODE` stages migration to enforced destination policy:
+
+- `compat` preserves explicitly configured legacy URL behavior and emits an
+  operational warning. This is the Compose upgrade default.
+- `enforce` requires the URL allowlist to be enabled and nonempty. New
+  installer-generated environments use this mode with HTTPS-only and private
+  destinations denied.
+
+Protected direct clients resolve and validate every DNS answer for each new
+socket, then dial only the validated literal address. Redirects are limited,
+cannot downgrade HTTPS to HTTP, and are revalidated before connection. A
+configured HTTP/SOCKS proxy remains an explicit DNS and egress trust boundary.
+
+For an intentional private or HTTP upstream, add its exact host to the relevant
+host list and explicitly enable the corresponding private/HTTP option. Never
+enable a global exception merely to work around one misconfigured provider.
 
 ## Nginx baseline
 

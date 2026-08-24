@@ -94,6 +94,11 @@ and ordinary data backups. Prefer `deploy/docker-deploy.sh` or
 [`deploy/README.md`](deploy/README.md) for manual generation, rotation,
 migration, and recovery guidance.
 
+New installations enforce outbound host validation with HTTPS and public
+destinations by default. Existing deployments temporarily retain
+`SECURITY_OUTBOUND_MODE=compat`; review custom/private upstreams and migrate to
+`enforce` using [`deploy/EDGE_SECURITY.md`](deploy/EDGE_SECURITY.md).
+
 Only the AI gateway paths should be public. Keep `/admin`, `/login`, and
 `/api/v1/*` control-plane APIs private. The control plane validates requests
 from explicitly allowed WireGuard peers; a 404 from the server itself or an

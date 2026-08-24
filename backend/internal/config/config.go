@@ -711,7 +711,16 @@ type ForwardedClientIPSettings struct {
 	Headers          []string
 }
 
+const (
+	SecurityOutboundModeCompat  = "compat"
+	SecurityOutboundModeEnforce = "enforce"
+)
+
 type SecurityConfig struct {
+	// OutboundMode stages secure egress defaults without silently breaking an
+	// existing installation. New installers use enforce; an upgraded config
+	// with no value remains in compat until the operator opts in.
+	OutboundMode    string               `mapstructure:"outbound_mode"`
 	URLAllowlist    URLAllowlistConfig   `mapstructure:"url_allowlist"`
 	ResponseHeaders ResponseHeaderConfig `mapstructure:"response_headers"`
 	CSP             CSPConfig            `mapstructure:"csp"`
@@ -1871,8 +1880,11 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 		cfg.JWT.Secret = ""
 	}
 
+	if cfg.Security.OutboundMode == SecurityOutboundModeCompat {
+		slog.Warn("security.outbound_mode=compat; legacy outbound URL behavior remains enabled; migrate to enforce")
+	}
 	if !cfg.Security.URLAllowlist.Enabled {
-		slog.Warn("security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).")
+		slog.Warn("security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only)")
 	}
 	if !cfg.Security.ResponseHeaders.Enabled {
 		slog.Warn("security.response_headers.enabled=false; configurable header filtering disabled (default allowlist only).")
@@ -1963,6 +1975,7 @@ func setDefaults() {
 	viper.SetDefault("webauthn.rp_origins", []string{})
 
 	// Security
+	viper.SetDefault("security.outbound_mode", SecurityOutboundModeCompat)
 	viper.SetDefault("security.url_allowlist.enabled", false)
 	viper.SetDefault("security.url_allowlist.upstream_hosts", []string{
 		"api.openai.com",
@@ -2550,6 +2563,19 @@ func setEnvReachableDefaults() {
 }
 
 func (c *Config) Validate() error {
+	c.Security.OutboundMode = strings.ToLower(strings.TrimSpace(c.Security.OutboundMode))
+	switch c.Security.OutboundMode {
+	case SecurityOutboundModeCompat:
+	case SecurityOutboundModeEnforce:
+		if !c.Security.URLAllowlist.Enabled {
+			return fmt.Errorf("security.url_allowlist.enabled must be true when security.outbound_mode=enforce")
+		}
+		if len(normalizeStringSlice(c.Security.URLAllowlist.UpstreamHosts)) == 0 {
+			return fmt.Errorf("security.url_allowlist.upstream_hosts must not be empty when security.outbound_mode=enforce")
+		}
+	default:
+		return fmt.Errorf("security.outbound_mode must be one of: compat/enforce")
+	}
 	forwardedClientIPHeaders, err := NormalizeForwardedClientIPHeaders(c.Security.ForwardedClientIPHeaders)
 	if err != nil {
 		return fmt.Errorf("security.forwarded_client_ip_headers: %w", err)

@@ -183,6 +183,15 @@ run the final UI/API checks from an allowlisted WireGuard peer.
 Never publish the control port through the public reverse proxy. See
 [`EDGE_SECURITY.md`](EDGE_SECURITY.md) for the full boundary.
 
+### Outbound destination policy
+
+New environments generated from `.env.example` use
+`SECURITY_OUTBOUND_MODE=enforce`, enable URL allowlisting, require HTTPS, and
+deny private destinations. Existing deployments without the new mode remain in
+`compat` for a migration window and log a warning. Before switching an existing
+deployment to `enforce`, inventory custom upstream, pricing, CRS, and proxy
+hosts and add only the required hosts to the category-specific allowlists.
+
 ### Database Migration Notes (PostgreSQL)
 
 - Migrations are applied in lexicographic order (e.g. `001_...sql`, `002_...sql`).

@@ -79,6 +79,10 @@ SUB2API_DATA_ENCRYPTION_KEYS_JSON={"data-v1":"<base64-encoded-32-byte-key>"}
 `deploy/docker-deploy.sh` 或 `deploy/install.sh`，脚本会自动生成并设置权限；手动
 生成、轮换、迁移和恢复请参阅 [`deploy/README.md`](deploy/README.md)。
 
+新安装默认强制执行出站主机校验，仅允许 HTTPS 和公网目标。已有部署暂时保持
+`SECURITY_OUTBOUND_MODE=compat`；请审查自定义或私有上游，并按照
+[`deploy/EDGE_SECURITY.md`](deploy/EDGE_SECURITY.md) 迁移到 `enforce`。
+
 公网只放行 AI 网关路径，`/admin`、`/login`、`/api/v1/*` 控制面 API 应保持私有。
 控制面必须从显式允许的 WireGuard peer 验证；服务器自身或未授权 peer 收到 404
 是预期的隐藏行为，不代表控制进程未启动。详细边界见

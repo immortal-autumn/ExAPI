@@ -45,6 +45,17 @@ if len(set(material)) != len(material):
 required = ("JWT_SECRET", "TOTP_ENCRYPTION_KEY", "POSTGRES_PASSWORD")
 if any(not values.get(name) for name in required):
     raise SystemExit("state-coupled credential is empty")
+secure_outbound = {
+    "SECURITY_OUTBOUND_MODE": "enforce",
+    "SECURITY_URL_ALLOWLIST_ENABLED": "true",
+    "SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP": "false",
+    "SECURITY_URL_ALLOWLIST_ALLOW_PRIVATE_HOSTS": "false",
+}
+for name, expected in secure_outbound.items():
+    if values.get(name) != expected:
+        raise SystemExit(f"{name}={values.get(name)!r}, expected {expected!r} for a new install")
+if not values.get("SECURITY_URL_ALLOWLIST_UPSTREAM_HOSTS"):
+    raise SystemExit("new install outbound upstream allowlist is empty")
 mode = path.stat().st_mode & 0o777
 if mode != 0o600:
     probe = path.parent / ".mode-probe"

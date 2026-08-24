@@ -707,6 +707,9 @@ func TestLoadDefaultSecurityToggles(t *testing.T) {
 	if cfg.Security.URLAllowlist.Enabled {
 		t.Fatalf("URLAllowlist.Enabled = true, want false")
 	}
+	if cfg.Security.OutboundMode != SecurityOutboundModeCompat {
+		t.Fatalf("Security.OutboundMode = %q, want %q", cfg.Security.OutboundMode, SecurityOutboundModeCompat)
+	}
 	if !cfg.Security.URLAllowlist.AllowInsecureHTTP {
 		t.Fatalf("URLAllowlist.AllowInsecureHTTP = false, want true")
 	}
@@ -716,6 +719,29 @@ func TestLoadDefaultSecurityToggles(t *testing.T) {
 	if !cfg.Security.ResponseHeaders.Enabled {
 		t.Fatalf("ResponseHeaders.Enabled = false, want true")
 	}
+}
+
+func TestEnforcedOutboundModeRequiresAllowlist(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("SECURITY_OUTBOUND_MODE", SecurityOutboundModeEnforce)
+
+	_, err := Load()
+	require.ErrorContains(t, err, "security.url_allowlist.enabled must be true")
+}
+
+func TestLoadEnforcedOutboundModeWithSafeSettings(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("SECURITY_OUTBOUND_MODE", SecurityOutboundModeEnforce)
+	t.Setenv("SECURITY_URL_ALLOWLIST_ENABLED", "true")
+	t.Setenv("SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP", "false")
+	t.Setenv("SECURITY_URL_ALLOWLIST_ALLOW_PRIVATE_HOSTS", "false")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, SecurityOutboundModeEnforce, cfg.Security.OutboundMode)
+	require.True(t, cfg.Security.URLAllowlist.Enabled)
+	require.False(t, cfg.Security.URLAllowlist.AllowInsecureHTTP)
+	require.False(t, cfg.Security.URLAllowlist.AllowPrivateHosts)
 }
 
 func TestLoadDefaultServerMode(t *testing.T) {
