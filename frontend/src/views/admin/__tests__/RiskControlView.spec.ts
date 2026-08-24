@@ -4,7 +4,12 @@ import { flushPromises, mount } from '@vue/test-utils'
 import type { DOMWrapper, VueWrapper } from '@vue/test-utils'
 
 import RiskControlView from '../RiskControlView.vue'
-import type { ContentModerationConfig, UpdateContentModerationConfig } from '@/api/admin/riskControl'
+import type {
+  ContentModerationConfig,
+  ContentModerationLog,
+  ContentModerationLogsResponse,
+  UpdateContentModerationConfig,
+} from '@/api/admin/riskControl'
 
 const {
   getConfig,
@@ -190,6 +195,82 @@ function findButtonByText(wrapper: VueWrapper, text: string): DOMWrapper<HTMLBut
   return button
 }
 
+function mountRiskControlView(): VueWrapper {
+  return mount(RiskControlView, {
+    global: {
+      stubs: {
+        AppLayout: AppLayoutStub,
+        BaseDialog: BaseDialogStub,
+        Icon: true,
+        Select: true,
+        Toggle: true,
+        Pagination: true,
+        ModelWhitelistSelector: ModelWhitelistSelectorStub,
+        ProxySelector: true,
+      },
+    },
+  })
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
+}
+
+function moderationLog(id: number, marker: string): ContentModerationLog {
+  return {
+    id,
+    request_id: `request-${id}`,
+    user_id: id,
+    user_email: `${marker}@example.test`,
+    api_key_id: id,
+    api_key_name: `key-${marker}`,
+    group_id: id,
+    group_name: `group-${marker}`,
+    endpoint: '/v1/messages',
+    provider: 'synthetic',
+    model: 'test-model',
+    mode: 'pre_block',
+    action: 'pass',
+    flagged: false,
+    highest_category: '',
+    highest_score: 0,
+    matched_keyword: '',
+    category_scores: {},
+    threshold_snapshot: {},
+    input_excerpt: `${marker}-input`,
+    upstream_latency_ms: 1,
+    error: '',
+    violation_count: 0,
+    auto_banned: false,
+    email_sent: false,
+    user_status: 'active',
+    queue_delay_ms: 0,
+    created_at: '2026-08-24T12:00:00Z',
+  }
+}
+
+function logResponse(marker: string, id: number, total: number): ContentModerationLogsResponse {
+  return {
+    items: [moderationLog(id, marker)],
+    total,
+    page: 1,
+    page_size: 20,
+    pages: Math.ceil(total / 20),
+  }
+}
+
+async function requestLogs(wrapper: VueWrapper, search: string): Promise<void> {
+  const searchInput = wrapper.get('input[type="search"][placeholder="admin.riskControl.filters.search"]')
+  await searchInput.setValue(search)
+  await searchInput.trigger('keyup.enter')
+}
+
 describe('admin RiskControlView', () => {
   beforeEach(() => {
     getConfig.mockReset()
@@ -215,6 +296,83 @@ describe('admin RiskControlView', () => {
       api_key_masks: [],
       api_key_statuses: [],
     }))
+  })
+
+  it('keeps the newest log response when an older request resolves last', async () => {
+    const wrapper = mountRiskControlView()
+    await flushPromises()
+
+    const older = deferred<ContentModerationLogsResponse>()
+    const newer = deferred<ContentModerationLogsResponse>()
+    listLogs.mockImplementationOnce(() => older.promise)
+    listLogs.mockImplementationOnce(() => newer.promise)
+
+    await requestLogs(wrapper, 'older')
+    const olderSignal = listLogs.mock.calls[1][1]?.signal as AbortSignal
+    await requestLogs(wrapper, 'newer')
+
+    expect(olderSignal.aborted).toBe(true)
+    expect((listLogs.mock.calls[2][1]?.signal as AbortSignal).aborted).toBe(false)
+
+    newer.resolve(logResponse('newer', 2, 41))
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('newer@example.test')
+    expect(wrapper.get('pagination-stub').attributes('total')).toBe('41')
+
+    older.resolve(logResponse('older', 1, 7))
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('newer@example.test')
+    expect(wrapper.text()).not.toContain('older@example.test')
+    expect(wrapper.get('pagination-stub').attributes('total')).toBe('41')
+    expect(showError).not.toHaveBeenCalled()
+  })
+
+  it('ignores a stale log error and keeps loading for the active request', async () => {
+    const wrapper = mountRiskControlView()
+    await flushPromises()
+
+    const older = deferred<ContentModerationLogsResponse>()
+    const newer = deferred<ContentModerationLogsResponse>()
+    listLogs.mockImplementationOnce(() => older.promise)
+    listLogs.mockImplementationOnce(() => newer.promise)
+
+    await requestLogs(wrapper, 'older')
+    await requestLogs(wrapper, 'newer')
+
+    older.reject(new Error('stale failure'))
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('common.loading')
+    expect(showError).not.toHaveBeenCalled()
+
+    newer.resolve(logResponse('newer', 2, 1))
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('common.loading')
+    expect(wrapper.text()).toContain('newer@example.test')
+    expect(showError).not.toHaveBeenCalled()
+  })
+
+  it('aborts and invalidates an in-flight log request when unmounted', async () => {
+    const wrapper = mountRiskControlView()
+    await flushPromises()
+
+    const pending = deferred<ContentModerationLogsResponse>()
+    listLogs.mockImplementationOnce(() => pending.promise)
+    await requestLogs(wrapper, 'pending')
+
+    const signal = listLogs.mock.calls[1][1]?.signal as AbortSignal
+    expect(signal.aborted).toBe(false)
+
+    wrapper.unmount()
+    expect(signal.aborted).toBe(true)
+
+    pending.reject(new Error('completed after unmount'))
+    await flushPromises()
+
+    expect(showError).not.toHaveBeenCalled()
   })
 
   it('saves the selected model filter mode and models', async () => {

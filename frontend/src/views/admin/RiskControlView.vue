@@ -1222,6 +1222,8 @@ const moderationTestImages = ref<string[]>([])
 const moderationTestResult = ref<ContentModerationTestAuditResult | null>(null)
 const inputDetailRow = ref<ContentModerationLog | null>(null)
 let statusTimer: number | null = null
+let logsAbortController: AbortController | null = null
+let logsRequestGeneration = 0
 
 const configForm = reactive({
   enabled: false,
@@ -1851,6 +1853,10 @@ async function saveConfig() {
 }
 
 async function loadLogs() {
+  const requestGeneration = ++logsRequestGeneration
+  logsAbortController?.abort()
+  const requestController = new AbortController()
+  logsAbortController = requestController
   logsLoading.value = true
   try {
     const params = {
@@ -1863,16 +1869,35 @@ async function loadLogs() {
       from: normalizeDateTimeLocal(filters.from),
       to: normalizeDateTimeLocal(filters.to),
     }
-    const result = await adminAPI.riskControl.listLogs(params)
+    const result = await adminAPI.riskControl.listLogs(params, {
+      signal: requestController.signal,
+    })
+    if (
+      requestController.signal.aborted ||
+      requestGeneration !== logsRequestGeneration ||
+      logsAbortController !== requestController
+    ) {
+      return
+    }
     logs.value = result.items
     pagination.total = result.total
     pagination.page = result.page
     pagination.page_size = result.page_size
     pagination.pages = result.pages
   } catch (err: unknown) {
+    if (
+      requestController.signal.aborted ||
+      requestGeneration !== logsRequestGeneration ||
+      logsAbortController !== requestController
+    ) {
+      return
+    }
     appStore.showError(extractApiErrorMessage(err, t('admin.riskControl.logsFailed')))
   } finally {
-    logsLoading.value = false
+    if (requestGeneration === logsRequestGeneration && logsAbortController === requestController) {
+      logsLoading.value = false
+      logsAbortController = null
+    }
   }
 }
 
@@ -2365,6 +2390,9 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  logsRequestGeneration += 1
+  logsAbortController?.abort()
+  logsAbortController = null
   if (statusTimer !== null) {
     window.clearInterval(statusTimer)
     statusTimer = null
