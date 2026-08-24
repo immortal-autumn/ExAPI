@@ -25,6 +25,10 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Set up Docker Compose CLI
         run: |
+          # GitHub's macOS image may include aws/tap, which Homebrew now blocks
+          # as untrusted. This job does not use it; remove only that runner tap
+          # instead of disabling Homebrew's trust enforcement globally.
+          brew untap aws/tap 2>/dev/null || true
           brew install bash docker docker-compose
           mkdir -p "$HOME/.docker/cli-plugins"
           ln -s "$(brew --prefix)/lib/docker/cli-plugins/docker-compose" "$HOME/.docker/cli-plugins/docker-compose"
