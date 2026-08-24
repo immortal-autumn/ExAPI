@@ -6,7 +6,7 @@ baseline lives in [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md).
 
 ## Current Goal
 
-Build on the deployed v0.2.5 baseline while preserving runtime compatibility,
+Build on the deployed v0.2.6 baseline while preserving runtime compatibility,
 deployment compatibility, API compatibility, and private-control-plane
 security.
 

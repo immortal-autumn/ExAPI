@@ -25,6 +25,8 @@ contracts, compatibility references, and historical design evidence.
 
 - [`PROJECT_STATUS.md`](PROJECT_STATUS.md) — canonical dated release,
   deployment, validation, and known-external-condition record.
+- [`PROJECT_STATUS.zh-CN.md`](PROJECT_STATUS.zh-CN.md) — Simplified Chinese
+  mirror of the current status record; English remains the default.
 - [`ACCOUNT_PROBES.md`](ACCOUNT_PROBES.md) — manual probe and forced usage
   refresh semantics.
 - [`../development.md`](../development.md) — active development priorities and

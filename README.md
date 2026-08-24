@@ -13,13 +13,14 @@ English (default) | [简体中文](README.zh-CN.md)
 
 ## Current status
 
-The reviewed and deployed release is **ExAPI v0.2.5**, commit
-`14a7c412a17971b160de356baaab7a3555fb90fa`. Production uses only an immutable
+The reviewed and deployed release is **ExAPI v0.2.6**, commit
+`8363e0decd68786e02c9620e616e17f1284e0ff2`. Production uses only an immutable
 OCI digest validated by the release workflow with SBOM and provenance
 attestations; mutable tags such as `latest` are not used for production.
 
 - Current release, image digest, deployment validation, and provider status:
   [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)
+- Simplified Chinese status mirror: [`docs/PROJECT_STATUS.zh-CN.md`](docs/PROJECT_STATUS.zh-CN.md)
 - Documentation map and maintenance rules: [`docs/README.md`](docs/README.md)
 - Production promotion and rollback gates:
   [`deploy/PRODUCTION_ROLLOUT.md`](deploy/PRODUCTION_ROLLOUT.md)

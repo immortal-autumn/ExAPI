@@ -11,12 +11,13 @@ ExAPI 是面向个人和私有基础设施的 AI API 网关，用于把本地工
 
 ## 当前状态
 
-当前已审阅并部署的版本是 **ExAPI v0.2.5**，对应提交
-`14a7c412a17971b160de356baaab7a3555fb90fa`。生产环境只使用经过发布工作流验证、
+当前已审阅并部署的版本是 **ExAPI v0.2.6**，对应提交
+`8363e0decd68786e02c9620e616e17f1284e0ff2`。生产环境只使用经过发布工作流验证、
 带 SBOM/来源证明的不可变 OCI digest，不使用 `latest` 等可变标签。
 
 - 当前发布、镜像 digest、部署验证和已知上游账号状态：
-  [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)
+  [`docs/PROJECT_STATUS.zh-CN.md`](docs/PROJECT_STATUS.zh-CN.md)（英文标准版：
+  [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)）
 - 文档导航与维护规则：[`docs/README.zh-CN.md`](docs/README.zh-CN.md)
 - 生产发布与回滚门禁：
   [`deploy/PRODUCTION_ROLLOUT.md`](deploy/PRODUCTION_ROLLOUT.md)

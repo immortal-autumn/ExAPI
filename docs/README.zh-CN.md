@@ -18,6 +18,7 @@
 ## 项目与运维文档
 
 - [`PROJECT_STATUS.md`](PROJECT_STATUS.md) — 当前发布、部署、验证和外部状态的标准记录。
+- [`PROJECT_STATUS.zh-CN.md`](PROJECT_STATUS.zh-CN.md) — 当前状态记录的简体中文镜像；英文仍为默认入口。
 - [`ACCOUNT_PROBES.md`](ACCOUNT_PROBES.md) — 手动探测和强制用量刷新语义。
 - [`../development.md`](../development.md) — 当前开发优先级和强制质量门禁。
 - [`../deploy/README.md`](../deploy/README.md) — 部署入口。

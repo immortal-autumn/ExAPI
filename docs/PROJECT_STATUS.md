@@ -7,18 +7,19 @@ belong in `deploy/`; this page records the currently reviewed facts.
 
 ## Current release
 
-Last reviewed: **2026-08-20 (Europe/London)**
+Last reviewed: **2026-08-24 (Europe/London)**
 
 | Item | Current value |
 |---|---|
-| Product version | `0.2.5` |
+| Product version | `0.2.6` |
 | GitHub repository | `immortal-autumn/ExAPI` |
-| Git tag | `v0.2.5` |
+| Git tag | `v0.2.6` |
+| Main branch | `main` (fast-forwarded to the reviewed commit) |
 | Release branch | `revision/exapi-v0.2.1` |
-| Reviewed commit | `14a7c412a17971b160de356baaab7a3555fb90fa` |
-| OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:2fc5b6c06ba8e118302ce00f1778064fd5ac253f46c60d90cffb51c350953cfe` |
-| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.5> |
-| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/32358414952> |
+| Reviewed commit | `8363e0decd68786e02c9620e616e17f1284e0ff2` |
+| OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:5ef74f0df89989ae7922fa819ac67ea159c8769871173fba33548baf0a708b43` |
+| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.6> |
+| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/32739586602> |
 | Upstream baseline | Sub2API `v0.1.171`, constrained by `upstream.lock.json` |
 
 The GitHub repository was renamed from `Sub2API2Personal` to `ExAPI` on
@@ -30,25 +31,46 @@ verified package migration.
 The release workflow passed the Go module-tidy check, backend unit and
 integration suites, race detector, frontend tests/type checks/build audit,
 multi-architecture image build, OCI label verification, SPDX SBOM generation,
-and provenance/SBOM attestations.
+and provenance/SBOM attestations. The attested manifest digest is the same
+digest recorded above; the release also passed `gh attestation verify`.
 
 ## Production deployment
 
 Production runs the digest above as Docker Compose project `sub2api` from
-`/opt/sub2api`. The application container reports version `0.2.5`, the reviewed
-commit, healthy status, and zero restarts at the time of this review.
+`/opt/sub2api`. The application container reports version `0.2.6`, the reviewed
+commit, healthy status, and zero restarts after promotion and observation.
 
 The deployment keeps versioned promotion inputs:
 
-- `/opt/sub2api/.env.v0.2.5`
-- `/opt/sub2api/docker-compose.v0.2.5.yml`
+- `/opt/sub2api/.env.v0.2.6`
+- `/opt/sub2api/docker-compose.v0.2.6.yml`
 - `/opt/sub2api/.env` and `docker-compose.local.yml` point to the same current
   configuration.
-- The v0.2.4 environment and Compose snapshots remain available for rollback.
+- The v0.2.5 environment, Compose file, and digest remain available for
+  application-only rollback.
 
 PostgreSQL and Redis were preserved during the application-only promotion and
-remained healthy. The restored-data and isolated synthetic-provider canaries
-also ran the v0.2.5 digest successfully before production promotion.
+remained healthy; their container IDs and start times did not change. The
+isolated v0.2.6 synthetic-provider canary passed readiness, provider gateway
+smoke, internal-network/egress checks, and disposable private migration before
+promotion.
+
+The v0.2.6 recovery set was created under rollout
+`exapi-v026-production-20260824a`: the encrypted logical dump and physical
+snapshot were retained off-host and independently restored into networkless
+disposable targets. Evidence is under the checkout-local `tmp/rollouts/`
+directory on OPC.
+
+The production observation ran for 60 minutes with 120 readiness probes:
+
+- readiness failures: `0`; restarts: `0`; unexpected 5xx: `0`;
+- error rate: `0.0`; p95: `1.0 ms` versus a `4.852 ms` baseline;
+- new P0/P1 alerts: `0`; production topology and dependency identities: verified.
+
+The final allowlisted peer was `100.97.17.2`: control `/ready`,
+`/api/v1/operator/me`, and a read-only account-list request returned 200. Public
+`/ready` remained 200, while the public root and public control route returned
+404.
 
 Do not copy protected environment files, database dumps, provider credentials,
 or signing keys into this repository. Deployment evidence and scratch output
@@ -76,7 +98,7 @@ See [`deploy/EDGE_SECURITY.md`](../deploy/EDGE_SECURITY.md) for the generic
 boundary and [`deploy/PRODUCTION_ROLLOUT.md`](../deploy/PRODUCTION_ROLLOUT.md)
 for promotion requirements.
 
-## v0.2.5 account-probe behavior
+## v0.2.6 account-probe behavior
 
 Manual provider tests now write a sanitized snapshot to
 `account.extra.account_test_probe`. That snapshot is display/diagnostic state,
