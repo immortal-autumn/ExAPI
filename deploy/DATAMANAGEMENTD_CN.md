@@ -1,5 +1,7 @@
 # datamanagementd 部署说明（数据管理）
 
+[English（默认）](DATAMANAGEMENTD.md) | 简体中文
+
 本文说明如何在宿主机部署 `datamanagementd`，并与主进程联动开启“数据管理”功能。
 
 ## 1. 关键约束

@@ -1,5 +1,7 @@
 # ExAPI Deployment Files
 
+English (default) | Chinese notes are linked from the relevant sections.
+
 This directory contains files for deploying ExAPI on Linux servers.
 
 Production promotion and rollback gates are documented in
@@ -30,10 +32,11 @@ mutable facts into generic procedures.
 | `.env.example` | Container environment variables template |
 | `DOCKER.md` | GHCR image verification and digest-pinned Compose guidance |
 | `install.sh` | One-click binary installation script |
-| `install-datamanagementd.sh` | datamanagementd 一键安装脚本 |
+| `install-datamanagementd.sh` | One-click datamanagementd installation script |
 | `sub2api.service` | Systemd service unit file |
 | `sub2api-datamanagementd.service` | datamanagementd systemd service unit file |
-| `DATAMANAGEMENTD_CN.md` | datamanagementd 部署与联动说明（中文） |
+| `DATAMANAGEMENTD.md` | datamanagementd deployment and integration guide |
+| `DATAMANAGEMENTD_CN.md` | datamanagementd deployment and integration guide (Simplified Chinese) |
 | `config.example.yaml` | Example configuration file |
 | `EDGE_SECURITY.md` | Reverse proxy, CDN/WAF, trusted proxy, and ingress hardening guide |
 | `PRODUCTION_ROLLOUT.md` | Backup, restore, canary, promotion, and rollback gates |
@@ -204,13 +207,16 @@ SELECT
   (SELECT COUNT(*) FROM user_allowed_groups) AS new_pair_count;
 ```
 
-### datamanagementd（数据管理）联动
+### datamanagementd integration
 
-如需启用管理后台“数据管理”功能，请额外部署宿主机 `datamanagementd`：
+To enable **Data Management** in the admin console, deploy
+`datamanagementd` on the host:
 
-- 主进程固定探测 `/tmp/sub2api-datamanagement.sock`
-- Docker 场景下需把宿主机 Socket 挂载到容器内同路径
-- 详细步骤见：`deploy/DATAMANAGEMENTD_CN.md`
+- The main process always probes `/tmp/sub2api-datamanagement.sock`.
+- For Docker deployments, mount the host socket at the same path inside the
+  container.
+- See [`DATAMANAGEMENTD.md`](DATAMANAGEMENTD.md) or the
+  [Simplified Chinese guide](DATAMANAGEMENTD_CN.md).
 
 ### Commands
 
@@ -404,8 +410,9 @@ Requires your own OAuth client credentials.
 GEMINI_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GEMINI_OAUTH_CLIENT_SECRET=GOCSPX-your-client-secret
 
-# 可选：如需使用 Gemini CLI 内置 OAuth Client（Code Assist / Google One）
-# 安全说明：本仓库不会内置该 client_secret，请在运行环境通过环境变量注入。
+# Optional: use the Gemini CLI built-in OAuth client (Code Assist / Google One).
+# Security: this repository never embeds that client_secret; inject it through
+# the runtime environment.
 # GEMINI_CLI_OAUTH_CLIENT_SECRET=GOCSPX-your-built-in-secret
 ```
 
@@ -551,7 +558,8 @@ If you need to use AI Studio OAuth for Gemini accounts, add the OAuth client cre
    Environment=GEMINI_OAUTH_CLIENT_SECRET=GOCSPX-your-client-secret
    ```
 
-   如需使用“内置 Gemini CLI OAuth Client”（Code Assist / Google One），还需要注入：
+   To use the built-in Gemini CLI OAuth client (Code Assist / Google One),
+   inject this additional variable:
    ```ini
    Environment=GEMINI_CLI_OAUTH_CLIENT_SECRET=GOCSPX-your-built-in-secret
    ```

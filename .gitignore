@@ -133,12 +133,14 @@ deploy/docker-compose.override.yml
 vite.config.js
 docs/*
 !docs/README.md
+!docs/README.zh-CN.md
 !docs/PROJECT_STATUS.md
 !docs/ACCOUNT_PROBES.md
 !docs/UPSTREAM_LOCK.md
 !docs/PAYMENT.md
 !docs/PAYMENT_CN.md
 !docs/ADMIN_PAYMENT_INTEGRATION_API.md
+!docs/ADMIN_PAYMENT_INTEGRATION_API.zh-CN.md
 !docs/ASYNC_IMAGE_TASKS.md
 !docs/legal/
 !docs/legal/*.md

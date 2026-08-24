@@ -1,59 +1,83 @@
 # ExAPI
 
-ExAPI 是一个面向个人/私有基础设施的 AI API 网关，用于把本地工具、编程 Agent 和应用流量路由到可管理的上游 AI 账号池。
+ExAPI is a private AI API gateway for routing local tools, coding agents, and
+application traffic through a manageable pool of upstream AI accounts.
 
-本项目 fork 自 `Wei-Shaw/sub2api`。为了兼容已有部署，部分内部模块、数据库、缓存、服务名仍保留 `sub2api` 标识；但本 fork 的产品方向是私有控制面、配额可见性、多账号韧性和本地集成体验。
+This fork is based on `Wei-Shaw/sub2api`. Some internal modules, database,
+cache, and service identifiers intentionally retain the `sub2api` name for
+deployment compatibility. The ExAPI product direction is a private control
+plane, visible quota diagnostics, resilient multi-account routing, and a
+local-first integration experience.
 
-## 当前状态
+English (default) | [简体中文](README.zh-CN.md)
 
-当前已审阅并部署的版本是 **ExAPI v0.2.5**，对应提交
-`14a7c412a17971b160de356baaab7a3555fb90fa`。生产环境只使用经过发布工作流验证、
-带 SBOM/来源证明的不可变 OCI digest，不使用 `latest` 等可变标签。
+## Current status
 
-- 当前发布、镜像 digest、部署验证和已知上游账号状态：
+The reviewed and deployed release is **ExAPI v0.2.5**, commit
+`14a7c412a17971b160de356baaab7a3555fb90fa`. Production uses only an immutable
+OCI digest validated by the release workflow with SBOM and provenance
+attestations; mutable tags such as `latest` are not used for production.
+
+- Current release, image digest, deployment validation, and provider status:
   [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)
-- 文档导航与维护规则：[`docs/README.md`](docs/README.md)
-- 生产发布与回滚门禁：[`deploy/PRODUCTION_ROLLOUT.md`](deploy/PRODUCTION_ROLLOUT.md)
+- Documentation map and maintenance rules: [`docs/README.md`](docs/README.md)
+- Production promotion and rollback gates:
+  [`deploy/PRODUCTION_ROLLOUT.md`](deploy/PRODUCTION_ROLLOUT.md)
 
-## 主要特性
+## Features
 
-- OpenAI 兼容 `/v1` 网关。
-- 继承上游的 Claude / Codex / Gemini / Antigravity 等客户端兼容路由。
-- 适合单用户部署的 localhost / WireGuard 私有控制面。
-- 上游账号池、定时账号测试、配额窗口、用量日志。
-- 手动账号探测与调度状态相互独立，失败结果可见但不会静默停用账号。
-- Antigravity 强制实时配额刷新、按模型配额展示和 Google 429 分类。
-- 面向 IDE、Agent、自动化脚本的 API Key 管理。
-- 保留上游多用户、订阅、支付、兑换码等可选能力，但不作为本 fork 的默认重点。
+- OpenAI-compatible `/v1` gateway.
+- Client-compatible routing for Claude, Codex, Gemini, Antigravity, and other
+  upstream integrations inherited from Sub2API.
+- A localhost/WireGuard private control plane for single-user deployments.
+- Upstream account pools, scheduled account tests, quota windows, and usage
+  logs.
+- Manual account probes are independent from scheduler state: failures are
+  visible and do not silently disable an account.
+- Forced real-time Antigravity quota refresh, per-model quota display, and
+  Google 429 classification.
+- API-key management for IDEs, agents, and automation scripts.
+- Optional upstream multi-user, subscription, payment, group, and redeem-code
+  capabilities remain available, but are not the default focus of this fork.
 
-## 部署模式
+## Deployment modes
 
-### 私有单用户模式
+### Private single-user mode
 
-推荐用于个人服务器：
+Recommended for a personal server:
 
-- 公网域名只暴露 AI 网关路径；
-- 管理后台仅通过 localhost 或 WireGuard/VPN 访问；
-- 侧边栏优先展示账号、API Key、用量、代理、运维和设置；
-- 控制台直接展示配额监控和本地集成入口。
+- Expose only the AI gateway paths through the public domain.
+- Keep the administration UI reachable only through localhost or
+  WireGuard/VPN.
+- Prioritize accounts, API keys, usage, proxies, operations, and settings in
+  the sidebar.
+- Show quota monitoring and local integration entry points directly in the
+  cockpit.
 
-### 标准多用户模式
+### Standard multi-user mode
 
-ExAPI 仍保留上游的 SaaS 风格功能，例如用户、订阅、支付、分组、兑换码等。它们适合团队/受控场景，但不是本 fork 的默认产品重点。
+ExAPI retains upstream SaaS-style capabilities such as users, subscriptions,
+payments, groups, and redeem codes. They can be used for team or controlled
+deployments, but are not the default product focus.
 
-## 技术栈
+## Technology stack
 
-- 后端：Go、Gin、Ent、PostgreSQL、Redis。
-- 前端：Vue 3、TypeScript、Pinia、Vue Router、TailwindCSS、Vite。
-- 部署：Docker/Compose 或 systemd，通常放在 nginx/Caddy/Cloudflare 后面。
+- Backend: Go, Gin, Ent, PostgreSQL, and Redis.
+- Frontend: Vue 3, TypeScript, Pinia, Vue Router, TailwindCSS, and Vite.
+- Deployment: Docker/Compose or systemd, normally behind nginx, Caddy, or
+  Cloudflare.
 
-Go module 路径和不少运行时名称仍保留 `sub2api`。尝试完整重命名 module、服务、数据库或数据目录前，请先阅读 [`docs/UPSTREAM_COMPATIBILITY.md`](docs/UPSTREAM_COMPATIBILITY.md)。
+The Go module path and many runtime names remain `sub2api`. Read
+[`docs/UPSTREAM_COMPATIBILITY.md`](docs/UPSTREAM_COMPATIBILITY.md) before
+attempting to rename modules, services, databases, or data directories.
 
-## 快速开始
+## Quick start
 
-Docker 部署请从 [`deploy/`](deploy/) 下的模板开始。除非你执行了完整迁移，否则上游文档中涉及 `sub2api` 路径/服务名的部署命令仍应保持兼容。
+Start with the templates under [`deploy/`](deploy/). Unless you have completed
+the migration, keep `sub2api` paths and service names used by upstream
+deployment commands unchanged.
 
-ExAPI 私有部署建议配置：
+Recommended private deployment settings:
 
 ```env
 RUN_MODE=simple
@@ -65,29 +89,42 @@ SUB2API_DATA_ENCRYPTION_KEYS_JSON={"data-v1":"<base64-encoded-32-byte-key>"}
 ```
 
 The external data keyring is mandatory and must be retained outside PostgreSQL
-and ordinary data backups. Prefer `deploy/docker-deploy.sh` or `deploy/install.sh`,
-which generate and permission it automatically; see [`deploy/README.md`](deploy/README.md)
-for manual generation, rotation, migration, and recovery guidance.
+and ordinary data backups. Prefer `deploy/docker-deploy.sh` or
+`deploy/install.sh`; they generate and permission it automatically. See
+[`deploy/README.md`](deploy/README.md) for manual generation, rotation,
+migration, and recovery guidance.
 
-公网只放行 AI 网关路径，`/admin`、`/login`、`/api/v1/*` 控制面 API 应保持私有。
-控制面必须从显式允许的 WireGuard peer 验证；服务器自身或未授权 peer 收到 404
-是预期的隐藏行为，不代表控制进程未启动。详细边界见
-[`deploy/EDGE_SECURITY.md`](deploy/EDGE_SECURITY.md)。
+Only the AI gateway paths should be public. Keep `/admin`, `/login`, and
+`/api/v1/*` control-plane APIs private. The control plane validates requests
+from explicitly allowed WireGuard peers; a 404 from the server itself or an
+unauthorized peer is an expected hidden response and does not mean that the
+control process is down. See [`deploy/EDGE_SECURITY.md`](deploy/EDGE_SECURITY.md)
+for the boundary details.
 
-## 账号探测与配额诊断
+## Account probes and quota diagnostics
 
-管理员手动测试账号时，最新结果保存在
-`account.extra.account_test_probe`，但不会直接修改 `account.status` 或
-`schedulable`。定时测试不会覆盖手动结果；凭据、路由或代理发生实质变化时旧结果会失效。
+When an administrator tests an account manually, the latest result is stored in
+`account.extra.account_test_probe` without directly changing `account.status`
+or `schedulable`. Scheduled tests do not overwrite the manual result; material
+credential, route, or proxy changes invalidate stale results.
 
-Antigravity 的“实时查询”使用 `force=true` 绕过后端配额缓存。配额查询成功只说明
-配额接口可达，不等价于推理请求一定可用；仍需选择上游当前公布的模型执行手动探测。
-完整运维流程见 [`docs/ACCOUNT_PROBES.md`](docs/ACCOUNT_PROBES.md)。
+Antigravity live usage queries use `force=true` to bypass the backend quota
+cache. A successful quota query proves only that the quota endpoint is
+reachable; it does not prove that inference is currently accepted. Run a
+manual probe against a model currently advertised by the provider. The full
+operator workflow is in [`docs/ACCOUNT_PROBES.md`](docs/ACCOUNT_PROBES.md).
 
-## 安全声明
+## Security notice
 
-通过网关使用上游消费者 AI 账号可能违反服务商条款。请自行阅读相关条款、遵守所在地法律，并仅使用你有权操作的账号和流量。本项目仅用于技术研究和自托管基础设施场景；部署、账号和数据风险由使用者自行承担。
+Using consumer AI accounts through a gateway may violate a provider's terms.
+Read and follow the applicable terms and laws, and use only accounts and
+traffic you are authorized to operate. This project is intended for technical
+research and self-hosted infrastructure; deployment, account, and data risks
+remain with the operator.
 
-## 上游致谢
+## Upstream acknowledgement
 
-ExAPI 派生自 Wei-Shaw 及贡献者维护的 Sub2API 开源项目。本 fork 默认 README 不再展示上游赞助/推广内容，而是聚焦私有运维工作流。兼容性说明见 [`docs/UPSTREAM_COMPATIBILITY.md`](docs/UPSTREAM_COMPATIBILITY.md)。
+ExAPI derives from the Sub2API project maintained by Wei-Shaw and its
+contributors. This README focuses on private operations rather than upstream
+sponsorship or promotion. Compatibility details are documented in
+[`docs/UPSTREAM_COMPATIBILITY.md`](docs/UPSTREAM_COMPATIBILITY.md).

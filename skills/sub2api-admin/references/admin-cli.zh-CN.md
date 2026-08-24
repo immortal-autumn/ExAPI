@@ -1,21 +1,17 @@
-# ExAPI admin CLI reference
+# Sub2API Admin Reference
 
-English (default) | [简体中文](admin-cli.zh-CN.md)
+[English（默认）](admin-cli.md) | 简体中文
 
 ## Environment
 
 ```bash
 export SUB2API_BASE_URL='https://your-exapi-host'
 export SUB2API_ADMIN_API_KEY='<admin api key>'
-# Alternatively, when no Admin API Key is configured:
+# 或者，未配置管理员 API Key 时使用管理员 JWT：
 # export SUB2API_JWT='<admin access_token>'
 ```
 
-Authentication prefers `SUB2API_ADMIN_API_KEY`, sent as `x-api-key`. When that
-variable is unset, the CLI uses `SUB2API_JWT` as
-`Authorization: Bearer <jwt>`. Regenerate the Admin API Key after an
-`INVALID_ADMIN_KEY` response. To obtain a JWT, sign in with an administrator
-account and copy `data.access_token` from the response:
+后台鉴权优先使用 `SUB2API_ADMIN_API_KEY` 发送 `x-api-key`，未设置时使用 `SUB2API_JWT` 发送 `Authorization: Bearer <jwt>`。如果返回 `INVALID_ADMIN_KEY`，重新生成管理员 API Key；如果使用 JWT，先用管理员邮箱密码登录并从响应的 `data.access_token` 复制 token：
 
 ```bash
 curl -sS "$SUB2API_BASE_URL/api/v1/auth/login" \
@@ -23,11 +19,11 @@ curl -sS "$SUB2API_BASE_URL/api/v1/auth/login" \
   -d '{"email":"admin@example.com","password":"your-password"}'
 ```
 
-Do not paste live credentials into shell history, logs, tickets, or Git.
+不要把真实凭据粘贴到 shell 历史、日志、工单或 Git 中。
 
 ## CLI
 
-The commands below assume the current directory is the skill directory.
+以下命令都假设当前目录是这个 skill 目录。
 
 ```bash
 node scripts/sub2api-admin.js <command>
@@ -35,7 +31,7 @@ node scripts/sub2api-admin.js <command>
 
 ## Accounts
 
-### Read-only operations
+### 只读
 
 ```bash
 node scripts/sub2api-admin.js accounts list --page-size 20
@@ -50,15 +46,14 @@ node scripts/sub2api-admin.js accounts temp-unschedulable 40
 node scripts/sub2api-admin.js accounts antigravity-default-model-mapping
 ```
 
-`accounts export` contains account credentials and tokens. Write it to a
-protected file instead of printing it to the terminal:
+`accounts export` 会包含账号凭据和 token，建议写入文件，不要直接刷屏：
 
 ```bash
 node scripts/sub2api-admin.js accounts export --ids 40,39 --file accounts-export.json
 node scripts/sub2api-admin.js accounts export --platform openai --type oauth --include-proxies false --file accounts-export.json
 ```
 
-### Single-account writes
+### 单账号写入
 
 ```bash
 node scripts/sub2api-admin.js accounts create --file account.json
@@ -76,16 +71,16 @@ node scripts/sub2api-admin.js accounts apply-oauth 40 --file credentials.json
 node scripts/sub2api-admin.js accounts reset-temp-unschedulable 40
 ```
 
-### Deletion and cleanup
+### 删除与清理
 
-List and verify the target account names and IDs before deletion.
+删除前先列出目标账号名和 ID。
 
 ```bash
 node scripts/sub2api-admin.js accounts delete 25
 node scripts/sub2api-admin.js accounts keep-only --name 'target@example.com'
 ```
 
-### Bulk writes
+### 批量写入
 
 ```bash
 node scripts/sub2api-admin.js accounts batch-create --file accounts.json
@@ -95,30 +90,27 @@ node scripts/sub2api-admin.js accounts batch-refresh --ids 40,39
 node scripts/sub2api-admin.js accounts batch-clear-error --ids 40,39
 ```
 
-`bulk-update` accepts fields exposed by the admin form, including `base_url`,
-`model_mapping`, `group_ids`, `proxy_id`, `concurrency`, `priority`,
-`rate_multiplier`, `status`, and `compact_mode`. Run `accounts get <id>` first
-to verify field names and current values. Keep bulk selections provider-scoped
-when model mappings differ between platforms.
+`bulk-update` 可覆盖页面“批量更新”的字段，payload 由后台表单字段决定，例如 `base_url`、`model_mapping`、`group_ids`、`proxy_id`、`concurrency`、`priority`、`rate_multiplier`、`status`、`compact_mode` 等。更新前先用 `accounts get <id>` 确认字段名。
 
-### Import
+不同平台的模型映射不同时，批量选择应限制在同一服务商。
 
-General admin import:
+### 导入
+
+通用后台导入：
 
 ```bash
 node scripts/sub2api-admin.js accounts import-data --file accounts-export.json
 node scripts/sub2api-admin.js accounts import-codex-session --file payload.json
 ```
 
-CRS synchronization:
+CRS 同步：
 
 ```bash
 node scripts/sub2api-admin.js accounts crs-preview --file payload.json
 node scripts/sub2api-admin.js accounts crs-sync --file payload.json
 ```
 
-The legacy JSON importer remains available. It copies selected configuration
-from the template account to imported accounts:
+旧版 JSON 导入仍可用，会把模板账号的配置复制给导入账号：
 
 ```bash
 node scripts/sub2api-admin.js accounts import-json \
@@ -127,26 +119,25 @@ node scripts/sub2api-admin.js accounts import-json \
   --dry-run
 ```
 
-Copied fields:
+复制字段：
 
 - `concurrency`
 - `priority`
 - `group_ids`
 - `credentials.model_mapping`
 
-## Groups and proxies
+## Groups And Proxies
 
 ```bash
 node scripts/sub2api-admin.js groups all
 node scripts/sub2api-admin.js proxies all
 ```
 
-## Redeem codes
+## Redeem Codes
 
-Types include `balance`, `concurrency`, `subscription`, and `invitation`.
-Common states are `unused`, `used`, and `expired`.
+兑换码类型包括 `balance`、`concurrency`、`subscription`、`invitation`。状态常用 `unused`、`used`、`expired`。
 
-### Read-only operations
+### 只读
 
 ```bash
 node scripts/sub2api-admin.js redeem-codes list --page-size 20
@@ -156,7 +147,7 @@ node scripts/sub2api-admin.js redeem-codes stats
 node scripts/sub2api-admin.js redeem-codes export --file redeem-codes.csv
 ```
 
-### Generate codes
+### 生成兑换码
 
 ```bash
 node scripts/sub2api-admin.js redeem-codes generate \
@@ -164,7 +155,7 @@ node scripts/sub2api-admin.js redeem-codes generate \
   --idempotency-key "redeem-generate-$(date +%s)"
 ```
 
-Subscription codes require `group_id` and a nonzero `validity_days`:
+订阅兑换码需要 `group_id` 和非零 `validity_days`：
 
 ```bash
 node scripts/sub2api-admin.js redeem-codes generate \
@@ -172,11 +163,9 @@ node scripts/sub2api-admin.js redeem-codes generate \
   --idempotency-key "redeem-subscription-$(date +%s)"
 ```
 
-### Create and redeem
+### 创建并兑换
 
-This operation creates a code and redeems it to a user in one step for payment
-callbacks or manual recharge. Production workflows must provide a stable
-`--idempotency-key`.
+用于支付回调或人工充值，一步完成创建兑换码并兑换到用户。生产流程必须传稳定的 `--idempotency-key`。
 
 ```bash
 node scripts/sub2api-admin.js redeem-codes create-and-redeem \
@@ -184,9 +173,9 @@ node scripts/sub2api-admin.js redeem-codes create-and-redeem \
   --idempotency-key order-123
 ```
 
-### Modification and cleanup
+### 修改与清理
 
-Use `list` or `get` to verify every target ID before writing.
+写入前先 `list` 或 `get` 核对目标 ID。
 
 ```bash
 node scripts/sub2api-admin.js redeem-codes batch-update --ids 123,124 --json '{"notes":"campaign A"}'
@@ -195,10 +184,9 @@ node scripts/sub2api-admin.js redeem-codes delete 123
 node scripts/sub2api-admin.js redeem-codes batch-delete --ids 123,124
 ```
 
-## Error rules and TLS profiles
+## Error Rules And TLS Profiles
 
-These commands correspond to **Error Passthrough Rules** and **TLS Fingerprint
-Profiles** on the account page.
+对应账号页顶部“错误透传规则”和“TLS 指纹模板”。
 
 ```bash
 node scripts/sub2api-admin.js error-rules list
@@ -217,8 +205,7 @@ node scripts/sub2api-admin.js tls-profiles delete 1
 
 ## Raw Admin API
 
-Use `api` for a new or unwrapped admin endpoint. Paths may use `/admin/...` or
-`/api/v1/admin/...`.
+未封装或新版本后台接口可用 `api` 直通。路径可写 `/admin/...` 或 `/api/v1/admin/...`。
 
 ```bash
 node scripts/sub2api-admin.js api GET /admin/groups/all
@@ -226,7 +213,7 @@ node scripts/sub2api-admin.js api POST /admin/accounts/bulk-update \
   --json '{"account_ids":[40],"concurrency":10}'
 ```
 
-## Confirmed Admin endpoints
+## Confirmed Admin Endpoints
 
 - `GET /api/v1/admin/accounts`
 - `GET /api/v1/admin/accounts/:id`
@@ -286,7 +273,6 @@ node scripts/sub2api-admin.js api POST /admin/accounts/bulk-update \
 
 ## Notes
 
-- Verify the target set with a read-only command before every production write.
-- Exports contain sensitive credentials; use `--file` with protected storage.
-- `PUT /admin/accounts/:id` and `bulk-update` accept permissive request bodies.
-  When a field name is uncertain, inspect `accounts get` or the admin UI first.
+- 线上写入前先只读核对目标集合。
+- 导出结果包含敏感凭据，优先使用 `--file`。
+- `PUT /admin/accounts/:id` 和 `bulk-update` 接受宽松请求体，字段名不确定时先用 `accounts get` 或后台页面确认。

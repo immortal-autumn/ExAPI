@@ -1,5 +1,7 @@
 # Sub2API Deployment and Operation Compliance Commitment
 
+English (default) | [简体中文](admin-compliance.zh.md)
+
 Version: v2026.06.10
 
 This document applies to any individual, organization, or authorized representative that deploys, configures, manages, operates, or effectively controls a Sub2API instance. Before continuing to access or use console functions, the acknowledging party must read, understand, and accept this document in full.

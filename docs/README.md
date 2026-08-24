@@ -1,7 +1,25 @@
 # ExAPI documentation map
 
+English (default) | [简体中文](README.zh-CN.md)
+
 Documentation is split into living project/operator guidance, feature
 contracts, compatibility references, and historical design evidence.
+
+## Language policy
+
+- English is the canonical and default language for unsuffixed documentation
+  paths such as `README.md`.
+- Simplified Chinese translations use `.zh-CN.md`; established `_CN.md` files
+  remain valid until they are migrated without breaking inbound links.
+- A translated pair must link to the other language near the top of both
+  files. Operational commands, configuration keys, API fields, digests, and
+  security requirements must remain semantically identical.
+- When a change affects behavior, update English first and update its Chinese
+  translation in the same change. If a translation is temporarily behind,
+  label its last synchronized revision rather than silently presenting stale
+  instructions.
+- Historical evidence under `openspec/changes/` remains in its source language;
+  current operator guidance belongs in the living documents listed below.
 
 ## Living project and operations documents
 
@@ -67,3 +85,6 @@ instead of editing the original evidence to resemble the present.
   transient.
 - Update documentation in the same change as a public API, operator workflow,
   deployment invariant, or compatibility-boundary change.
+- Keep English as the default target of repository, release, installer, and
+  external documentation links. Link the matching Chinese translation from
+  the English page rather than making Chinese the default path.

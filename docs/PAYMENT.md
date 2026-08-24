@@ -1,5 +1,7 @@
 # Payment System Configuration Guide
 
+English (default) | [简体中文](PAYMENT_CN.md)
+
 Sub2API has a built-in payment system that enables user self-service top-up without deploying a separate payment service.
 
 ---

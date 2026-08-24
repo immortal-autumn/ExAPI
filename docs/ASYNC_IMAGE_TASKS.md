@@ -39,14 +39,14 @@ Configure an S3-compatible object store (AWS S3, Cloudflare R2, Aliyun OSS, MinI
 ```yaml
 image_storage:
   enabled: true
-  endpoint: "https://<account_id>.r2.cloudflarestorage.com"  # AWS 官方可留空
+  endpoint: "https://<account_id>.r2.cloudflarestorage.com"  # Leave empty for AWS.
   region: "auto"
   bucket: "my-images"
   access_key_id: "..."
   secret_access_key: "..."
   prefix: "images/"
   force_path_style: false          # MinIO/path-style buckets set true
-  public_base_url: ""              # set to return public_base_url/key直链; empty → presigned URL
+  public_base_url: ""              # Set for a direct public_base_url/key URL; empty returns a presigned URL.
   presign_expiry_hours: 24         # presigned link TTL when public_base_url is empty
   max_download_bytes: 33554432     # cap when re-hosting an upstream image URL (32MB)
 ```
