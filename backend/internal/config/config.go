@@ -711,11 +711,6 @@ type ForwardedClientIPSettings struct {
 	Headers          []string
 }
 
-const (
-	SecurityOutboundModeCompat  = "compat"
-	SecurityOutboundModeEnforce = "enforce"
-)
-
 type SecurityConfig struct {
 	// OutboundMode stages secure egress defaults without silently breaking an
 	// existing installation. New installers use enforce; an upgraded config
@@ -810,16 +805,6 @@ func (c *Config) SetTrustForwardedIPForAPIKeyACL(enabled bool) {
 		return
 	}
 	c.SetForwardedClientIPSettings(enabled, c.ForwardedClientIPSettings().Headers)
-}
-
-type URLAllowlistConfig struct {
-	Enabled           bool     `mapstructure:"enabled"`
-	UpstreamHosts     []string `mapstructure:"upstream_hosts"`
-	PricingHosts      []string `mapstructure:"pricing_hosts"`
-	CRSHosts          []string `mapstructure:"crs_hosts"`
-	AllowPrivateHosts bool     `mapstructure:"allow_private_hosts"`
-	// 关闭 URL 白名单校验时，是否允许 http URL（默认只允许 https）
-	AllowInsecureHTTP bool `mapstructure:"allow_insecure_http"`
 }
 
 type ResponseHeaderConfig struct {
@@ -1880,12 +1865,7 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 		cfg.JWT.Secret = ""
 	}
 
-	if cfg.Security.OutboundMode == SecurityOutboundModeCompat {
-		slog.Warn("security.outbound_mode=compat; legacy outbound URL behavior remains enabled; migrate to enforce")
-	}
-	if !cfg.Security.URLAllowlist.Enabled {
-		slog.Warn("security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only)")
-	}
+	warnOutboundSecurityCompatibility(cfg.Security)
 	if !cfg.Security.ResponseHeaders.Enabled {
 		slog.Warn("security.response_headers.enabled=false; configurable header filtering disabled (default allowlist only).")
 	}
@@ -1975,26 +1955,7 @@ func setDefaults() {
 	viper.SetDefault("webauthn.rp_origins", []string{})
 
 	// Security
-	viper.SetDefault("security.outbound_mode", SecurityOutboundModeCompat)
-	viper.SetDefault("security.url_allowlist.enabled", false)
-	viper.SetDefault("security.url_allowlist.upstream_hosts", []string{
-		"api.openai.com",
-		"api.anthropic.com",
-		"api.kimi.com",
-		"api.moonshot.ai",
-		"api.moonshot.cn",
-		"open.bigmodel.cn",
-		"api.minimaxi.com",
-		"generativelanguage.googleapis.com",
-		"cloudcode-pa.googleapis.com",
-		"*.openai.azure.com",
-	})
-	viper.SetDefault("security.url_allowlist.pricing_hosts", []string{
-		"raw.githubusercontent.com",
-	})
-	viper.SetDefault("security.url_allowlist.crs_hosts", []string{})
-	viper.SetDefault("security.url_allowlist.allow_private_hosts", true)
-	viper.SetDefault("security.url_allowlist.allow_insecure_http", true)
+	setOutboundSecurityDefaults()
 	viper.SetDefault("security.response_headers.enabled", true)
 	viper.SetDefault("security.response_headers.additional_allowed", []string{})
 	viper.SetDefault("security.response_headers.force_remove", []string{})
@@ -2563,18 +2524,8 @@ func setEnvReachableDefaults() {
 }
 
 func (c *Config) Validate() error {
-	c.Security.OutboundMode = strings.ToLower(strings.TrimSpace(c.Security.OutboundMode))
-	switch c.Security.OutboundMode {
-	case SecurityOutboundModeCompat:
-	case SecurityOutboundModeEnforce:
-		if !c.Security.URLAllowlist.Enabled {
-			return fmt.Errorf("security.url_allowlist.enabled must be true when security.outbound_mode=enforce")
-		}
-		if len(normalizeStringSlice(c.Security.URLAllowlist.UpstreamHosts)) == 0 {
-			return fmt.Errorf("security.url_allowlist.upstream_hosts must not be empty when security.outbound_mode=enforce")
-		}
-	default:
-		return fmt.Errorf("security.outbound_mode must be one of: compat/enforce")
+	if err := validateOutboundSecurityPolicy(&c.Security); err != nil {
+		return err
 	}
 	forwardedClientIPHeaders, err := NormalizeForwardedClientIPHeaders(c.Security.ForwardedClientIPHeaders)
 	if err != nil {
