@@ -44,8 +44,9 @@ The deployment keeps versioned promotion inputs:
 
 - `/opt/sub2api/.env.v0.2.6`
 - `/opt/sub2api/docker-compose.v0.2.6.yml`
-- `/opt/sub2api/.env` and `docker-compose.local.yml` point to the same current
-  configuration.
+- `/opt/sub2api/.env` and `docker-compose.local.yml` retain the legacy local
+  provenance and v0.2.5 rollback digest; promotion uses the versioned files
+  above explicitly.
 - The v0.2.5 environment, Compose file, and digest remain available for
   application-only rollback.
 

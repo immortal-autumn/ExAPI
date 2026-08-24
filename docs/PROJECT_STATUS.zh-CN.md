@@ -31,6 +31,9 @@
 - `/opt/sub2api/.env.v0.2.6`
 - `/opt/sub2api/docker-compose.v0.2.6.yml`
 
+`/opt/sub2api/.env` 和 `docker-compose.local.yml` 保留旧的本地 provenance 及 v0.2.5
+回滚 digest；生产 promotion 明确使用上面的版本化文件。
+
 应用容器版本为 `0.2.6`，OCI revision 为上述提交，状态 healthy、重启次数为 0。
 PostgreSQL 和 Redis 仅作为既有依赖保留，容器 ID、启动时间、数据挂载和健康状态均
 未改变。v0.2.5 的环境、Compose 文件和 digest 仍可用于无 schema 变化的应用回滚。
