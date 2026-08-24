@@ -91,7 +91,7 @@ assert report["candidate"]["compose_environment_sha256"]
 assert report["wireguard"]["interface"] == "wg0"
 PY
 
-CUTOVER_APP_ID=$(printf '1%.0s' $(seq 1 64))
+CUTOVER_APP_ID=$(printf '1%.0s' {1..64})
 export CUTOVER_APP_ID
 changed=$(deploy/ops/report-private-cutover-target.sh)
 [[ "$changed" != "$first" ]] || fail 'container identity change did not alter the target digest'
