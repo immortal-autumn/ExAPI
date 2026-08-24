@@ -137,11 +137,7 @@ func registerControlRoutes(
 
 	v1 := r.Group("/api/v1")
 	routes.RegisterOperatorRoutes(v1, h, operatorAuth, auditLog, panelRateLimiter)
-	routes.RegisterAdminRoutes(v1, h, operatorAuth, auditLog, privateOperatorStepUp(), settingService, panelRateLimiter)
-}
-
-func privateOperatorStepUp() middleware2.StepUpAuthMiddleware {
-	return middleware2.StepUpAuthMiddleware(func(c *gin.Context) { c.Next() })
+	routes.RegisterPrivateAdminRoutes(v1, h, operatorAuth, auditLog, settingService, panelRateLimiter)
 }
 
 func probeReadiness(ctx context.Context, db *sql.DB, redisClient *redis.Client) error {

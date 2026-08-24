@@ -20,6 +20,15 @@ func controlBoundaryTestRouter() *gin.Engine {
 	}))
 	router.GET("/", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 	router.GET("/api/v1/operator/me", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	router.GET("/api/v1/admin/accounts/data", func(c *gin.Context) {
+		// The sensitive stub deliberately accepts no browser credential. The
+		// direct peer boundary is the only authorization in private mode.
+		if c.GetHeader("Authorization") != "" || c.GetHeader("Cookie") != "" {
+			c.Status(http.StatusBadRequest)
+			return
+		}
+		c.Status(http.StatusNoContent)
+	})
 	router.POST("/api/v1/admin/settings", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 	return router
 }
@@ -65,6 +74,18 @@ func TestControlBoundaryRequiresMarkerOnControlAPI(t *testing.T) {
 
 	require.Equal(t, http.StatusForbidden, recorder.Code)
 	require.Contains(t, recorder.Body.String(), "CONTROL_REQUEST_REQUIRED")
+}
+
+func TestControlBoundaryAllowsSensitiveOperatorRouteWithoutBrowserCredentials(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "http://100.97.17.1:8027/api/v1/admin/accounts/data", nil)
+	request.Host = "100.97.17.1:8027"
+	request.RemoteAddr = "100.97.17.25:42100"
+	request.Header.Set(ControlRequestHeader, "1")
+	recorder := httptest.NewRecorder()
+
+	controlBoundaryTestRouter().ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusNoContent, recorder.Code)
 }
 
 func TestControlBoundaryAllowsSafeControlAPIWithoutFetchMetadata(t *testing.T) {

@@ -10,13 +10,47 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterAdminRoutes 注册管理员路由
+// RegisterAdminRoutes retains the session-oriented admin route constructor for
+// compatibility tests and downstream integrations. Private ExAPI production
+// wiring uses RegisterPrivateAdminRoutes, whose sensitive operations inherit
+// authorization exclusively from the WireGuard operator boundary.
 func RegisterAdminRoutes(
 	v1 *gin.RouterGroup,
 	h *handler.Handlers,
 	operatorAuth func(*gin.Context),
 	auditLog middleware.AuditLogMiddleware,
 	stepUpAuth middleware.StepUpAuthMiddleware,
+	settingService *service.SettingService,
+	panelRateLimiter *middleware.PanelRateLimiter,
+) {
+	var sensitiveAuthorization gin.HandlerFunc
+	if stepUpAuth != nil {
+		sensitiveAuthorization = gin.HandlerFunc(stepUpAuth)
+	}
+	registerAdminRoutes(v1, h, operatorAuth, auditLog, sensitiveAuthorization, settingService, panelRateLimiter)
+}
+
+// RegisterPrivateAdminRoutes exposes the operational admin surface to the
+// singleton private operator. The caller must install ControlBoundary before
+// this route graph. No password, cookie, bearer token, TOTP, or other browser
+// credential is accepted by this registration path.
+func RegisterPrivateAdminRoutes(
+	v1 *gin.RouterGroup,
+	h *handler.Handlers,
+	operatorAuth middleware.OperatorAuthMiddleware,
+	auditLog middleware.AuditLogMiddleware,
+	settingService *service.SettingService,
+	panelRateLimiter *middleware.PanelRateLimiter,
+) {
+	registerAdminRoutes(v1, h, operatorAuth, auditLog, nil, settingService, panelRateLimiter)
+}
+
+func registerAdminRoutes(
+	v1 *gin.RouterGroup,
+	h *handler.Handlers,
+	operatorAuth func(*gin.Context),
+	auditLog middleware.AuditLogMiddleware,
+	sensitiveAuthorization gin.HandlerFunc,
 	settingService *service.SettingService,
 	panelRateLimiter *middleware.PanelRateLimiter,
 ) {
@@ -46,7 +80,7 @@ func RegisterAdminRoutes(
 		registerGroupRoutes(admin, h)
 
 		// 账号管理
-		registerAccountRoutes(admin, h, stepUpAuth)
+		registerAccountRoutes(admin, h, sensitiveAuthorization)
 
 		// OpenAI OAuth
 		registerOpenAIOAuthRoutes(admin, h)
@@ -61,16 +95,16 @@ func RegisterAdminRoutes(
 		registerGrokOAuthRoutes(admin, h)
 
 		// 代理管理
-		registerProxyRoutes(admin, h, stepUpAuth)
+		registerProxyRoutes(admin, h, sensitiveAuthorization)
 
 		// 系统设置
 		registerSettingsRoutes(admin, h)
 
 		// 数据管理
-		registerDataManagementRoutes(admin, h, stepUpAuth)
+		registerDataManagementRoutes(admin, h, sensitiveAuthorization)
 
 		// 数据库备份恢复
-		registerBackupRoutes(admin, h, stepUpAuth)
+		registerBackupRoutes(admin, h, sensitiveAuthorization)
 
 		// 运维监控（Ops）
 		registerOpsRoutes(admin, h)
@@ -106,7 +140,7 @@ func RegisterAdminRoutes(
 		registerPromptAuditRoutes(admin, h)
 
 		// 操作审计日志
-		registerAuditLogRoutes(admin, h, stepUpAuth)
+		registerAuditLogRoutes(admin, h)
 	}
 }
 
@@ -126,12 +160,13 @@ func registerPromptAuditRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	}
 }
 
-func registerAuditLogRoutes(admin *gin.RouterGroup, h *handler.Handlers, _ middleware.StepUpAuthMiddleware) {
+func registerAuditLogRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	auditLogs := admin.Group("/audit-logs")
 	{
 		auditLogs.GET("", h.Admin.AuditLog.List)
 		auditLogs.GET("/:id", h.Admin.AuditLog.Get)
-		// 清空需现场 TOTP 校验（在 handler 内强制），不复用 step-up sudo 窗口
+		// Clearing requires an explicit confirmation phrase in the handler. The
+		// operator identity still comes exclusively from the peer boundary.
 		auditLogs.POST("/clear", h.Admin.AuditLog.Clear)
 	}
 }
@@ -323,7 +358,7 @@ func registerGroupRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	}
 }
 
-func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAuth middleware.StepUpAuthMiddleware) {
+func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, sensitiveAuthorization gin.HandlerFunc) {
 	accounts := admin.Group("/accounts")
 	{
 		accounts.GET("", h.Admin.Account.List)
@@ -370,8 +405,9 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 		accounts.GET("/:id/models", h.Admin.Account.GetAvailableModels)
 		accounts.POST("/:id/models/sync-upstream", h.Admin.Account.SyncUpstreamModels)
 		accounts.POST("/batch", h.Admin.Account.BatchCreate)
-		// 账号导出泄露上游凭证原文——要求 step-up 2FA
-		accounts.GET("/data", gin.HandlerFunc(stepUpAuth), h.Admin.Account.ExportData)
+		// Credential export is sensitive. Private ExAPI authorizes it at the
+		// WireGuard operator boundary; compatibility callers may add a gate.
+		accounts.GET("/data", sensitiveOperation(sensitiveAuthorization, h.Admin.Account.ExportData)...)
 		accounts.POST("/data", h.Admin.Account.ImportData)
 		accounts.POST("/batch-update-credentials", h.Admin.Account.BatchUpdateCredentials)
 		accounts.POST("/batch-refresh-tier", h.Admin.Account.BatchRefreshTier)
@@ -457,13 +493,13 @@ func registerGrokOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	}
 }
 
-func registerProxyRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAuth middleware.StepUpAuthMiddleware) {
+func registerProxyRoutes(admin *gin.RouterGroup, h *handler.Handlers, sensitiveAuthorization gin.HandlerFunc) {
 	proxies := admin.Group("/proxies")
 	{
 		proxies.GET("", h.Admin.Proxy.List)
 		proxies.GET("/all", h.Admin.Proxy.GetAll)
-		// 代理导出泄露账号密码原文——要求 step-up 2FA
-		proxies.GET("/data", gin.HandlerFunc(stepUpAuth), h.Admin.Proxy.ExportData)
+		// Proxy export is sensitive and inherits the same operator boundary.
+		proxies.GET("/data", sensitiveOperation(sensitiveAuthorization, h.Admin.Proxy.ExportData)...)
 		proxies.POST("/data", h.Admin.Proxy.ImportData)
 		proxies.GET("/:id", h.Admin.Proxy.GetByID)
 		proxies.POST("", h.Admin.Proxy.Create)
@@ -544,7 +580,7 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	}
 }
 
-func registerDataManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAuth middleware.StepUpAuthMiddleware) {
+func registerDataManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers, sensitiveAuthorization gin.HandlerFunc) {
 	dataManagement := admin.Group("/data-management")
 	{
 		dataManagement.GET("/agent/health", h.Admin.DataManagement.GetAgentHealth)
@@ -557,30 +593,30 @@ func registerDataManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers, s
 		dataManagement.POST("/sources/:source_type/profiles/:profile_id/activate", h.Admin.DataManagement.SetActiveSourceProfile)
 		dataManagement.POST("/s3/test", h.Admin.DataManagement.TestS3)
 		dataManagement.GET("/s3/profiles", h.Admin.DataManagement.ListS3Profiles)
-		// 修改 S3 目标可将数据备份外泄——要求 step-up 2FA
-		dataManagement.POST("/s3/profiles", gin.HandlerFunc(stepUpAuth), h.Admin.DataManagement.CreateS3Profile)
-		dataManagement.PUT("/s3/profiles/:profile_id", gin.HandlerFunc(stepUpAuth), h.Admin.DataManagement.UpdateS3Profile)
+		// Storage target changes and backup creation are sensitive and inherit
+		// the private operator boundary.
+		dataManagement.POST("/s3/profiles", sensitiveOperation(sensitiveAuthorization, h.Admin.DataManagement.CreateS3Profile)...)
+		dataManagement.PUT("/s3/profiles/:profile_id", sensitiveOperation(sensitiveAuthorization, h.Admin.DataManagement.UpdateS3Profile)...)
 		dataManagement.DELETE("/s3/profiles/:profile_id", h.Admin.DataManagement.DeleteS3Profile)
-		dataManagement.POST("/s3/profiles/:profile_id/activate", gin.HandlerFunc(stepUpAuth), h.Admin.DataManagement.SetActiveS3Profile)
-		dataManagement.POST("/backups", gin.HandlerFunc(stepUpAuth), h.Admin.DataManagement.CreateBackupJob)
+		dataManagement.POST("/s3/profiles/:profile_id/activate", sensitiveOperation(sensitiveAuthorization, h.Admin.DataManagement.SetActiveS3Profile)...)
+		dataManagement.POST("/backups", sensitiveOperation(sensitiveAuthorization, h.Admin.DataManagement.CreateBackupJob)...)
 		dataManagement.GET("/backups", h.Admin.DataManagement.ListBackupJobs)
 		dataManagement.GET("/backups/:job_id", h.Admin.DataManagement.GetBackupJob)
 	}
 }
 
-func registerBackupRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAuth middleware.StepUpAuthMiddleware) {
+func registerBackupRoutes(admin *gin.RouterGroup, h *handler.Handlers, sensitiveAuthorization gin.HandlerFunc) {
 	backup := admin.Group("/backups")
 	{
 		// S3 存储配置
 		backup.GET("/s3-config", h.Admin.Backup.GetS3Config)
-		// 修改 S3 目标可将数据库备份外泄——要求 step-up 2FA
-		backup.PUT("/s3-config", gin.HandlerFunc(stepUpAuth), h.Admin.Backup.UpdateS3Config)
+		// Storage target changes inherit the private operator boundary.
+		backup.PUT("/s3-config", sensitiveOperation(sensitiveAuthorization, h.Admin.Backup.UpdateS3Config)...)
 		backup.POST("/s3-config/test", h.Admin.Backup.TestS3Connection)
 
 		// 异步生图对象存储配置（与备份共用 S3 客户端，可直接复用备份凭证）
 		backup.GET("/image-storage", h.Admin.Backup.GetImageStorageConfig)
-		// 同 S3 配置：改写对象存储目标可将生成内容导向外部账号——要求 step-up 2FA
-		backup.PUT("/image-storage", gin.HandlerFunc(stepUpAuth), h.Admin.Backup.UpdateImageStorageConfig)
+		backup.PUT("/image-storage", sensitiveOperation(sensitiveAuthorization, h.Admin.Backup.UpdateImageStorageConfig)...)
 		backup.POST("/image-storage/test", h.Admin.Backup.TestImageStorageConnection)
 
 		// 定时备份配置
@@ -588,17 +624,24 @@ func registerBackupRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAut
 		backup.PUT("/schedule", h.Admin.Backup.UpdateSchedule)
 
 		// 备份操作
-		backup.POST("", gin.HandlerFunc(stepUpAuth), h.Admin.Backup.CreateBackup)
+		backup.POST("", sensitiveOperation(sensitiveAuthorization, h.Admin.Backup.CreateBackup)...)
 		backup.GET("", h.Admin.Backup.ListBackups)
 		backup.GET("/:id", h.Admin.Backup.GetBackup)
 		backup.DELETE("/:id", h.Admin.Backup.DeleteBackup)
-		// 备份下载链接可直接取走整库数据——要求 step-up 2FA
-		backup.GET("/:id/download-url", gin.HandlerFunc(stepUpAuth), h.Admin.Backup.GetDownloadURL)
+		// A download URL exposes database contents and inherits the same boundary.
+		backup.GET("/:id/download-url", sensitiveOperation(sensitiveAuthorization, h.Admin.Backup.GetDownloadURL)...)
 
 		// Live restore is deliberately absent in private-only mode. Recovery is an
 		// offline operator procedure so it cannot roll the running control plane
 		// back across the private-schema cutover boundary.
 	}
+}
+
+func sensitiveOperation(authorization gin.HandlerFunc, operation gin.HandlerFunc) []gin.HandlerFunc {
+	if authorization == nil {
+		return []gin.HandlerFunc{operation}
+	}
+	return []gin.HandlerFunc{authorization, operation}
 }
 
 func registerSystemRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
