@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 # Restore an exact versioned encrypted pg_dump into a networkless disposable
-# PostgreSQL container and emit evidence only after operator SQL checks pass.
+# PostgreSQL container and emit evidence only after repository-owned checks and
+# any additional operator assertions pass.
 set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$ROOT_DIR"
 die() { printf 'logical restore drill failed: %s\n' "$*" >&2; exit 1; }
 require_env() { [[ -n "${!1:-}" ]] || die "$1 is required"; }
-for name in RECOVERY_EVIDENCE AGE_IDENTITY_FILE POSTGRES_IMAGE RESTORE_VERIFY_SQL_FILE; do require_env "$name"; done
+for name in RECOVERY_EVIDENCE AGE_IDENTITY_FILE POSTGRES_IMAGE; do require_env "$name"; done
 for command_name in age aws docker python3; do command -v "$command_name" >/dev/null 2>&1 || die "$command_name is required"; done
 [[ "$POSTGRES_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]] || die 'POSTGRES_IMAGE must be immutable by digest'
-[[ -r "$RECOVERY_EVIDENCE" && -r "$AGE_IDENTITY_FILE" && -r "$RESTORE_VERIFY_SQL_FILE" ]] || die 'an input file is unreadable'
+required_checks="$ROOT_DIR/deploy/ops/restore-checks.required.sql"
+[[ -r "$RECOVERY_EVIDENCE" && -r "$AGE_IDENTITY_FILE" && -r "$required_checks" ]] || die 'a required input file is unreadable'
+if [[ -n "${RESTORE_VERIFY_SQL_FILE:-}" && ! -r "$RESTORE_VERIFY_SQL_FILE" ]]; then
+  die 'RESTORE_VERIFY_SQL_FILE is unreadable'
+fi
 
 readarray -t recovery < <(python3 - "$RECOVERY_EVIDENCE" <<'PY'
 import json, sys
@@ -69,11 +74,19 @@ python3 deploy/ops/stream_hash.py "$actual_checksum" <"$fifo" |
 wait "$download_pid"
 [[ "$(tr -d '\n' < "$actual_checksum")" == "$expected_sha" ]] || die 'downloaded encrypted object checksum does not match recovery evidence'
 
-docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres -d exapi_restore <"$RESTORE_VERIFY_SQL_FILE" \
-  >"$OPS_TMP_DIR/verification.txt"
+required_checks_sha=$(sha256sum "$required_checks" | awk '{print $1}')
+docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres -d exapi_restore <"$required_checks" \
+  >"$OPS_TMP_DIR/verification-required.txt"
+optional_checks_sha=""
+if [[ -n "${RESTORE_VERIFY_SQL_FILE:-}" ]]; then
+  optional_checks_sha=$(sha256sum "$RESTORE_VERIFY_SQL_FILE" | awk '{print $1}')
+  docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres -d exapi_restore <"$RESTORE_VERIFY_SQL_FILE" \
+    >"$OPS_TMP_DIR/verification-operator.txt"
+fi
 
 ROLLOUT_ID="$rollout_id" CONTAINER="$container" VOLUME="$volume" OBJECT_SHA="$expected_sha" \
-POSTGRES_IMAGE="$POSTGRES_IMAGE" python3 - "$evidence" <<'PY'
+POSTGRES_IMAGE="$POSTGRES_IMAGE" REQUIRED_CHECKS_SHA="$required_checks_sha" \
+OPTIONAL_CHECKS_SHA="$optional_checks_sha" python3 - "$evidence" <<'PY'
 import json, os, sys
 from datetime import datetime, timezone
 data = {
@@ -84,6 +97,10 @@ data = {
     "postgres_image": os.environ["POSTGRES_IMAGE"],
     "restored_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     "backup_sha256": os.environ["OBJECT_SHA"],
+    "required_validator_sha256": os.environ["REQUIRED_CHECKS_SHA"],
+    "required_validator_verified": True,
+    "operator_validator_sha256": os.environ["OPTIONAL_CHECKS_SHA"] or None,
+    "operator_validator_verified": bool(os.environ["OPTIONAL_CHECKS_SHA"]),
     "network_mode": "none",
     "verified": True,
 }

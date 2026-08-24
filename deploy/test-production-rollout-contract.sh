@@ -18,6 +18,17 @@ bash -n deploy/ops/validate-immutable-compose.sh || fail 'immutable Compose vali
 sh -n deploy/ops/with-migration-report-key.sh || fail 'migration report key wrapper has invalid POSIX shell syntax'
 bash -n deploy/ops/run-private-cutover.sh || fail 'offline cutover orchestrator has invalid shell syntax'
 
+grep -Fq 'restore-checks.required.sql' deploy/ops/verify-logical-restore.sh || \
+  fail 'logical restore can bypass the repository-owned validator'
+grep -Fq 'required_validator_verified' deploy/ops/verify-logical-restore.sh || \
+  fail 'logical restore evidence omits mandatory-validator status'
+grep -Fq 'required_validator_sha256' deploy/ops/verify-logical-restore.sh || \
+  fail 'logical restore evidence is not bound to the mandatory validator'
+grep -Fq "checksum !~ '^[0-9a-f]{64}$'" deploy/ops/restore-checks.required.sql || \
+  fail 'mandatory restore validator does not validate migration checksums'
+grep -Fq "role = 'admin' AND status = 'active'" deploy/ops/restore-checks.required.sql || \
+  fail 'mandatory restore validator does not require an active administrator'
+
 grep -Fq '/app/with-migration-report-key.sh' deploy/ops/run-private-cutover.sh || \
   fail 'offline cutover does not use the protected report-key wrapper'
 ! grep -Fq 'export EXAPI_MIGRATION_REPORT_KEY=' deploy/PRODUCTION_ROLLOUT.md || \

@@ -1,25 +1,10 @@
 \set ON_ERROR_STOP on
 
-DO $$
-DECLARE
-  required_table text;
-BEGIN
-  FOREACH required_table IN ARRAY ARRAY[
-    'schema_migrations', 'users', 'accounts', 'api_keys', 'groups'
-  ] LOOP
-    IF to_regclass('public.' || required_table) IS NULL THEN
-      RAISE EXCEPTION 'required table is missing after restore: %', required_table;
-    END IF;
-  END LOOP;
-END
-$$;
+-- Optional deployment-specific assertions. The repository-owned validator in
+-- restore-checks.required.sql always runs first and cannot be replaced by this
+-- file. Copy this example into tmp/, add assertions derived from the signed
+-- pre-backup manifest, and pass it as RESTORE_VERIFY_SQL_FILE.
 
-SELECT COUNT(*) AS applied_migrations FROM schema_migrations;
-SELECT COUNT(*) AS users FROM users;
-SELECT COUNT(*) AS accounts FROM accounts;
-SELECT COUNT(*) AS api_keys FROM api_keys;
-SELECT COUNT(*) AS groups FROM groups;
-
--- Copy this file into tmp/, add deployment-specific row-count and integrity
--- assertions, then pass that file as RESTORE_VERIFY_SQL_FILE. Never weaken the
--- required-table checks above.
+-- Replace these placeholders with reviewed minimums for this recovery set.
+SELECT COUNT(*) >= 1 AS expected_users_present FROM users;
+SELECT COUNT(*) >= 0 AS expected_accounts_checked FROM accounts;

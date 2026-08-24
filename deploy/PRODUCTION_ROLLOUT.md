@@ -294,6 +294,12 @@ export KEEP_RESTORE_TARGET=true
 deploy/ops/verify-logical-restore.sh
 ```
 
+The repository-owned `deploy/ops/restore-checks.required.sql` always runs
+first; `RESTORE_VERIFY_SQL_FILE` only adds deployment-specific assertions and
+cannot replace the minimum schema, migration-checksum, and active-admin checks.
+The evidence records SHA-256 values and separate verification flags for both
+validators. Omitting the optional file still runs the mandatory validator.
+
 Restore the independent provider snapshot through a separate executable adapter:
 
 ```bash
