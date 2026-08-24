@@ -23,10 +23,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/outbound"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyurl"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyutil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/servertiming"
-	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
 )
 
 // Transport 连接池默认配置
@@ -36,7 +36,7 @@ const (
 	defaultIdleConnTimeout     = 90 * time.Second // 空闲连接超时时间（建议小于上游 LB 超时）
 	defaultDialTimeout         = 5 * time.Second  // TCP 连接超时（含代理握手），代理不通时快速失败
 	defaultTLSHandshakeTimeout = 5 * time.Second  // TLS 握手超时
-	validatedHostTTL           = 30 * time.Second // DNS Rebinding 校验缓存 TTL
+	defaultRedirectLimit       = 5
 )
 
 // Options 定义共享 HTTP 客户端的构建参数
@@ -56,9 +56,6 @@ type Options struct {
 
 // sharedClients 存储按配置参数缓存的 http.Client 实例
 var sharedClients sync.Map
-
-// 允许测试替换校验函数，生产默认指向真实实现。
-var validateResolvedIP = urlvalidator.ValidateResolvedIP
 
 // GetClient 返回共享的 HTTP 客户端实例
 // 性能优化：相同配置复用同一客户端，避免重复创建 Transport
@@ -84,23 +81,37 @@ func GetClient(opts Options) (*http.Client, error) {
 }
 
 func buildClient(opts Options) (*http.Client, error) {
-	transport, err := buildTransport(opts)
+	return buildClientWithPolicy(opts, outbound.Policy{AllowPrivate: opts.AllowPrivateHosts})
+}
+
+func buildClientWithPolicy(opts Options, policy outbound.Policy) (*http.Client, error) {
+	transport, proxied, err := buildTransport(opts)
 	if err != nil {
 		return nil, err
 	}
 
-	var rt http.RoundTripper = transport
-	if opts.ValidateResolvedIP && !opts.AllowPrivateHosts {
-		rt = newValidatedTransport(transport)
+	if opts.ValidateResolvedIP {
+		mode := outbound.DirectResolution
+		if proxied {
+			mode = outbound.TrustedProxyResolution
+		}
+		if err := policy.ConfigureTransport(transport, mode); err != nil {
+			return nil, err
+		}
 	}
-	rt = servertiming.WrapRoundTripper(rt)
+	var checkRedirect func(*http.Request, []*http.Request) error
+	if opts.ValidateResolvedIP {
+		checkRedirect = redirectChecker(policy, defaultRedirectLimit)
+	}
+
 	return &http.Client{
-		Transport: rt,
-		Timeout:   opts.Timeout,
+		Transport:     servertiming.WrapRoundTripper(transport),
+		Timeout:       opts.Timeout,
+		CheckRedirect: checkRedirect,
 	}, nil
 }
 
-func buildTransport(opts Options) (*http.Transport, error) {
+func buildTransport(opts Options) (*http.Transport, bool, error) {
 	// 使用自定义值或默认值
 	maxIdleConns := opts.MaxIdleConns
 	if maxIdleConns <= 0 {
@@ -125,22 +136,40 @@ func buildTransport(opts Options) (*http.Transport, error) {
 
 	if opts.InsecureSkipVerify {
 		// 安全要求：禁止跳过证书验证，避免中间人攻击。
-		return nil, fmt.Errorf("insecure_skip_verify is not allowed; install a trusted certificate instead")
+		return nil, false, fmt.Errorf("insecure_skip_verify is not allowed; install a trusted certificate instead")
 	}
 
 	_, parsed, err := proxyurl.Parse(opts.ProxyURL)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if parsed == nil {
-		return transport, nil
+		return transport, false, nil
 	}
 
 	if err := proxyutil.ConfigureTransportProxy(transport, parsed); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	return transport, nil
+	return transport, true, nil
+}
+
+func redirectChecker(policy outbound.Policy, limit int) func(*http.Request, []*http.Request) error {
+	return func(req *http.Request, via []*http.Request) error {
+		if len(via) >= limit {
+			return fmt.Errorf("stopped after %d redirects", limit)
+		}
+		if req == nil || req.URL == nil {
+			return fmt.Errorf("invalid outbound redirect")
+		}
+		if len(via) > 0 && via[len(via)-1].URL != nil &&
+			strings.EqualFold(via[len(via)-1].URL.Scheme, "https") &&
+			strings.EqualFold(req.URL.Scheme, "http") {
+			return fmt.Errorf("outbound redirect cannot downgrade from https to http")
+		}
+		_, err := policy.ValidateURL(req.URL.String(), true)
+		return err
+	}
 }
 
 func buildClientKey(opts Options) string {
@@ -155,59 +184,4 @@ func buildClientKey(opts Options) string {
 		opts.MaxIdleConnsPerHost,
 		opts.MaxConnsPerHost,
 	)
-}
-
-type validatedTransport struct {
-	base           http.RoundTripper
-	validatedHosts sync.Map // map[string]time.Time, value 为过期时间
-	now            func() time.Time
-}
-
-func newValidatedTransport(base http.RoundTripper) *validatedTransport {
-	return &validatedTransport{
-		base: base,
-		now:  time.Now,
-	}
-}
-
-func (t *validatedTransport) isValidatedHost(host string, now time.Time) bool {
-	if t == nil {
-		return false
-	}
-	raw, ok := t.validatedHosts.Load(host)
-	if !ok {
-		return false
-	}
-	expireAt, ok := raw.(time.Time)
-	if !ok {
-		t.validatedHosts.Delete(host)
-		return false
-	}
-	if now.Before(expireAt) {
-		return true
-	}
-	t.validatedHosts.Delete(host)
-	return false
-}
-
-func (t *validatedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if req != nil && req.URL != nil {
-		host := strings.ToLower(strings.TrimSpace(req.URL.Hostname()))
-		if host != "" {
-			now := time.Now()
-			if t != nil && t.now != nil {
-				now = t.now()
-			}
-			if !t.isValidatedHost(host, now) {
-				if err := validateResolvedIP(host); err != nil {
-					return nil, err
-				}
-				t.validatedHosts.Store(host, now.Add(validatedHostTTL))
-			}
-		}
-	}
-	if t == nil || t.base == nil {
-		return nil, fmt.Errorf("validated transport base is nil")
-	}
-	return t.base.RoundTrip(req)
 }

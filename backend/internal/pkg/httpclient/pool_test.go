@@ -1,115 +1,105 @@
 package httpclient
 
 import (
+	"context"
 	"errors"
-	"io"
+	"net"
 	"net/http"
-	"strings"
-	"sync/atomic"
 	"testing"
-	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/outbound"
 	"github.com/stretchr/testify/require"
 )
 
-type roundTripFunc func(*http.Request) (*http.Response, error)
+type testResolverFunc func(context.Context, string) ([]net.IPAddr, error)
 
-func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return f(req)
+func (f testResolverFunc) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
+	return f(ctx, host)
 }
 
-func TestValidatedTransport_CacheHostValidation(t *testing.T) {
-	originalValidate := validateResolvedIP
-	defer func() { validateResolvedIP = originalValidate }()
+type testDialerFunc func(context.Context, string, string) (net.Conn, error)
 
-	var validateCalls int32
-	validateResolvedIP = func(host string) error {
-		atomic.AddInt32(&validateCalls, 1)
-		require.Equal(t, "api.openai.com", host)
-		return nil
-	}
-
-	var baseCalls int32
-	base := roundTripFunc(func(_ *http.Request) (*http.Response, error) {
-		atomic.AddInt32(&baseCalls, 1)
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(strings.NewReader(`{}`)),
-			Header:     make(http.Header),
-		}, nil
-	})
-
-	now := time.Unix(1730000000, 0)
-	transport := newValidatedTransport(base)
-	transport.now = func() time.Time { return now }
-
-	req, err := http.NewRequest(http.MethodGet, "https://api.openai.com/v1/responses", nil)
-	require.NoError(t, err)
-
-	_, err = transport.RoundTrip(req)
-	require.NoError(t, err)
-	_, err = transport.RoundTrip(req)
-	require.NoError(t, err)
-
-	require.Equal(t, int32(1), atomic.LoadInt32(&validateCalls))
-	require.Equal(t, int32(2), atomic.LoadInt32(&baseCalls))
+func (f testDialerFunc) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	return f(ctx, network, address)
 }
 
-func TestValidatedTransport_ExpiredCacheTriggersRevalidation(t *testing.T) {
-	originalValidate := validateResolvedIP
-	defer func() { validateResolvedIP = originalValidate }()
-
-	var validateCalls int32
-	validateResolvedIP = func(_ string) error {
-		atomic.AddInt32(&validateCalls, 1)
-		return nil
+func TestBuildClientPinsValidatedAddressAtDialTime(t *testing.T) {
+	var dialed string
+	policy := outbound.Policy{
+		Resolver: testResolverFunc(func(_ context.Context, host string) ([]net.IPAddr, error) {
+			require.Equal(t, "api.example.test", host)
+			return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
+		}),
+		Dialer: testDialerFunc(func(_ context.Context, _ string, address string) (net.Conn, error) {
+			dialed = address
+			return nil, errors.New("dial sentinel")
+		}),
 	}
 
-	base := roundTripFunc(func(_ *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(strings.NewReader(`{}`)),
-			Header:     make(http.Header),
-		}, nil
-	})
-
-	now := time.Unix(1730001000, 0)
-	transport := newValidatedTransport(base)
-	transport.now = func() time.Time { return now }
-
-	req, err := http.NewRequest(http.MethodGet, "https://api.openai.com/v1/responses", nil)
+	client, err := buildClientWithPolicy(Options{ValidateResolvedIP: true}, policy)
 	require.NoError(t, err)
-
-	_, err = transport.RoundTrip(req)
-	require.NoError(t, err)
-
-	now = now.Add(validatedHostTTL + time.Second)
-	_, err = transport.RoundTrip(req)
-	require.NoError(t, err)
-
-	require.Equal(t, int32(2), atomic.LoadInt32(&validateCalls))
+	_, err = client.Get("https://api.example.test/resource")
+	require.ErrorContains(t, err, "dial sentinel")
+	require.Equal(t, "93.184.216.34:443", dialed)
 }
 
-func TestValidatedTransport_ValidationErrorStopsRoundTrip(t *testing.T) {
-	originalValidate := validateResolvedIP
-	defer func() { validateResolvedIP = originalValidate }()
-
-	expectedErr := errors.New("dns rebinding rejected")
-	validateResolvedIP = func(_ string) error {
-		return expectedErr
+func TestBuildClientRejectsDNSRebindingBeforeDial(t *testing.T) {
+	dialed := false
+	policy := outbound.Policy{
+		Resolver: testResolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
+			return []net.IPAddr{
+				{IP: net.ParseIP("93.184.216.34")},
+				{IP: net.ParseIP("127.0.0.1")},
+			}, nil
+		}),
+		Dialer: testDialerFunc(func(context.Context, string, string) (net.Conn, error) {
+			dialed = true
+			return nil, errors.New("unexpected dial")
+		}),
 	}
 
-	var baseCalls int32
-	base := roundTripFunc(func(_ *http.Request) (*http.Response, error) {
-		atomic.AddInt32(&baseCalls, 1)
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
-	})
+	client, err := buildClientWithPolicy(Options{ValidateResolvedIP: true}, policy)
+	require.NoError(t, err)
+	_, err = client.Get("https://rebind.example.test/resource")
+	require.ErrorContains(t, err, "disallowed")
+	require.False(t, dialed)
+}
 
-	transport := newValidatedTransport(base)
-	req, err := http.NewRequest(http.MethodGet, "https://api.openai.com/v1/responses", nil)
+func TestBuildClientPreservesConfiguredProxyResolution(t *testing.T) {
+	policyResolverCalled := false
+	policy := outbound.Policy{
+		Resolver: testResolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
+			policyResolverCalled = true
+			return nil, errors.New("policy resolver must not resolve proxy destinations")
+		}),
+	}
+
+	client, err := buildClientWithPolicy(Options{
+		ProxyURL:           "http://127.0.0.1:1",
+		ValidateResolvedIP: true,
+	}, policy)
+	require.NoError(t, err)
+	_, err = client.Get("https://provider.example.test/resource")
+	require.Error(t, err)
+	require.False(t, policyResolverCalled)
+}
+
+func TestRedirectCheckerRejectsHTTPSDowngradeAndPrivatePivot(t *testing.T) {
+	check := redirectChecker(outbound.PublicPolicy(), 5)
+	original, err := http.NewRequest(http.MethodGet, "https://api.example.test/start", nil)
 	require.NoError(t, err)
 
-	_, err = transport.RoundTrip(req)
-	require.ErrorIs(t, err, expectedErr)
-	require.Equal(t, int32(0), atomic.LoadInt32(&baseCalls))
+	downgrade, err := http.NewRequest(http.MethodGet, "http://api.example.test/next", nil)
+	require.NoError(t, err)
+	require.ErrorContains(t, check(downgrade, []*http.Request{original}), "downgrade")
+
+	private, err := http.NewRequest(http.MethodGet, "https://127.0.0.1/internal", nil)
+	require.NoError(t, err)
+	require.ErrorContains(t, check(private, []*http.Request{original}), "disallowed")
+}
+
+func TestCompatibilityClientKeepsDefaultRedirectBehavior(t *testing.T) {
+	client, err := buildClientWithPolicy(Options{ValidateResolvedIP: false}, outbound.PublicPolicy())
+	require.NoError(t, err)
+	require.Nil(t, client.CheckRedirect)
 }
