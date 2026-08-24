@@ -7,7 +7,25 @@ fail() { printf 'private cutover target test failed: %s\n' "$*" >&2; exit 1; }
 
 mkdir -p tmp
 test_dir=$(mktemp -d tmp/cutover-target-test.XXXXXX)
-report_file=$(mktemp /dev/shm/exapi-cutover-target-test.XXXXXX)
+secure_tmp=
+if [[ -n "${EXAPI_CONTRACT_SECURE_TMP_DIR:-}" ]]; then
+  mkdir -p "$EXAPI_CONTRACT_SECURE_TMP_DIR"
+  secure_tmp=$EXAPI_CONTRACT_SECURE_TMP_DIR
+else
+  for candidate in "$ROOT_DIR/tmp" /dev/shm "${TMPDIR:-/tmp}" /tmp; do
+    [[ -d "$candidate" && -w "$candidate" ]] || continue
+    mode_probe=$(mktemp "$candidate/cutover-target-test-mode.XXXXXX") || continue
+    chmod 600 "$mode_probe"
+    mode=$(stat -c '%a' "$mode_probe" 2>/dev/null || stat -f '%Lp' "$mode_probe" 2>/dev/null || true)
+    rm -f "$mode_probe"
+    if [[ "$mode" == 600 ]]; then
+      secure_tmp=$candidate
+      break
+    fi
+  done
+fi
+[[ -n "$secure_tmp" ]] || fail 'no permission-capable temporary directory; set EXAPI_CONTRACT_SECURE_TMP_DIR'
+report_file=$(mktemp "$secure_tmp/exapi-cutover-target-test.XXXXXX")
 cleanup() { rm -rf "$test_dir"; rm -f "$report_file"; }
 trap cleanup EXIT HUP INT TERM
 
@@ -40,7 +58,9 @@ first=$(deploy/ops/report-private-cutover-target.sh)
 second=$(deploy/ops/report-private-cutover-target.sh)
 [[ "$first" =~ ^[0-9a-f]{64}$ && "$first" == "$second" ]] || \
   fail 'stable target identity did not produce a stable digest'
-[[ "$(stat -c '%a' "$EXAPI_CUTOVER_TARGET_REPORT")" == 600 ]] || \
+report_mode=$(stat -c '%a' "$EXAPI_CUTOVER_TARGET_REPORT" 2>/dev/null || \
+  stat -f '%Lp' "$EXAPI_CUTOVER_TARGET_REPORT" 2>/dev/null || true)
+[[ "$report_mode" == 600 ]] || \
   fail 'target report is not mode 0600'
 
 python3 - "$EXAPI_CUTOVER_TARGET_REPORT" "$candidate_compose" "$legacy_compose" <<'PY'
