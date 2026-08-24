@@ -24,7 +24,7 @@ fi
 for candidate in "${candidates[@]}"; do
   [[ -d "$candidate" && -w "$candidate" ]] || continue
   mode_probe=$(mktemp "$candidate/cutover-target-test-mode.XXXXXX") || continue
-  chmod 600 "$mode_probe"
+  chmod 600 "$mode_probe" || { rm -f "$mode_probe"; continue; }
   mode=$(stat -c '%a' "$mode_probe" 2>/dev/null || stat -f '%Lp' "$mode_probe" 2>/dev/null || true)
   rm -f "$mode_probe"
   if [[ "$mode" == 600 ]]; then
