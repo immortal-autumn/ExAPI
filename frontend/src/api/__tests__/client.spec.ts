@@ -55,4 +55,20 @@ describe('private control API client', () => {
 
     await expect(apiClient.get('/operator/me')).resolves.toMatchObject({ data: { id: 9 } })
   })
+
+  it('uses a stable English fallback for network failures', async () => {
+    const { apiClient } = await import('@/api/client')
+    const adapter = vi.fn<AxiosAdapter>().mockRejectedValue({
+      code: 'ERR_NETWORK',
+      config: { url: '/operator/me' },
+      message: 'Network Error',
+    })
+    apiClient.defaults.adapter = adapter
+
+    await expect(apiClient.get('/operator/me')).rejects.toMatchObject({
+      status: 0,
+      code: 'NETWORK_ERROR',
+      message: 'Network connection failed. Check your connection and try again.',
+    })
+  })
 })

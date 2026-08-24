@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { RouterView, useRoute } from 'vue-router'
 import { computed, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import Toast from '@/components/common/Toast.vue'
 import NavigationProgress from '@/components/common/NavigationProgress.vue'
 import { resolveRouteDocumentTitle } from '@/router/title'
@@ -13,6 +14,7 @@ const route = useRoute()
 const appStore = useAppStore()
 const authStore = useAuthStore()
 const adminSettingsStore = useAdminSettingsStore()
+const { locale } = useI18n()
 const operatorAccessMessage = computed(() => {
   switch (authStore.accessState) {
     case 'denied':
@@ -54,6 +56,7 @@ watch(
     () => appStore.cachedPublicSettings?.custom_menu_items,
     () => authStore.isAdmin,
     () => adminSettingsStore.customMenuItems,
+    () => locale.value,
   ],
   updateDocumentTitle,
   { deep: true }

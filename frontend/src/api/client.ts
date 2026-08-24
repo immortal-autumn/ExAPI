@@ -153,7 +153,8 @@ apiClient.interceptors.response.use(
     // Network error
     return Promise.reject({
       status: 0,
-      message: '网络连接异常，请检查网络后重试。'
+      code: 'NETWORK_ERROR',
+      message: 'Network connection failed. Check your connection and try again.'
     })
   }
 )

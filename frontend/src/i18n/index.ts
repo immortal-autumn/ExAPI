@@ -1,23 +1,26 @@
 import { createI18n } from 'vue-i18n'
 
-type LocaleCode = 'zh-CN'
+export type LocaleCode = 'en' | 'zh-CN'
 
 type LocaleMessages = Record<string, any>
 
 const LOCALE_KEY = 'sub2api_locale'
-const DEFAULT_LOCALE: LocaleCode = 'zh-CN'
+const DEFAULT_LOCALE: LocaleCode = 'en'
 
 const localeLoaders: Record<LocaleCode, () => Promise<{ default: LocaleMessages }>> = {
-  'zh-CN': () => import('./locales/zh')
+  en: () => import('./locales/en'),
+  'zh-CN': () => import('./locales/zh'),
 }
 
-function isLocaleCode(value: string): value is LocaleCode {
-  return value === 'zh-CN'
+function isLocaleCode(value: unknown): value is LocaleCode {
+  return value === 'en' || value === 'zh-CN'
 }
 
 function getDefaultLocale(): LocaleCode {
-  // ExAPI fork policy: the product UI is Chinese-only. Ignore browser language
-  // and any legacy saved English locale to avoid mixed-language pages.
+  const savedLocale = localStorage.getItem(LOCALE_KEY)
+  if (isLocaleCode(savedLocale)) {
+    return savedLocale
+  }
   return DEFAULT_LOCALE
 }
 
@@ -52,33 +55,11 @@ export async function initI18n(): Promise<void> {
 }
 
 export async function setLocale(locale: string): Promise<void> {
-  if (!isLocaleCode(locale)) {
-    localStorage.setItem(LOCALE_KEY, DEFAULT_LOCALE)
-    i18n.global.locale.value = DEFAULT_LOCALE
-    document.documentElement.setAttribute('lang', DEFAULT_LOCALE)
-    return
-  }
-
-  await loadLocaleMessages(locale)
-  i18n.global.locale.value = locale
-  localStorage.setItem(LOCALE_KEY, locale)
-  document.documentElement.setAttribute('lang', locale)
-
-  // 同步更新浏览器页签标题，使其跟随语言切换
-  const { resolveRouteDocumentTitle } = await import('@/router/title')
-  const { default: router } = await import('@/router')
-  const { useAppStore } = await import('@/stores/app')
-  const { useAuthStore } = await import('@/stores/auth')
-  const { useAdminSettingsStore } = await import('@/stores/adminSettings')
-  const route = router.currentRoute.value
-  const appStore = useAppStore()
-  const authStore = useAuthStore()
-  const adminSettingsStore = useAdminSettingsStore()
-  const customMenuItems = [
-    ...(appStore.cachedPublicSettings?.custom_menu_items ?? []),
-    ...(authStore.isAdmin ? adminSettingsStore.customMenuItems : []),
-  ]
-  document.title = resolveRouteDocumentTitle(route, appStore.siteName, customMenuItems)
+  const nextLocale = isLocaleCode(locale) ? locale : DEFAULT_LOCALE
+  await loadLocaleMessages(nextLocale)
+  i18n.global.locale.value = nextLocale
+  localStorage.setItem(LOCALE_KEY, nextLocale)
+  document.documentElement.setAttribute('lang', nextLocale)
 }
 
 export function getLocale(): LocaleCode {
@@ -87,7 +68,8 @@ export function getLocale(): LocaleCode {
 }
 
 export const availableLocales = [
-  { code: 'zh-CN', name: '中文', flag: '🇨🇳' }
+  { code: 'en', name: 'English', flag: '🇬🇧' },
+  { code: 'zh-CN', name: '中文', flag: '🇨🇳' },
 ] as const
 
 export default i18n

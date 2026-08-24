@@ -26,16 +26,32 @@ export interface OperatorIdentity {
 }
 
 function asOperatorIdentity(value: unknown): OperatorIdentity {
-  const data = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
-  const id = typeof data.id === 'number' ? data.id : Number(data.id)
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Invalid operator identity response')
+  }
+
+  const data = value as Record<string, unknown>
+  if (typeof data.id !== 'number' || !Number.isInteger(data.id) || data.id <= 0) {
+    throw new Error('Invalid operator identity response')
+  }
+  if (data.role !== 'admin') {
+    throw new Error('Invalid operator identity response')
+  }
+  if (data.status !== undefined && data.status !== 'active') {
+    throw new Error('Invalid operator identity response')
+  }
+  if (data.run_mode !== undefined && data.run_mode !== 'standard' && data.run_mode !== 'simple') {
+    throw new Error('Invalid operator identity response')
+  }
+
   return {
-    id: Number.isFinite(id) ? id : 0,
+    id: data.id as number,
     username: typeof data.username === 'string' ? data.username : undefined,
     email: typeof data.email === 'string' ? data.email : undefined,
-    role: 'admin',
+    role: data.role,
     status: typeof data.status === 'string' ? data.status : undefined,
     concurrency: typeof data.concurrency === 'number' ? data.concurrency : undefined,
-    run_mode: data.run_mode === 'standard' ? 'standard' : 'simple',
+    run_mode: data.run_mode as OperatorIdentity['run_mode'],
   }
 }
 
@@ -68,12 +84,13 @@ export const useAuthStore = defineStore('auth', () => {
         const identity = asOperatorIdentity(data)
         const next = identity as unknown as User
         user.value = next
-        runMode.value = 'simple'
+        runMode.value = identity.run_mode ?? 'simple'
         accessState.value = 'ready'
         return next
       })
       .catch((error) => {
         user.value = null
+        runMode.value = 'simple'
         accessError.value = error
         accessState.value = accessStateForError(error)
         throw error
@@ -112,6 +129,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout(): Promise<void> {
     stopAutoRefresh()
     user.value = null
+    runMode.value = 'simple'
     accessState.value = 'unknown'
     accessError.value = null
   }
