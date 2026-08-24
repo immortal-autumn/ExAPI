@@ -3,10 +3,12 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -141,10 +143,25 @@ func TestWebhookConstants(t *testing.T) {
 	t.Run("maxWebhookBodySize is 1MB", func(t *testing.T) {
 		assert.Equal(t, int64(1<<20), int64(maxWebhookBodySize))
 	})
+}
 
-	t.Run("webhookLogTruncateLen is 200", func(t *testing.T) {
-		assert.Equal(t, 200, webhookLogTruncateLen)
-	})
+func TestWebhookVerificationFailureLogOmitsPayload(t *testing.T) {
+	var output bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&output, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	// Use the same sentinel as both the request body and provider error. This
+	// protects against accidentally reintroducing either the old rawBody field
+	// or an unbounded error string in the failure log.
+	sentinel := `{"signature":"WEBHOOK_SENTINEL_BODY"}`
+	logWebhookVerificationFailure(payment.TypeStripe, http.MethodPost, sentinel, errors.New(sentinel))
+
+	logs := output.String()
+	assert.NotContains(t, logs, sentinel)
+	assert.NotContains(t, logs, "rawBody")
+	assert.Contains(t, logs, "bodyLen=37")
+	assert.Contains(t, logs, "error_type=")
 }
 
 func TestExtractOutTradeNo(t *testing.T) {
