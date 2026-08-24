@@ -114,5 +114,9 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           version: v2.9
+          # The lint run parses the config itself. Avoid the action's separate
+          # network-only JSON Schema fetch, which makes CI depend on
+          # golangci-lint.run availability before linting can start.
+          verify: false
           args: --timeout=30m
           working-directory: backend
