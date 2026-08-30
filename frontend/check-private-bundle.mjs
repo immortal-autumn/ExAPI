@@ -70,7 +70,10 @@ function graphSizeKB(graph) {
 
 const forbiddenContentPatterns = [
   ['commercial admin API', /["'`]\/admin\/(?:users|subscriptions|redeem-codes|promo-codes|announcements|affiliates|user-attributes|payment)(?:\/|[?"'`])/i],
-  ['customer API', /["'`]\/(?:subscriptions|payment|redeem|affiliate)(?:\/|[?"'`])/i],
+  // Vue retirement routes use `/:pathMatch(...)`; that is UI compatibility
+  // metadata, not executable customer API code. Continue rejecting real API
+  // roots, query strings, and subpaths while allowing only that route syntax.
+  ['customer API', /["'`]\/(?:subscriptions|payment|redeem|affiliate)(?:\/(?!:pathMatch\()|[?"'`])/i],
   ['customer authentication API', /["'`]\/auth\/(?:login|register|refresh|logout|2fa|passkeys?|totp)(?:\/|[?"'`])/i],
   ['online database restore API', /["'`]\/admin\/backups\/[^"'`]*\/restore(?:[?"'`])/i],
   ['online self-update API', /["'`]\/admin\/system\/(?:check-updates|update|rollback|rollback-versions|restart)(?:[?"'`])/i],
