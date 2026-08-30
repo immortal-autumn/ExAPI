@@ -68,6 +68,7 @@ func SetupControlRouter(
 		return nil
 	}))
 	r.Use(middleware2.ServerTiming(cfg.Server.EnableServerTiming))
+	r.Use(middleware2.RetiredCustomerSurface())
 
 	// Serve embedded frontend with settings injection if available
 	if web.HasEmbeddedFrontend() {
@@ -112,6 +113,7 @@ func SetupPublicRouter(
 	r.Use(middleware2.CORS(cfg.CORS))
 	r.Use(middleware2.SecurityHeaders(cfg.Security.CSP, nil))
 	r.Use(middleware2.ServerTiming(false))
+	r.Use(middleware2.RetiredCustomerSurface())
 
 	routes.RegisterCommonRoutes(r, func(ctx context.Context) error {
 		return probeReadiness(ctx, db, redisClient)
