@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	grokSSOImportConcurrency  = 3
-	grokSSOImportMaxAccounts  = 5000
+	grokSSOImportConcurrency   = 3
+	grokSSOImportMaxAccounts   = 5000
 	grokSSOImportMaxTokenBytes = 16 << 10
 )
 
