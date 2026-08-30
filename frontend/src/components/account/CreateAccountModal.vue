@@ -4994,7 +4994,8 @@ const handleVertexServiceAccountDrop = async (event: DragEvent) => {
 const handleSubmit = async () => {
   // For OAuth-based type, handle OAuth flow (goes to step 2)
   if (isOAuthFlow.value) {
-    if (!isGrokSSOInputMethod.value && !form.name.trim()) {
+    const grokBuildImport = form.platform === 'grok' && inputMethod.value === 'refresh_token'
+    if (!isGrokSSOInputMethod.value && !grokBuildImport && !form.name.trim()) {
       appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
       return
     }
@@ -5383,7 +5384,7 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
         const credentials = grokOAuth.buildCredentials(tokenInfo)
         applyGrokOAuthUpstreamConfig(credentials)
         const extra = grokOAuth.buildExtraInfo(tokenInfo)
-        const accountName = refreshTokens.length > 1 ? `${form.name || tokenInfo.email || 'Grok OAuth Account'} #${i + 1}` : (form.name || tokenInfo.email || 'Grok OAuth Account')
+        const accountName = form.name || tokenInfo.email || (refreshTokens.length > 1 ? `Grok OAuth Account #${i + 1}` : 'Grok OAuth Account')
 
         const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
         if (modelMapping) {
