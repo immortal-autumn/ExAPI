@@ -23,7 +23,7 @@
                 class="text-blue-600 focus:ring-blue-500"
               />
               <span class="text-sm text-blue-900 dark:text-blue-200">{{
-                t('admin.accounts.oauth.manualAuth')
+                manualAuthLabel
               }}</span>
             </label>
             <label v-if="showCookieOption" class="flex cursor-pointer items-center gap-2">
@@ -163,6 +163,46 @@
               >
                 {{ t('admin.accounts.oauth.batchCreateAccounts', { count: parsedRefreshTokenCount }) }}
               </p>
+
+              <div
+                v-if="platform === 'grok' && inputMethod === 'refresh_token'"
+                class="mt-3 rounded-lg border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-600 dark:bg-blue-900/20"
+              >
+                <input
+                  ref="refreshTokenFileInput"
+                  type="file"
+                  multiple
+                  accept=".txt,.json,.jsonl,.csv,text/plain,application/json"
+                  class="hidden"
+                  @change="handleRefreshTokenFileInput"
+                />
+                <div class="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    class="btn btn-secondary"
+                    data-testid="grok-build-files-upload"
+                    @click="refreshTokenFileInput?.click()"
+                  >
+                    <Icon name="upload" size="sm" class="mr-1.5" />
+                    {{ t(getOAuthKey('buildFilesSelect')) }}
+                  </button>
+                  <span
+                    v-if="refreshTokenFileParsedCount > 0"
+                    class="text-xs font-medium text-blue-700 dark:text-blue-300"
+                  >
+                    {{ t(getOAuthKey('buildFilesParsed'), { count: refreshTokenFileParsedCount }) }}
+                  </span>
+                </div>
+                <p class="mt-2 text-xs text-blue-700 dark:text-blue-300">
+                  {{ t(getOAuthKey('buildFilesHint')) }}
+                </p>
+                <p
+                  v-if="refreshTokenFileError"
+                  class="mt-2 text-xs text-red-600 dark:text-red-400"
+                >
+                  {{ refreshTokenFileError }}
+                </p>
+              </div>
             </div>
 
             <!-- Error Message -->
@@ -244,6 +284,43 @@
               <p class="mt-1 text-xs text-blue-600 dark:text-blue-400">
                 {{ t(getOAuthKey('ssoCookieHint')) }}
               </p>
+
+              <div class="mt-3 rounded-lg border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-600 dark:bg-blue-900/20">
+                <input
+                  ref="ssoFileInput"
+                  type="file"
+                  multiple
+                  accept=".txt,.json,.jsonl,.csv,.sso,text/plain,application/json"
+                  class="hidden"
+                  @change="handleSSOFileInput"
+                />
+                <div class="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    class="btn btn-secondary"
+                    data-testid="grok-sso-files-upload"
+                    @click="ssoFileInput?.click()"
+                  >
+                    <Icon name="upload" size="sm" class="mr-1.5" />
+                    {{ t(getOAuthKey('ssoFilesSelect')) }}
+                  </button>
+                  <span
+                    v-if="ssoFileParsedCount > 0"
+                    class="text-xs font-medium text-blue-700 dark:text-blue-300"
+                  >
+                    {{ t(getOAuthKey('ssoFilesParsed'), { count: ssoFileParsedCount }) }}
+                  </span>
+                </div>
+                <p class="mt-2 text-xs text-blue-700 dark:text-blue-300">
+                  {{ t(getOAuthKey('ssoFilesHint')) }}
+                </p>
+                <p
+                  v-if="ssoFileError"
+                  class="mt-2 text-xs text-red-600 dark:text-red-400"
+                >
+                  {{ ssoFileError }}
+                </p>
+              </div>
             </div>
 
             <div
@@ -816,6 +893,7 @@ import { useClipboard } from '@/composables/useClipboard'
 import Icon from '@/components/icons/Icon.vue'
 import type { AddMethod, AuthInputMethod } from '@/composables/useAccountOAuth'
 import type { AccountPlatform } from '@/types'
+import { parseGrokBuildFileContent, parseGrokSSOFileContent } from '@/utils/grokSsoFiles'
 
 interface Props {
   addMethod: AddMethod
@@ -895,6 +973,11 @@ const getOAuthKey = (key: string) => {
 
 // Computed translations for current platform
 const oauthTitle = computed(() => t(getOAuthKey('title')))
+const manualAuthLabel = computed(() =>
+  props.platform === 'grok'
+    ? t('admin.accounts.oauth.grok.buildAuth')
+    : t('admin.accounts.oauth.manualAuth')
+)
 const oauthFollowSteps = computed(() => t(getOAuthKey('followSteps')))
 const oauthStep1GenerateUrl = computed(() => t(getOAuthKey('step1GenerateUrl')))
 const oauthGenerateAuthUrl = computed(() => t(getOAuthKey('generateAuthUrl')))
@@ -918,10 +1001,16 @@ const isAgentIdentityInput = computed(() => inputMethod.value === 'agent_identit
 const authCodeInput = ref('')
 const sessionKeyInput = ref('')
 const refreshTokenInput = ref('')
+const refreshTokenFileInput = ref<HTMLInputElement | null>(null)
+const refreshTokenFileParsedCount = ref(0)
+const refreshTokenFileError = ref('')
 const sessionTokenInput = ref('')
 const codexSessionInput = ref('')
 const codexPATInput = ref('')
 const ssoCookieInput = ref('')
+const ssoFileInput = ref<HTMLInputElement | null>(null)
+const ssoFileParsedCount = ref(0)
+const ssoFileError = ref('')
 const showHelpDialog = ref(false)
 const oauthState = ref('')
 const projectId = ref('')
@@ -1052,6 +1141,40 @@ const handleValidateRefreshToken = () => {
   }
 }
 
+const handleRefreshTokenFileInput = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files || [])
+  if (files.length === 0) return
+
+  refreshTokenFileError.value = ''
+  refreshTokenFileParsedCount.value = 0
+
+  const nextTokens: string[] = []
+  try {
+    for (const file of files) {
+      nextTokens.push(...parseGrokBuildFileContent(await file.text()))
+    }
+  } catch {
+    refreshTokenFileError.value = t(getOAuthKey('buildFilesReadFailed'))
+    return
+  } finally {
+    input.value = ''
+  }
+
+  const uniqueTokens = Array.from(new Set(nextTokens))
+  if (uniqueTokens.length === 0) {
+    refreshTokenFileError.value = t(getOAuthKey('buildFilesEmpty'))
+    return
+  }
+
+  const existingTokens = refreshTokenInput.value
+    .split('\n')
+    .map((item) => item.trim())
+    .filter((item) => item)
+  refreshTokenInput.value = Array.from(new Set([...existingTokens, ...uniqueTokens])).join('\n')
+  refreshTokenFileParsedCount.value = uniqueTokens.length
+}
+
 const handleImportCodexSession = () => {
   if (codexSessionInput.value.trim()) {
     emit('import-codex-session', codexSessionInput.value.trim())
@@ -1070,6 +1193,40 @@ const handleImportSSO = () => {
   }
 }
 
+const handleSSOFileInput = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files || [])
+  if (files.length === 0) return
+
+  ssoFileError.value = ''
+  ssoFileParsedCount.value = 0
+
+  const nextTokens: string[] = []
+  try {
+    for (const file of files) {
+      nextTokens.push(...parseGrokSSOFileContent(await file.text()))
+    }
+  } catch {
+    ssoFileError.value = t(getOAuthKey('ssoFilesReadFailed'))
+    return
+  } finally {
+    input.value = ''
+  }
+
+  const uniqueTokens = Array.from(new Set(nextTokens))
+  if (uniqueTokens.length === 0) {
+    ssoFileError.value = t(getOAuthKey('ssoFilesEmpty'))
+    return
+  }
+
+  const existingTokens = ssoCookieInput.value
+    .split('\n')
+    .map((item) => item.trim())
+    .filter((item) => item)
+  ssoCookieInput.value = Array.from(new Set([...existingTokens, ...uniqueTokens])).join('\n')
+  ssoFileParsedCount.value = uniqueTokens.length
+}
+
 // Expose methods and state
 defineExpose({
   authCode: authCodeInput,
@@ -1081,6 +1238,8 @@ defineExpose({
   codexSession: codexSessionInput,
   codexPAT: codexPATInput,
   ssoCookie: ssoCookieInput,
+  ssoFileParsedCount,
+  refreshTokenFileParsedCount,
   inputMethod,
   reset: () => {
     authCodeInput.value = ''
@@ -1088,10 +1247,14 @@ defineExpose({
     projectId.value = ''
     sessionKeyInput.value = ''
     refreshTokenInput.value = ''
+    refreshTokenFileParsedCount.value = 0
+    refreshTokenFileError.value = ''
     sessionTokenInput.value = ''
     codexSessionInput.value = ''
     codexPATInput.value = ''
     ssoCookieInput.value = ''
+    ssoFileParsedCount.value = 0
+    ssoFileError.value = ''
     inputMethod.value = props.initialInputMethod
     showHelpDialog.value = false
   }

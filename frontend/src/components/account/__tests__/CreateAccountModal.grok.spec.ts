@@ -10,11 +10,21 @@ const source = readFileSync(
 describe('CreateAccountModal Grok account types', () => {
   it('offers API-key setup alongside OAuth with the official xAI default', () => {
     expect(source).toContain('data-testid="grok-account-type-api-key"')
+    expect(source).toContain('data-testid="grok-account-type-build"')
+    expect(source).toContain('data-testid="grok-account-type-sso-files"')
     expect(source).toContain("@click=\"accountCategory = 'apikey'\"")
     expect(source).toContain("newPlatform === 'grok'")
     expect(source).toContain("? 'https://api.x.ai/v1'")
     expect(source).toContain("form.platform === 'grok'")
     expect(source).toContain("? 'xai-...'")
+  })
+
+  it('exposes distinct Grok Build and SSO Files import entry points', () => {
+    expect(source).toContain("grokOAuthEntry = 'build'")
+    expect(source).toContain("grokOAuthEntry = 'sso_files'")
+    expect(source).toContain('admin.accounts.types.grokBuild')
+    expect(source).toContain('admin.accounts.types.grokSsoFiles')
+    expect(source).toContain("grokOAuthEntry === 'sso_files' ? 'sso_cookie' : 'manual'")
   })
 
   it('exposes custom upstream URL and header override for the OAuth create flow', () => {

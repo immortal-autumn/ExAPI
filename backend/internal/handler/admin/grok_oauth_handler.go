@@ -17,7 +17,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const grokSSOImportConcurrency = 3
+const (
+	grokSSOImportConcurrency  = 3
+	grokSSOImportMaxAccounts  = 5000
+	grokSSOImportMaxTokenBytes = 16 << 10
+)
 
 type GrokOAuthHandler struct {
 	grokOAuthService *service.GrokOAuthService
@@ -309,7 +313,11 @@ func (h *GrokOAuthHandler) CreateAccountsFromSSO(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
-	tokens := normalizeSSOImportTokens(req.SSOTokens, req.SSOToken)
+	tokens, err := normalizeSSOImportTokens(req.SSOTokens, req.SSOToken)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
 	if len(tokens) == 0 {
 		response.BadRequest(c, "sso_tokens is required")
 		return
@@ -458,7 +466,7 @@ func cloneGrokSSOValue(value any) any {
 	}
 }
 
-func normalizeSSOImportTokens(tokens []string, single string) []string {
+func normalizeSSOImportTokens(tokens []string, single string) ([]string, error) {
 	items := make([]string, 0, len(tokens)+1)
 	if strings.TrimSpace(single) != "" {
 		items = append(items, single)
@@ -472,14 +480,20 @@ func normalizeSSOImportTokens(tokens []string, single string) []string {
 			if token = xai.NormalizeSSOToken(token); token == "" {
 				continue
 			}
+			if len(token) > grokSSOImportMaxTokenBytes {
+				return nil, fmt.Errorf("SSO token exceeds %d bytes", grokSSOImportMaxTokenBytes)
+			}
 			if _, ok := seen[token]; ok {
 				continue
+			}
+			if len(result) >= grokSSOImportMaxAccounts {
+				return nil, fmt.Errorf("sso_tokens exceeds the limit of %d accounts", grokSSOImportMaxAccounts)
 			}
 			seen[token] = struct{}{}
 			result = append(result, token)
 		}
 	}
-	return result
+	return result, nil
 }
 
 func grokSSOImportAccountName(base string, tokenInfo *service.GrokTokenInfo, index, total int) string {

@@ -18,31 +18,24 @@ type ssoDeviceFakeClient struct {
 	t             *testing.T
 	tokenCalls    int
 	cookieHeaders []string
+	requestedURLs []string
 }
 
 func (c *ssoDeviceFakeClient) Do(req *http.Request) (*http.Response, error) {
 	c.cookieHeaders = append(c.cookieHeaders, req.Header.Get("Cookie"))
+	c.requestedURLs = append(c.requestedURLs, req.URL.String())
 	switch req.URL.String() {
-	case SSOAccountsURL:
-		require.Equal(c.t, http.MethodGet, req.Method)
-		return ssoDeviceResponse(http.StatusOK, http.Header{"Set-Cookie": {"session=web-session; Path=/"}}, `{}`), nil
 	case SSODeviceURL:
 		require.Equal(c.t, http.MethodPost, req.Method)
 		values := readSSODeviceForm(c.t, req)
 		require.Equal(c.t, DefaultClientID, values.Get("client_id"))
 		require.Equal(c.t, SSOBuildScope, values.Get("scope"))
 		return ssoDeviceResponse(http.StatusOK, http.Header{"Set-Cookie": {"csrf=csrf-token; Path=/"}}, `{"device_code":"device-1","user_code":"USER-1","verification_uri_complete":"https://auth.x.ai/oauth2/device/complete","interval":1,"expires_in":60}`), nil
-	case "https://auth.x.ai/oauth2/device/complete":
-		require.Equal(c.t, http.MethodGet, req.Method)
-		return ssoDeviceResponse(http.StatusOK, nil, `<html>ok</html>`), nil
 	case SSOVerifyURL:
 		require.Equal(c.t, http.MethodPost, req.Method)
 		values := readSSODeviceForm(c.t, req)
 		require.Equal(c.t, "USER-1", values.Get("user_code"))
 		return ssoDeviceResponse(http.StatusFound, http.Header{"Location": {"/oauth2/device/consent"}}, ``), nil
-	case "https://auth.x.ai/oauth2/device/consent":
-		require.Equal(c.t, http.MethodGet, req.Method)
-		return ssoDeviceResponse(http.StatusOK, nil, `<html>consent</html>`), nil
 	case SSOApproveURL:
 		require.Equal(c.t, http.MethodPost, req.Method)
 		values := readSSODeviceForm(c.t, req)
@@ -50,9 +43,6 @@ func (c *ssoDeviceFakeClient) Do(req *http.Request) (*http.Response, error) {
 		require.Equal(c.t, "allow", values.Get("action"))
 		require.Equal(c.t, "User", values.Get("principal_type"))
 		return ssoDeviceResponse(http.StatusSeeOther, http.Header{"Location": {"/oauth2/device/done"}}, ``), nil
-	case "https://auth.x.ai/oauth2/device/done":
-		require.Equal(c.t, http.MethodGet, req.Method)
-		return ssoDeviceResponse(http.StatusOK, nil, `<html>done</html>`), nil
 	case SSOTokenURL:
 		require.Equal(c.t, http.MethodPost, req.Method)
 		c.tokenCalls++
@@ -84,8 +74,19 @@ func TestConvertSSOToBuildCompletesDeviceFlow(t *testing.T) {
 	require.Equal(t, 1, client.tokenCalls)
 	require.Contains(t, client.cookieHeaders[0], "sso=sso-token")
 	require.Contains(t, client.cookieHeaders[0], "sso-rw=sso-token")
-	require.Contains(t, client.cookieHeaders[len(client.cookieHeaders)-1], "session=web-session")
 	require.Contains(t, client.cookieHeaders[len(client.cookieHeaders)-1], "csrf=csrf-token")
+	require.NotContains(t, client.requestedURLs, SSOAccountsURL)
+	require.NotContains(t, client.requestedURLs, "https://auth.x.ai/oauth2/device/complete")
+	require.NotContains(t, client.requestedURLs, "https://auth.x.ai/oauth2/device/consent")
+	require.NotContains(t, client.requestedURLs, "https://auth.x.ai/oauth2/device/done")
+}
+
+func TestSSODeviceRedirectStateRequiresExactTrustedPath(t *testing.T) {
+	require.Equal(t, "consent", ssoDeviceRedirectState("https://auth.x.ai/oauth2/device/consent"))
+	require.Equal(t, "done", ssoDeviceRedirectState("https://accounts.x.ai/oauth2/device/done/"))
+	require.Equal(t, "sign-in", ssoDeviceRedirectState("https://accounts.x.ai/sign-in"))
+	require.Empty(t, ssoDeviceRedirectState("https://evil.example/oauth2/device/consent"))
+	require.Empty(t, ssoDeviceRedirectState("https://auth.x.ai/oauth2/device/consent-extra"))
 }
 
 func TestNormalizeSSOTokenAcceptsCookieHeader(t *testing.T) {

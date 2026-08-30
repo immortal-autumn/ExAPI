@@ -91,17 +91,6 @@ func ConvertSSOToBuild(ctx context.Context, ssoToken string, opts *SSODeviceOpti
 }
 
 func (f *ssoDeviceFlow) convert(ctx context.Context) (*TokenResponse, error) {
-	status, finalURL, _, err := f.do(ctx, http.MethodGet, SSOAccountsURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	if status == http.StatusUnauthorized || strings.Contains(finalURL, "sign-in") || strings.Contains(finalURL, "sign-up") {
-		return nil, ErrSSOUnauthorized
-	}
-	if status < 200 || status >= 400 {
-		return nil, fmt.Errorf("validate Grok Web SSO: %w", SSOHTTPError{Status: status})
-	}
-
 	status, _, body, err := f.do(ctx, http.MethodPost, SSODeviceURL, url.Values{
 		"client_id": {DefaultClientID},
 		"scope":     {SSOBuildScope},
@@ -122,7 +111,7 @@ func (f *ssoDeviceFlow) convert(ctx context.Context) (*TokenResponse, error) {
 	if err := json.Unmarshal(body, &device); err != nil {
 		return nil, fmt.Errorf("parse xAI device flow response: %w", err)
 	}
-	if device.DeviceCode == "" || device.UserCode == "" || !safeXAIAuthURL(device.VerificationURIComplete) {
+	if device.DeviceCode == "" || device.UserCode == "" {
 		return nil, errors.New("xAI device flow response is incomplete")
 	}
 	if device.Interval <= 0 {
@@ -132,38 +121,39 @@ func (f *ssoDeviceFlow) convert(ctx context.Context) (*TokenResponse, error) {
 		device.ExpiresIn = 1800
 	}
 
-	status, _, _, err = f.do(ctx, http.MethodGet, device.VerificationURIComplete, nil)
+	// verify/approve commit the state change on auth.x.ai. Their redirect target
+	// is only a result page and may be protected by Cloudflare, so inspect the
+	// trusted Location without fetching it.
+	status, finalURL, _, err := f.doWithFollow(ctx, http.MethodPost, SSOVerifyURL, url.Values{"user_code": {device.UserCode}}, false)
 	if err != nil {
 		return nil, err
 	}
-	if status < 200 || status >= 400 {
-		return nil, fmt.Errorf("open xAI device verification page: %w", SSOHTTPError{Status: status})
-	}
-
-	status, finalURL, _, err = f.do(ctx, http.MethodPost, SSOVerifyURL, url.Values{"user_code": {device.UserCode}})
-	if err != nil {
-		return nil, err
+	if status == http.StatusUnauthorized || ssoDeviceRedirectState(finalURL) == "sign-in" {
+		return nil, ErrSSOUnauthorized
 	}
 	if status < 200 || status >= 400 {
 		return nil, fmt.Errorf("verify xAI device code: %w", SSOHTTPError{Status: status})
 	}
-	if !strings.Contains(finalURL, "consent") {
+	if ssoDeviceRedirectState(finalURL) != "consent" {
 		return nil, errors.New("xAI device verification did not reach consent page")
 	}
 
-	status, finalURL, _, err = f.do(ctx, http.MethodPost, SSOApproveURL, url.Values{
+	status, finalURL, _, err = f.doWithFollow(ctx, http.MethodPost, SSOApproveURL, url.Values{
 		"user_code":      {device.UserCode},
 		"action":         {"allow"},
 		"principal_type": {"User"},
 		"principal_id":   {""},
-	})
+	}, false)
 	if err != nil {
 		return nil, err
+	}
+	if status == http.StatusUnauthorized || ssoDeviceRedirectState(finalURL) == "sign-in" {
+		return nil, ErrSSOUnauthorized
 	}
 	if status < 200 || status >= 400 {
 		return nil, fmt.Errorf("approve xAI device code: %w", SSOHTTPError{Status: status})
 	}
-	if !strings.Contains(finalURL, "done") {
+	if ssoDeviceRedirectState(finalURL) != "done" {
 		return nil, errors.New("xAI device approval did not reach done page")
 	}
 
@@ -235,6 +225,10 @@ func (f *ssoDeviceFlow) pollToken(ctx context.Context, deviceCode string, interv
 }
 
 func (f *ssoDeviceFlow) do(ctx context.Context, method, endpoint string, form url.Values) (int, string, []byte, error) {
+	return f.doWithFollow(ctx, method, endpoint, form, true)
+}
+
+func (f *ssoDeviceFlow) doWithFollow(ctx context.Context, method, endpoint string, form url.Values, follow bool) (int, string, []byte, error) {
 	if !safeXAIAuthURL(endpoint) {
 		return 0, "", nil, errors.New("xAI OAuth URL is not trusted")
 	}
@@ -290,12 +284,32 @@ func (f *ssoDeviceFlow) do(ctx context.Context, method, endpoint string, form ur
 		if !safeXAIAuthURL(currentURL) {
 			return response.StatusCode, currentURL, data, errors.New("xAI OAuth redirected to untrusted host")
 		}
+		if !follow {
+			return response.StatusCode, currentURL, data, nil
+		}
 		if response.StatusCode == http.StatusSeeOther || ((response.StatusCode == http.StatusMovedPermanently || response.StatusCode == http.StatusFound) && currentMethod != http.MethodGet && currentMethod != http.MethodHead) {
 			currentMethod = http.MethodGet
 			currentForm = nil
 		}
 	}
 	return 0, currentURL, nil, errors.New("xAI OAuth redirected too many times")
+}
+
+func ssoDeviceRedirectState(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil || !safeXAIAuthURL(raw) {
+		return ""
+	}
+	switch strings.TrimRight(parsed.EscapedPath(), "/") {
+	case "/oauth2/device/consent":
+		return "consent"
+	case "/oauth2/device/done":
+		return "done"
+	case "/sign-in", "/sign-up":
+		return "sign-in"
+	default:
+		return ""
+	}
 }
 
 func (f *ssoDeviceFlow) captureCookies(response *http.Response) {
