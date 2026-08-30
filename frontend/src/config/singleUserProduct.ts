@@ -26,6 +26,24 @@ export const SINGLE_USER_COMPATIBILITY_REDIRECTS = [
   '/keys',
 ] as const
 
+/** Browser paths retained only to explain that the former customer UI is gone. */
+export const SINGLE_USER_RETIRED_ROUTES = [
+  '/register',
+  '/email-verify',
+  '/forgot-password',
+  '/reset-password',
+  '/dashboard',
+  '/usage',
+  '/monitor',
+  '/profile',
+  '/subscriptions/:pathMatch(.*)*',
+  '/purchase/:pathMatch(.*)*',
+  '/orders/:pathMatch(.*)*',
+  '/payment/:pathMatch(.*)*',
+  '/redeem/:pathMatch(.*)*',
+  '/affiliate/:pathMatch(.*)*',
+] as const
+
 export const SINGLE_USER_SETTINGS_TABS = [
   'general',
   'gateway',

@@ -1,4 +1,9 @@
 export default {
+  retiredFeature: {
+    title: 'Feature retired',
+    description: 'This customer-facing feature is no longer available. ExAPI now operates as a private administrator control plane.',
+    returnToControlPlane: 'Return to control plane',
+  },
   common: {
     loading: 'Loading...',
     submitting: 'Submitting...',

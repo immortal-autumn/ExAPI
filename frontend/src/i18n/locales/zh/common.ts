@@ -1,4 +1,9 @@
 export default {
+  retiredFeature: {
+    title: '功能已下线',
+    description: '该用户端功能已不再提供。ExAPI 现仅作为私有管理员控制平面运行。',
+    returnToControlPlane: '返回管理控制平面',
+  },
   common: {
     loading: '加载中...',
     submitting: '提交中...',

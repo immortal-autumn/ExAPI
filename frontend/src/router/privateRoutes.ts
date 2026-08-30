@@ -1,4 +1,12 @@
 import type { RouteRecordRaw } from 'vue-router'
+import { SINGLE_USER_RETIRED_ROUTES } from '@/config/singleUserProduct'
+
+const retiredCustomerRoutes: RouteRecordRaw[] = SINGLE_USER_RETIRED_ROUTES.map((path, index) => ({
+  path,
+  name: `RetiredCustomerFeature${index}`,
+  component: () => import('@/views/RetiredFeatureView.vue'),
+  meta: { requiresAuth: true, requiresAdmin: true, titleKey: 'retiredFeature.title' },
+}))
 
 /** The complete route table for the private-only ExAPI operator UI. */
 export const privateRoutes: RouteRecordRaw[] = [
@@ -91,6 +99,7 @@ export const privateRoutes: RouteRecordRaw[] = [
     component: () => import('@/views/admin/PrivateSettingsView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, titleKey: 'admin.settings.title' },
   },
+  ...retiredCustomerRoutes,
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',

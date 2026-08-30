@@ -57,22 +57,12 @@
           <Icon name="arrowLeft" size="md" class="mr-2" />
           Go Back
         </button>
-        <router-link to="/dashboard" class="btn btn-primary">
+        <router-link to="/admin/dashboard" class="btn btn-primary">
           <Icon name="home" size="md" class="mr-2" />
           Go to Dashboard
         </router-link>
       </div>
 
-      <!-- Help Link -->
-      <p class="mt-8 text-sm text-gray-400 dark:text-dark-500">
-        Need help?
-        <a
-          href="#"
-          class="text-primary-600 transition-colors hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
-        >
-          Contact support
-        </a>
-      </p>
     </div>
   </div>
 </template>

@@ -3,6 +3,7 @@ import {
   SINGLE_USER_ADMIN_ROUTES,
   SINGLE_USER_COMPATIBILITY_REDIRECTS,
   SINGLE_USER_PUBLIC_ROUTES,
+  SINGLE_USER_RETIRED_ROUTES,
 } from '@/config/singleUserProduct'
 
 const authStore = vi.hoisted(() => ({
@@ -46,13 +47,14 @@ describe('single-user private route matrix', () => {
       ...SINGLE_USER_PUBLIC_ROUTES,
       ...SINGLE_USER_ADMIN_ROUTES,
       ...SINGLE_USER_COMPATIBILITY_REDIRECTS,
+      ...SINGLE_USER_RETIRED_ROUTES,
       '/:pathMatch(.*)*',
     ])
 
     expect(paths).toEqual(expected)
   })
 
-  it('does not register dormant customer, payment, OAuth, or custom-page routes', async () => {
+  it('keeps retired customer entry points on an explicit retirement page', async () => {
     const { default: router } = await import('@/router')
     const paths = new Set(router.getRoutes().map((record) => record.path))
 
@@ -61,6 +63,15 @@ describe('single-user private route matrix', () => {
       '/email-verify',
       '/forgot-password',
       '/reset-password',
+      '/profile',
+      '/dashboard',
+      '/usage',
+      '/monitor',
+    ]) {
+      expect(paths.has(path), path).toBe(true)
+    }
+
+    for (const path of [
       '/auth/callback',
       '/auth/linuxdo/callback',
       '/auth/wechat/callback',
@@ -68,15 +79,7 @@ describe('single-user private route matrix', () => {
       '/auth/dingtalk/callback',
       '/auth/dingtalk/email-completion',
       '/auth/oidc/callback',
-      '/payment/result',
-      '/payment/stripe',
-      '/payment/airwallex',
-      '/payment/stripe-popup',
-      '/profile',
       '/custom/:id',
-      '/dashboard',
-      '/usage',
-      '/monitor',
     ]) {
       expect(paths.has(path), path).toBe(false)
     }
