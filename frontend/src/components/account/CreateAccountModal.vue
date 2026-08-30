@@ -4994,7 +4994,7 @@ const handleVertexServiceAccountDrop = async (event: DragEvent) => {
 const handleSubmit = async () => {
   // For OAuth-based type, handle OAuth flow (goes to step 2)
   if (isOAuthFlow.value) {
-    const grokBuildImport = form.platform === 'grok' && inputMethod.value === 'refresh_token'
+    const grokBuildImport = form.platform === 'grok' && oauthFlowRef.value?.inputMethod === 'refresh_token'
     if (!isGrokSSOInputMethod.value && !grokBuildImport && !form.name.trim()) {
       appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
       return
