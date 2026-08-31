@@ -914,6 +914,44 @@
       </template>
     </BaseDialog>
 
+    <!-- A generated key is unrecoverable and is therefore shown exactly once. -->
+    <BaseDialog
+      :show="showCreatedKeyDialog"
+      :title="t('keys.createdKeyTitle')"
+      width="normal"
+      @close="closeCreatedKeyDialog"
+    >
+      <div class="space-y-4">
+        <p class="text-sm text-amber-700 dark:text-amber-300">
+          {{ t('keys.createdKeyWarning') }}
+        </p>
+        <label class="input-label" for="created-api-key">{{ t('keys.apiKey') }}</label>
+        <div class="flex gap-2">
+          <input
+            id="created-api-key"
+            data-testid="created-api-key"
+            :value="createdKey"
+            readonly
+            autocomplete="off"
+            spellcheck="false"
+            class="input min-w-0 flex-1 font-mono"
+            @focus="($event.target as HTMLInputElement).select()"
+          />
+          <button type="button" class="btn btn-primary" @click="copyCreatedKey">
+            <Icon name="copy" size="sm" class="mr-1.5" />
+            {{ t('keys.copyCreatedKey') }}
+          </button>
+        </div>
+      </div>
+      <template #footer>
+        <div class="flex justify-end">
+          <button type="button" class="btn btn-secondary" @click="closeCreatedKeyDialog">
+            {{ t('keys.createdKeySaved') }}
+          </button>
+        </div>
+      </template>
+    </BaseDialog>
+
     <!-- Delete Confirmation Dialog -->
     <ConfirmDialog
       :show="showDeleteDialog"
@@ -1050,6 +1088,8 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
+import { extractApiErrorMessage } from '@/utils/apiError'
+import { useClipboard } from '@/composables/useClipboard'
 
 
 
@@ -1076,6 +1116,7 @@ interface GroupOption {
 
 const appStore = useAppStore()
 const onboardingStore = useOnboardingStore()
+const { copyToClipboard } = useClipboard()
 
 
 const allColumns = computed<Column[]>(() => [
@@ -1206,6 +1247,9 @@ const showResetRateLimitDialog = ref(false)
 const showColumnDropdown = ref(false)
 
 const selectedKey = ref<ApiKey | null>(null)
+const createdKey = ref('')
+const showCreatedKeyDialog = ref(false)
+const deleting = ref(false)
 
 const groupSelectorKeyId = ref<number | null>(null)
 const publicSettings = ref<PublicSettings | null>(null)
@@ -1604,6 +1648,7 @@ const handleSubmit = async () => {
 
   submitting.value = true
   try {
+    let rawCreatedKey = ''
     if (showEditModal.value && selectedKey.value) {
       const updates: UpdateApiKeyRequest = {
         name: formData.value.name,
@@ -1623,7 +1668,7 @@ const handleSubmit = async () => {
       appStore.showSuccess(t('keys.keyUpdatedSuccess'))
     } else {
       const customKey = formData.value.use_custom_key ? formData.value.custom_key : undefined
-      await keysAPI.create(
+      const created = await keysAPI.create(
         formData.value.name,
         formData.value.group_id,
         customKey,
@@ -1633,6 +1678,7 @@ const handleSubmit = async () => {
         expiresInDays,
         rateLimitData
       )
+      rawCreatedKey = created.key
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded
       if (onboardingStore.isCurrentStep('[data-tour="key-form-submit"]')) {
@@ -1640,10 +1686,13 @@ const handleSubmit = async () => {
       }
     }
     closeModals()
+    if (rawCreatedKey) {
+      createdKey.value = rawCreatedKey
+      showCreatedKeyDialog.value = true
+    }
     loadApiKeys()
-  } catch (error: any) {
-    const errorMsg = error.response?.data?.detail || t('keys.failedToSave')
-    appStore.showError(errorMsg)
+  } catch (error: unknown) {
+    appStore.showError(extractApiErrorMessage(error, t('keys.failedToSave')))
     // Don't advance tour on error
   } finally {
     submitting.value = false
@@ -1656,18 +1705,29 @@ const handleSubmit = async () => {
  * 若后端未返回消息则显示默认的国际化文本
  */
 const handleDelete = async () => {
-  if (!selectedKey.value) return
+  if (!selectedKey.value || deleting.value) return
 
+  deleting.value = true
   try {
     await keysAPI.delete(selectedKey.value.id)
     appStore.showSuccess(t('keys.keyDeletedSuccess'))
     showDeleteDialog.value = false
     loadApiKeys()
-  } catch (error: any) {
-    // 优先使用后端返回的错误消息，提供更具体的错误信息给用户
-    const errorMsg = error?.message || t('keys.failedToDelete')
-    appStore.showError(errorMsg)
+  } catch (error: unknown) {
+    appStore.showError(extractApiErrorMessage(error, t('keys.failedToDelete')))
+  } finally {
+    deleting.value = false
   }
+}
+
+const copyCreatedKey = async () => {
+  if (!createdKey.value) return
+  await copyToClipboard(createdKey.value, t('keys.copied'))
+}
+
+const closeCreatedKeyDialog = () => {
+  showCreatedKeyDialog.value = false
+  createdKey.value = ''
 }
 
 const closeModals = () => {

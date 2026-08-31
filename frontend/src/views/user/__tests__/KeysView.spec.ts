@@ -8,6 +8,8 @@ import KeysView from '../KeysView.vue'
 
 const {
   listKeys,
+  createKey,
+  deleteKey,
   getPublicSettings,
   getDashboardApiKeysUsage,
   getAvailableGroups,
@@ -20,6 +22,8 @@ const {
   getDriverInstance,
 } = vi.hoisted(() => ({
   listKeys: vi.fn(),
+  createKey: vi.fn(),
+  deleteKey: vi.fn(),
   getPublicSettings: vi.fn(),
   getDashboardApiKeysUsage: vi.fn(),
   getAvailableGroups: vi.fn(),
@@ -42,6 +46,11 @@ const messages: Record<string, string> = {
   'keys.allStatus': 'All Status',
   'keys.columnSettings': 'Column Settings',
   'keys.createKey': 'Create API Key',
+  'keys.copyCreatedKey': 'Copy key',
+  'keys.createdKeySaved': 'I have saved the key',
+  'keys.createdKeyTitle': 'Save your new API key',
+  'keys.createdKeyWarning': 'Shown only once',
+  'keys.copied': 'Copied!',
   'keys.created': 'Created',
   'keys.expiresAt': 'Expires',
   'keys.group': 'Group',
@@ -61,9 +70,9 @@ const messages: Record<string, string> = {
 vi.mock('@/api', () => ({
   keysAPI: {
     list: listKeys,
-    create: vi.fn(),
+    create: createKey,
     update: vi.fn(),
-    delete: vi.fn(),
+    delete: deleteKey,
     toggleStatus: vi.fn(),
   },
   usageAPI: {
@@ -167,6 +176,19 @@ const TablePageLayoutStub = {
   `,
 }
 
+const BaseDialogStub = {
+  name: 'BaseDialog',
+  props: ['show', 'title'],
+  template: '<section v-if="show"><h2>{{ title }}</h2><slot /><slot name="footer" /></section>',
+}
+
+const ConfirmDialogStub = {
+  name: 'ConfirmDialog',
+  props: ['show'],
+  emits: ['confirm', 'cancel'],
+  template: '<button v-if="show" data-test="confirm-dialog-confirm" @click="$emit(\'confirm\')">Confirm</button>',
+}
+
 const DataTableStub = {
   name: 'DataTable',
   props: ['columns', 'data'],
@@ -241,8 +263,8 @@ const mountView = async () => {
         TablePageLayout: TablePageLayoutStub,
         DataTable: DataTableStub,
         Pagination: PaginationStub,
-        BaseDialog: true,
-        ConfirmDialog: true,
+        BaseDialog: BaseDialogStub,
+        ConfirmDialog: ConfirmDialogStub,
         EmptyState: true,
         Select: SelectStub,
         SearchInput: SearchInputStub,
@@ -279,6 +301,8 @@ describe('user KeysView column settings', () => {
     localStorage.clear()
 
     listKeys.mockReset()
+    createKey.mockReset()
+    deleteKey.mockReset()
     getPublicSettings.mockReset()
     getDashboardApiKeysUsage.mockReset()
     getAvailableGroups.mockReset()
@@ -296,6 +320,8 @@ describe('user KeysView column settings', () => {
       page_size: 20,
       pages: 1,
     })
+    createKey.mockResolvedValue({ ...createApiKey(), key: 'sk-created-secret' })
+    deleteKey.mockResolvedValue({ message: 'deleted' })
     getPublicSettings.mockResolvedValue({ data: {} })
     getDashboardApiKeysUsage.mockResolvedValue({ stats: {} })
     getAvailableGroups.mockResolvedValue([])
@@ -309,6 +335,47 @@ describe('user KeysView column settings', () => {
     expect(getPublicSettings).toHaveBeenCalledWith('/settings/public')
     expect(wrapper.text()).not.toContain('keys.useKey')
     expect(wrapper.text()).not.toContain('keys.importToCcSwitch')
+  })
+
+  it('shows a generated key exactly once and clears it after acknowledgement', async () => {
+    getAvailableGroups.mockResolvedValue([{ id: 42, name: 'OpenAI' }])
+    const wrapper = await mountView()
+
+    await getButtonByText(wrapper, 'Create API Key').trigger('click')
+    await wrapper.get('input[data-tour="key-form-name"]').setValue('operator-key')
+    const formGroupSelect = wrapper.findAllComponents({ name: 'Select' })[2]
+    await formGroupSelect.vm.$emit('update:modelValue', 42)
+    await wrapper.get('form#key-form').trigger('submit')
+    await flushPromises()
+
+    expect(createKey).toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="created-api-key"]').attributes('value')).toBe(
+      'sk-created-secret'
+    )
+
+    await getButtonByText(wrapper, 'Copy key').trigger('click')
+    expect(copyToClipboard).toHaveBeenCalledWith('sk-created-secret', 'Copied!')
+
+    await getButtonByText(wrapper, 'I have saved the key').trigger('click')
+    expect(wrapper.find('[data-testid="created-api-key"]').exists()).toBe(false)
+    expect(wrapper.html()).not.toContain('sk-created-secret')
+  })
+
+  it('prevents duplicate revocation requests while deletion is pending', async () => {
+    let resolveDelete: (value: { message: string }) => void = () => undefined
+    deleteKey.mockImplementation(
+      () => new Promise<{ message: string }>((resolve) => { resolveDelete = resolve })
+    )
+    const wrapper = await mountView()
+
+    await getButtonByText(wrapper, 'common.delete').trigger('click')
+    const confirm = wrapper.get('[data-test="confirm-dialog-confirm"]')
+    await confirm.trigger('click')
+    await confirm.trigger('click')
+
+    expect(deleteKey).toHaveBeenCalledTimes(1)
+    resolveDelete({ message: 'deleted' })
+    await flushPromises()
   })
 
   it('uses the default API key columns with low-frequency columns hidden', async () => {
