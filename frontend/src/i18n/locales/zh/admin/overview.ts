@@ -1020,6 +1020,8 @@ export default {
         hint: '仅影响 /v1/models 展示结果，不影响白名单模型调用和账号调度。',
         loading: '正在加载模型列表...',
         empty: '暂无可展示模型',
+        loadFailed: '无法加载模型候选项，请重试。',
+        retry: '重试',
         selectedSummary: '已选 {selected} / {total}',
         selectAll: '全选',
         invertSelection: '反选'

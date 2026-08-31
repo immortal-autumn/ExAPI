@@ -228,6 +228,26 @@ describe('useTableLoader', () => {
       // 第二次请求的结果生效
       expect(fetchFn).toHaveBeenCalledTimes(2)
     })
+
+    it('忽略取消后仍然 resolve 的旧请求结果', async () => {
+      const resolvers: Array<(value: any) => void> = []
+      const fetchFn = vi.fn(() => new Promise((resolve) => {
+        resolvers.push(resolve)
+      }))
+      const { items, load } = useTableLoader({ fetchFn })
+
+      const firstLoad = load()
+      const secondLoad = load()
+
+      resolvers[1]!({ items: [{ id: 2 }], total: 1, pages: 1 })
+      await secondLoad
+      // Reproduce a transport/mock that ignores AbortSignal and resolves with
+      // no response after the newer request has already completed.
+      resolvers[0]!(undefined)
+
+      await expect(firstLoad).resolves.toBeUndefined()
+      expect(items.value).toEqual([{ id: 2 }])
+    })
   })
 
   // --- 错误处理 ---

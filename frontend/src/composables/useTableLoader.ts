@@ -56,6 +56,11 @@ export function useTableLoader<T, P extends Record<string, any>>(options: TableL
         { signal: currentController.signal }
       )
 
+      // Some transports and test doubles can still resolve after abort. Never
+      // read or commit a superseded response, even when the fetch function did
+      // not reject with a cancellation error.
+      if (currentController.signal.aborted) return
+
       items.value = response.items || []
       pagination.total = response.total || 0
       pagination.pages = response.pages || 0

@@ -766,6 +766,7 @@
             </div>
             <button
               type="button"
+              data-testid="create-models-list-toggle"
               @click="createModelsListState.enabled = !createModelsListState.enabled"
               :class="[
                 'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
@@ -787,7 +788,7 @@
             class="overflow-hidden rounded-lg border border-gray-200 bg-gray-50/50 dark:border-dark-600 dark:bg-dark-800/40"
           >
             <div
-              v-if="!createModelsListLoading && createModelsListState.items.length > 0"
+              v-if="!createModelsListLoading && !createModelsListError && createModelsListState.items.length > 0"
               class="flex items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2 text-xs dark:border-dark-600 dark:bg-dark-800"
             >
               <span class="text-gray-500 dark:text-gray-400">
@@ -818,9 +819,30 @@
             <div
               class="max-h-64 space-y-2 overflow-y-auto p-2"
             >
-              <p v-if="createModelsListLoading" class="text-xs text-gray-500 dark:text-gray-400">
+              <p
+                v-if="createModelsListLoading"
+                role="status"
+                data-testid="create-models-list-loading"
+                class="text-xs text-gray-500 dark:text-gray-400"
+              >
                 {{ t("admin.groups.modelsList.loading") }}
               </p>
+              <div
+                v-else-if="createModelsListError"
+                role="alert"
+                data-testid="create-models-list-error"
+                class="flex items-center justify-between gap-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-300"
+              >
+                <span>{{ t("admin.groups.modelsList.loadFailed") }}</span>
+                <button
+                  type="button"
+                  data-testid="create-models-list-retry"
+                  class="flex-shrink-0 rounded px-2 py-1 font-medium text-red-700 hover:bg-red-100 dark:text-red-200 dark:hover:bg-red-900/40"
+                  @click="retryCreateModelsListCandidates"
+                >
+                  {{ t("admin.groups.modelsList.retry") }}
+                </button>
+              </div>
               <p
                 v-else-if="createModelsListState.items.length === 0"
                 class="text-xs text-gray-500 dark:text-gray-400"
@@ -2371,6 +2393,7 @@
             </div>
             <button
               type="button"
+              data-testid="edit-models-list-toggle"
               @click="editModelsListState.enabled = !editModelsListState.enabled"
               :class="[
                 'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
@@ -2392,7 +2415,7 @@
             class="overflow-hidden rounded-lg border border-gray-200 bg-gray-50/50 dark:border-dark-600 dark:bg-dark-800/40"
           >
             <div
-              v-if="!editModelsListLoading && editModelsListState.items.length > 0"
+              v-if="!editModelsListLoading && !editModelsListError && editModelsListState.items.length > 0"
               class="flex items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2 text-xs dark:border-dark-600 dark:bg-dark-800"
             >
               <span class="text-gray-500 dark:text-gray-400">
@@ -2423,9 +2446,30 @@
             <div
               class="max-h-64 space-y-2 overflow-y-auto p-2"
             >
-              <p v-if="editModelsListLoading" class="text-xs text-gray-500 dark:text-gray-400">
+              <p
+                v-if="editModelsListLoading"
+                role="status"
+                data-testid="edit-models-list-loading"
+                class="text-xs text-gray-500 dark:text-gray-400"
+              >
                 {{ t("admin.groups.modelsList.loading") }}
               </p>
+              <div
+                v-else-if="editModelsListError"
+                role="alert"
+                data-testid="edit-models-list-error"
+                class="flex items-center justify-between gap-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-300"
+              >
+                <span>{{ t("admin.groups.modelsList.loadFailed") }}</span>
+                <button
+                  type="button"
+                  data-testid="edit-models-list-retry"
+                  class="flex-shrink-0 rounded px-2 py-1 font-medium text-red-700 hover:bg-red-100 dark:text-red-200 dark:hover:bg-red-900/40"
+                  @click="retryEditModelsListCandidates"
+                >
+                  {{ t("admin.groups.modelsList.retry") }}
+                </button>
+              </div>
               <p
                 v-else-if="editModelsListState.items.length === 0"
                 class="text-xs text-gray-500 dark:text-gray-400"
@@ -4675,6 +4719,8 @@ const createModelsListState = reactive(createInitialModelsListState());
 const editModelsListState = reactive(createInitialModelsListState());
 const createModelsListLoading = ref(false);
 const editModelsListLoading = ref(false);
+const createModelsListError = ref(false);
+const editModelsListError = ref(false);
 type ReasoningEffortPolicyFieldsExpose = {
   validate: () => boolean;
   resetValidation: () => void;
@@ -4969,6 +5015,8 @@ const loadModelsListCandidates = async (
   const requestID = modelsListCandidatesTracker.next(request);
   const state = mode === "create" ? createModelsListState : editModelsListState;
   const loadingRef = mode === "create" ? createModelsListLoading : editModelsListLoading;
+  const errorRef = mode === "create" ? createModelsListError : editModelsListError;
+  errorRef.value = false;
   loadingRef.value = true;
   try {
     const models = await adminAPI.groups.getModelsListCandidates(groupID, platform);
@@ -4976,16 +5024,27 @@ const loadModelsListCandidates = async (
       return;
     }
     setModelsListCandidates(state, models);
+    errorRef.value = false;
   } catch (error) {
     if (!modelsListCandidatesTracker.isCurrent(requestID, request)) {
       return;
     }
+    errorRef.value = true;
     console.error("Error loading group models list candidates:", error);
   } finally {
     if (modelsListCandidatesTracker.isCurrent(requestID, request)) {
       loadingRef.value = false;
     }
   }
+};
+
+const retryCreateModelsListCandidates = () => {
+  void loadModelsListCandidates("create", 0, createForm.platform);
+};
+
+const retryEditModelsListCandidates = () => {
+  if (!editingGroup.value) return;
+  void loadModelsListCandidates("edit", editingGroup.value.id, editForm.platform);
 };
 
 const moveCreateModelsListItem = (fromIndex: number, toIndex: number) => {

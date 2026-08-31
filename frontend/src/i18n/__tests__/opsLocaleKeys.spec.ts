@@ -44,7 +44,12 @@ describe('groups locale key completeness', () => {
     'admin.groups.webSearchPricing.finalPricePreview',
   ]
 
-  for (const key of webSearchPricingKeys) {
+  const modelsListRecoveryKeys = [
+    'admin.groups.modelsList.loadFailed',
+    'admin.groups.modelsList.retry',
+  ]
+
+  for (const key of [...webSearchPricingKeys, ...modelsListRecoveryKeys]) {
     it(`en and zh locales both have ${key}`, () => {
       expect(flattenKeys(en)).toContain(key)
       expect(flattenKeys(zh)).toContain(key)
