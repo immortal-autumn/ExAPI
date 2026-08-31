@@ -3637,6 +3637,8 @@ import {
   type OpenAIWSMode
 } from '@/utils/openaiWsMode'
 import OAuthAuthorizationFlow from './OAuthAuthorizationFlow.vue'
+import { grokBuildRetryInput, normalizeGrokBuildTokenInput } from '@/utils/grokSsoFiles'
+import { IMPORT_MAX_OBJECTS } from '@/utils/importLimits'
 
 // Type for exposed OAuthAuthorizationFlow component
 // Note: defineExpose automatically unwraps refs, so we use the unwrapped types
@@ -5352,13 +5354,16 @@ const createAccountAndFinish = async (
 const handleGrokValidateRT = async (refreshTokenInput: string) => {
   if (!refreshTokenInput.trim()) return
 
-  const refreshTokens = refreshTokenInput
-    .split('\n')
-    .map((rt) => rt.trim())
-    .filter((rt) => rt)
+  const refreshTokens = normalizeGrokBuildTokenInput(refreshTokenInput)
 
   if (refreshTokens.length === 0) {
     grokOAuth.error.value = t('admin.accounts.oauth.grok.pleaseEnterRefreshToken')
+    return
+  }
+  if (refreshTokens.length > IMPORT_MAX_OBJECTS) {
+    grokOAuth.error.value = t('admin.accounts.oauth.grok.buildFilesTooManyTokens', {
+      limit: IMPORT_MAX_OBJECTS,
+    })
     return
   }
   if (!validateGrokOAuthUpstreamConfig()) return
@@ -5369,6 +5374,7 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
   let successCount = 0
   let failedCount = 0
   const errors: string[] = []
+  const failedIndexes: number[] = []
 
   try {
     for (let i = 0; i < refreshTokens.length; i++) {
@@ -5376,6 +5382,7 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
         const tokenInfo = await grokOAuth.validateRefreshToken(refreshTokens[i], form.proxy_id)
         if (!tokenInfo) {
           failedCount++
+          failedIndexes.push(i)
           errors.push(`#${i + 1}: ${grokOAuth.error.value || 'Validation failed'}`)
           grokOAuth.error.value = ''
           continue
@@ -5413,6 +5420,7 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
         successCount++
       } catch (error: any) {
         failedCount++
+        failedIndexes.push(i)
         const errMsg = error.response?.data?.detail || error.message || 'Unknown error'
         errors.push(`#${i + 1}: ${errMsg}`)
       }
@@ -5427,6 +5435,9 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
       emit('created')
       handleClose()
     } else if (successCount > 0) {
+      if (oauthFlowRef.value) {
+        oauthFlowRef.value.refreshToken = grokBuildRetryInput(refreshTokens, failedIndexes)
+      }
       appStore.showWarning(t('admin.accounts.oauth.batchPartialSuccess', { success: successCount, failed: failedCount }))
       grokOAuth.error.value = errors.join('\n')
       emit('created')

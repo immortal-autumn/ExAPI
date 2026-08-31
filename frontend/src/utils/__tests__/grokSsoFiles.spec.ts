@@ -1,7 +1,12 @@
 // @vitest-environment node
 
 import { describe, expect, it } from 'vitest'
-import { parseGrokBuildFileContent, parseGrokSSOFileContent } from '../grokSsoFiles'
+import {
+  grokBuildRetryInput,
+  normalizeGrokBuildTokenInput,
+  parseGrokBuildFileContent,
+  parseGrokSSOFileContent,
+} from '../grokSsoFiles'
 
 describe('parseGrokSSOFileContent', () => {
   it('parses plain token lists split by newlines and commas', () => {
@@ -112,5 +117,42 @@ describe('parseGrokBuildFileContent', () => {
       'refresh-a',
       'refresh-b',
     ])
+  })
+
+  it('never treats Build metadata or access tokens as refresh tokens', () => {
+    const content = JSON.stringify({
+      provider: 'build',
+      accounts: [
+        {
+          name: 'operator-account',
+          email: 'operator@example.com',
+          access_token: 'must-not-be-imported',
+        },
+      ],
+    })
+
+    expect(parseGrokBuildFileContent(content)).toEqual([])
+  })
+
+  it('skips malformed structured input instead of submitting JSON fragments', () => {
+    expect(parseGrokBuildFileContent('{"refresh_token":"unterminated"')).toEqual([])
+    expect(parseGrokBuildFileContent('{"refresh_token":"valid"}\n{"refresh_token":')).toEqual([
+      'valid',
+    ])
+  })
+})
+
+describe('Grok Build batch retry input', () => {
+  it('deduplicates submitted token lines while preserving order', () => {
+    expect(normalizeGrokBuildTokenInput(' refresh-a\nrefresh-b\nrefresh-a\n')).toEqual([
+      'refresh-a',
+      'refresh-b',
+    ])
+  })
+
+  it('retains only failed entries after a partial batch result', () => {
+    expect(grokBuildRetryInput(['refresh-a', 'refresh-b', 'refresh-c'], [1])).toBe(
+      'refresh-b'
+    )
   })
 })

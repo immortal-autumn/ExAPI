@@ -63,6 +63,7 @@ describe('OAuthAuthorizationFlow Grok SSO file import', () => {
     const fileInput = wrapper.get('input[type="file"]')
     const file = {
       name: 'tokens.txt',
+      size: 32,
       text: vi.fn().mockResolvedValue('sso=abc\nCookie: sso=def'),
     } as unknown as File
 
@@ -101,6 +102,7 @@ describe('OAuthAuthorizationFlow Grok SSO file import', () => {
     const fileInput = wrapper.get('input[type="file"]')
     const file = {
       name: 'grok-Build-20accounts.json',
+      size: 256,
       text: vi.fn().mockResolvedValue(
         JSON.stringify({
           provider: 'build',
@@ -126,5 +128,35 @@ describe('OAuthAuthorizationFlow Grok SSO file import', () => {
 
     await wrapper.get('button.btn-primary').trigger('click')
     expect(wrapper.emitted('validate-refresh-token')).toEqual([['refresh-a\nrefresh-b']])
+  })
+
+  it('rejects an oversized Grok Build file before reading it', async () => {
+    const wrapper = mount(OAuthAuthorizationFlow, {
+      props: {
+        addMethod: 'oauth',
+        platform: 'grok',
+        showRefreshTokenOption: true,
+        showManualOption: false,
+        showCookieOption: false,
+        initialInputMethod: 'refresh_token',
+      },
+      global: { stubs: { Icon: true } },
+    })
+    const fileInput = wrapper.get('input[type="file"]')
+    const file = {
+      name: 'oversized.json',
+      size: 10 * 1024 * 1024 + 1,
+      text: vi.fn(),
+    } as unknown as File
+    Object.defineProperty(fileInput.element, 'files', {
+      configurable: true,
+      value: [file],
+    })
+
+    await fileInput.trigger('change')
+    await flushPromises()
+
+    expect(file.text).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('admin.accounts.oauth.grok.buildFilesFileTooLarge')
   })
 })

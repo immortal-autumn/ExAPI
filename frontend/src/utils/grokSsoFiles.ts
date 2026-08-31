@@ -267,12 +267,9 @@ function handleBuildParsedValue(
       return
     }
 
-    // Also accept `{ "account1": "refresh_token", ... }` maps.
-    for (const value of Object.values(record)) {
-      if (typeof value === 'string') {
-        handleBuildParsedValue(value, tokens, seen)
-      }
-    }
+    // Do not scan arbitrary string properties here. Build exports also contain
+    // email, name, provider and access_token fields; treating those values as
+    // refresh tokens would submit the wrong credential to the OAuth endpoint.
   }
 }
 
@@ -291,7 +288,8 @@ export function parseGrokBuildFileContent(text: string): string[] {
       handleBuildParsedValue(JSON.parse(trimmed), tokens, seen)
       return tokens
     } catch {
-      // Treat the whole file as plain text below.
+      // A JSONL document is not valid as one JSON value, so continue below and
+      // parse it line-by-line. Structured-looking malformed lines are skipped.
     }
   }
 
@@ -305,7 +303,7 @@ export function parseGrokBuildFileContent(text: string): string[] {
         handleBuildParsedValue(JSON.parse(trimmedLine), tokens, seen)
         continue
       } catch {
-        // Treat this line as plain text.
+        continue
       }
     }
 
@@ -313,4 +311,22 @@ export function parseGrokBuildFileContent(text: string): string[] {
   }
 
   return tokens
+}
+
+/** Normalize manual/file-populated Build input without revalidating duplicates. */
+export function normalizeGrokBuildTokenInput(text: string): string[] {
+  return Array.from(
+    new Set(
+      text
+        .split(/\r?\n/)
+        .map((token) => token.trim())
+        .filter(Boolean)
+    )
+  )
+}
+
+/** Keep only failed credentials in the form so a retry cannot recreate successes. */
+export function grokBuildRetryInput(tokens: readonly string[], failedIndexes: readonly number[]): string {
+  const failed = new Set(failedIndexes)
+  return tokens.filter((_, index) => failed.has(index)).join('\n')
 }

@@ -894,6 +894,11 @@ import Icon from '@/components/icons/Icon.vue'
 import type { AddMethod, AuthInputMethod } from '@/composables/useAccountOAuth'
 import type { AccountPlatform } from '@/types'
 import { parseGrokBuildFileContent, parseGrokSSOFileContent } from '@/utils/grokSsoFiles'
+import {
+  IMPORT_MAX_OBJECTS,
+  getImportFileLimitViolation,
+  type ImportLimitViolation,
+} from '@/utils/importLimits'
 
 interface Props {
   addMethod: AddMethod
@@ -1141,6 +1146,19 @@ const handleValidateRefreshToken = () => {
   }
 }
 
+const grokFileLimitErrorKey = (
+  kind: 'buildFiles' | 'ssoFiles',
+  violation: ImportLimitViolation
+) => {
+  const suffix: Record<ImportLimitViolation, string> = {
+    too_many_files: 'TooManyFiles',
+    file_too_large: 'FileTooLarge',
+    total_too_large: 'TotalTooLarge',
+    too_many_objects: 'TooManyTokens',
+  }
+  return getOAuthKey(`${kind}${suffix[violation]}`)
+}
+
 const handleRefreshTokenFileInput = async (event: Event) => {
   const input = event.target as HTMLInputElement
   const files = Array.from(input.files || [])
@@ -1148,6 +1166,13 @@ const handleRefreshTokenFileInput = async (event: Event) => {
 
   refreshTokenFileError.value = ''
   refreshTokenFileParsedCount.value = 0
+
+  const fileViolation = getImportFileLimitViolation(files)
+  if (fileViolation) {
+    refreshTokenFileError.value = t(grokFileLimitErrorKey('buildFiles', fileViolation))
+    input.value = ''
+    return
+  }
 
   const nextTokens: string[] = []
   try {
@@ -1164,6 +1189,12 @@ const handleRefreshTokenFileInput = async (event: Event) => {
   const uniqueTokens = Array.from(new Set(nextTokens))
   if (uniqueTokens.length === 0) {
     refreshTokenFileError.value = t(getOAuthKey('buildFilesEmpty'))
+    return
+  }
+  if (uniqueTokens.length > IMPORT_MAX_OBJECTS) {
+    refreshTokenFileError.value = t(getOAuthKey('buildFilesTooManyTokens'), {
+      limit: IMPORT_MAX_OBJECTS,
+    })
     return
   }
 
@@ -1201,6 +1232,13 @@ const handleSSOFileInput = async (event: Event) => {
   ssoFileError.value = ''
   ssoFileParsedCount.value = 0
 
+  const fileViolation = getImportFileLimitViolation(files)
+  if (fileViolation) {
+    ssoFileError.value = t(grokFileLimitErrorKey('ssoFiles', fileViolation))
+    input.value = ''
+    return
+  }
+
   const nextTokens: string[] = []
   try {
     for (const file of files) {
@@ -1216,6 +1254,12 @@ const handleSSOFileInput = async (event: Event) => {
   const uniqueTokens = Array.from(new Set(nextTokens))
   if (uniqueTokens.length === 0) {
     ssoFileError.value = t(getOAuthKey('ssoFilesEmpty'))
+    return
+  }
+  if (uniqueTokens.length > IMPORT_MAX_OBJECTS) {
+    ssoFileError.value = t(getOAuthKey('ssoFilesTooManyTokens'), {
+      limit: IMPORT_MAX_OBJECTS,
+    })
     return
   }
 
