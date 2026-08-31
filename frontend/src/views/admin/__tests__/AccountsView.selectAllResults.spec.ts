@@ -118,6 +118,13 @@ const AccountTableFiltersStub = {
 }
 
 const mountedWrappers: VueWrapper[] = []
+const emptyAccountsPage = {
+  items: [],
+  total: 0,
+  page: 1,
+  page_size: 20,
+  pages: 0
+}
 
 const mountView = () => {
   const wrapper = mount(AccountsView, {
@@ -164,6 +171,10 @@ describe('admin AccountsView select all filtered results', () => {
   beforeEach(() => {
     localStorage.clear()
     listAccounts.mockReset()
+    // A previous wrapper can still be finishing an async lifecycle load while
+    // the next test starts. Keep reset mocks API-shaped so that late requests
+    // cannot receive `undefined` between test-specific implementations.
+    listAccounts.mockResolvedValue(emptyAccountsPage)
     listWithEtag.mockReset()
     getBatchTodayStats.mockReset()
     getUpstreamBillingProbeSettings.mockReset()
@@ -186,8 +197,14 @@ describe('admin AccountsView select all filtered results', () => {
     getAllGroups.mockResolvedValue([])
   })
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Settle mounted lifecycle work before and after unmounting. Vue aborts the
+    // request on unmount, but mocked promises still resolve and run their
+    // continuations, so synchronous teardown alone can leak work into the next
+    // test's mockReset calls.
+    await flushPromises()
     for (const wrapper of mountedWrappers.splice(0)) wrapper.unmount()
+    await flushPromises()
     vi.unstubAllGlobals()
   })
 

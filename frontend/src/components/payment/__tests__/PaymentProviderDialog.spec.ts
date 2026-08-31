@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import PaymentProviderDialog from '@/components/payment/PaymentProviderDialog.vue'
 import { STRIPE_SDK_API_VERSION } from '@/components/payment/providerConfig'
@@ -22,6 +22,14 @@ const messages: Record<string, string> = {
   'admin.settings.payment.stripeWebhookApiVersionHint': 'Use Stripe API version {version}.',
   'admin.settings.payment.airwallexWebhookHint': 'Select payment_intent.succeeded and use the latest stable API version.',
 }
+
+const { showError } = vi.hoisted(() => ({
+  showError: vi.fn(),
+}))
+
+vi.mock('@/stores', () => ({
+  useAppStore: () => ({ showError }),
+}))
 
 vi.mock('vue-i18n', async () => ({
   ...(await vi.importActual<typeof import('vue-i18n')>('vue-i18n')),
@@ -54,8 +62,10 @@ function providerFactory(overrides: Partial<ProviderInstance> = {}): ProviderIns
   }
 }
 
+const mountedWrappers: VueWrapper[] = []
+
 function mountDialog(options: { editing?: ProviderInstance | null } = {}) {
-  return mount(PaymentProviderDialog, {
+  const wrapper = mount(PaymentProviderDialog, {
     props: {
       show: true,
       saving: false,
@@ -94,9 +104,18 @@ function mountDialog(options: { editing?: ProviderInstance | null } = {}) {
       },
     },
   })
+  mountedWrappers.push(wrapper)
+  return wrapper
 }
 
 describe('PaymentProviderDialog payment guide', () => {
+  afterEach(async () => {
+    await flushPromises()
+    for (const wrapper of mountedWrappers.splice(0)) wrapper.unmount()
+    await flushPromises()
+    showError.mockReset()
+  })
+
   it('shows no payment guide for providers without a flow guide', () => {
     const wrapper = mountDialog()
 
@@ -244,7 +263,11 @@ describe('PaymentProviderDialog payment guide', () => {
     await upstreamTypeInput.setValue('hkpay')
     await displayNameInput.setValue('Hong Kong Alipay')
     await wrapper.find('form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(wrapper.emitted('save')).toBeUndefined()
+    expect(showError).toHaveBeenCalledWith(
+      'admin.settings.payment.validationEasyPayCustomMethodPrefixReserved',
+    )
   })
 })
