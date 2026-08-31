@@ -35,12 +35,16 @@ export function useTableLoader<T, P extends Record<string, any>>(options: TableL
   })
 
   let abortController: AbortController | null = null
+  let disposed = false
 
   const isAbortError = (error: any) => {
     return error?.name === 'AbortError' || error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError'
   }
 
   const load = async () => {
+    // A debounced callback may already be queued when the component scope is
+    // destroyed. Do not start new work for a disposed table.
+    if (disposed) return
     if (abortController) {
       abortController.abort()
     }
@@ -98,6 +102,7 @@ export function useTableLoader<T, P extends Record<string, any>>(options: TableL
   }
 
   onUnmounted(() => {
+    disposed = true
     abortController?.abort()
   })
 

@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useTableLoader } from '@/composables/useTableLoader'
 
+const { unmountCallbacks } = vi.hoisted(() => ({
+  unmountCallbacks: [] as Array<() => void>,
+}))
+
 // Mock @vueuse/core 的 useDebounceFn
 vi.mock('@vueuse/core', () => ({
   useDebounceFn: (fn: Function, ms: number) => {
@@ -19,7 +23,9 @@ vi.mock('vue', async () => {
   const actual = await vi.importActual('vue')
   return {
     ...actual,
-    onUnmounted: vi.fn(),
+    onUnmounted: vi.fn((callback: () => void) => {
+      unmountCallbacks.push(callback)
+    }),
   }
 })
 
@@ -31,6 +37,7 @@ describe('useTableLoader', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
+    unmountCallbacks.splice(0)
   })
 
   afterEach(() => {
@@ -247,6 +254,19 @@ describe('useTableLoader', () => {
 
       await expect(firstLoad).resolves.toBeUndefined()
       expect(items.value).toEqual([{ id: 2 }])
+    })
+
+    it('组件卸载后不启动已经排队的防抖请求', async () => {
+      const fetchFn = createMockFetchFn()
+      const { debouncedReload } = useTableLoader({ fetchFn })
+
+      debouncedReload()
+      expect(fetchFn).not.toHaveBeenCalled()
+
+      for (const dispose of unmountCallbacks) dispose()
+      await vi.advanceTimersByTimeAsync(300)
+
+      expect(fetchFn).not.toHaveBeenCalled()
     })
   })
 
