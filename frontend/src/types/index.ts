@@ -873,7 +873,7 @@ export interface Proxy {
   host: string
   port: number
   username: string | null
-  password?: string | null
+  has_password: boolean
   status: 'active' | 'inactive' | 'expired'
   account_count?: number // Number of accounts using this proxy
   latency_ms?: number

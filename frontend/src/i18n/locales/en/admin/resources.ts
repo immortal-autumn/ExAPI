@@ -81,6 +81,7 @@ export default {
       dataExportFailed: 'Failed to export data',
       copyProxyUrl: 'Copy Proxy URL',
       urlCopied: 'Proxy URL copied',
+      credentialConfigured: 'Password configured',
       searchProxies: 'Search proxies...',
       allProtocols: 'All Protocols',
       allStatus: 'All Status',

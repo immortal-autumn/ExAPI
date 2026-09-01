@@ -74,6 +74,7 @@ func TestProxyExportDataRespectsFilters(t *testing.T) {
 	require.Len(t, resp.Data.Proxies, 1)
 	require.Len(t, resp.Data.Accounts, 0)
 	require.Equal(t, "https", resp.Data.Proxies[0].Protocol)
+	require.Equal(t, "p", resp.Data.Proxies[0].Password)
 	require.Equal(t, 1, adminSvc.lastListProxies.calls)
 	require.Equal(t, "https", adminSvc.lastListProxies.protocol)
 	require.Equal(t, "id", adminSvc.lastListProxies.sortBy)
@@ -117,6 +118,7 @@ func TestProxyExportDataWithSelectedIDs(t *testing.T) {
 	require.Len(t, resp.Data.Proxies, 1)
 	require.Equal(t, "https", resp.Data.Proxies[0].Protocol)
 	require.Equal(t, "10.0.0.2", resp.Data.Proxies[0].Host)
+	require.Equal(t, "p", resp.Data.Proxies[0].Password)
 	require.Equal(t, 0, adminSvc.lastListProxies.calls)
 }
 

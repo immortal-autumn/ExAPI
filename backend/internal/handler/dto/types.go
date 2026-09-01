@@ -352,11 +352,11 @@ type ProxyWithAccountCount struct {
 	QualityChecked *int64 `json:"quality_checked,omitempty"`
 }
 
-// AdminProxy 是管理员接口使用的 proxy DTO（包含密码等敏感字段）。
-// 注意：普通接口不得使用此 DTO。
+// AdminProxy is the routine administrator proxy DTO. It reports whether a
+// credential exists without exposing the decrypted credential itself.
 type AdminProxy struct {
 	Proxy
-	Password string `json:"password,omitempty"`
+	HasPassword bool `json:"has_password"`
 }
 
 // AdminProxyWithAccountCount 是管理员接口使用的带账号统计的 proxy DTO。

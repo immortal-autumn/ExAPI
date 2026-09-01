@@ -268,35 +268,46 @@ func TestGroupHandlerEndpoints(t *testing.T) {
 
 func TestProxyHandlerEndpoints(t *testing.T) {
 	router, _ := setupAdminRouter()
+	assertCredentialRedacted := func(rec *httptest.ResponseRecorder) {
+		t.Helper()
+		require.NotContains(t, rec.Body.String(), "routine-proxy-secret")
+		require.NotContains(t, rec.Body.String(), `"password"`)
+		require.Contains(t, rec.Body.String(), `"has_password":true`)
+	}
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/proxies", nil)
 	router.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
+	assertCredentialRedacted(rec)
 
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/proxies/all", nil)
 	router.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
+	assertCredentialRedacted(rec)
 
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/proxies/4", nil)
 	router.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
+	assertCredentialRedacted(rec)
 
-	body, _ := json.Marshal(map[string]any{"name": "proxy", "protocol": "http", "host": "localhost", "port": 8080})
+	body, _ := json.Marshal(map[string]any{"name": "proxy", "protocol": "http", "host": "localhost", "port": 8080, "password": "routine-proxy-secret"})
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/proxies", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
+	assertCredentialRedacted(rec)
 
-	body, _ = json.Marshal(map[string]any{"name": "proxy2"})
+	body, _ = json.Marshal(map[string]any{"name": "proxy2", "password": "routine-proxy-secret"})
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPut, "/api/v1/admin/proxies/4", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
+	assertCredentialRedacted(rec)
 
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodDelete, "/api/v1/admin/proxies/4", nil)

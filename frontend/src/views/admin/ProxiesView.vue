@@ -164,21 +164,13 @@
           </template>
 
           <template #cell-auth="{ row }">
-            <div v-if="row.username || row.password" class="flex items-center gap-1.5">
+            <div v-if="row.username || row.has_password" class="flex items-center gap-1.5">
               <div class="flex flex-col text-xs">
                 <span v-if="row.username" class="text-gray-700 dark:text-gray-200">{{ row.username }}</span>
-                <span v-if="row.password" class="font-mono text-gray-500 dark:text-gray-400">
-                  {{ visiblePasswordIds.has(row.id) ? row.password : '••••••' }}
+                <span v-if="row.has_password" class="text-gray-500 dark:text-gray-400">
+                  {{ t('admin.proxies.credentialConfigured') }}
                 </span>
               </div>
-              <button
-                v-if="row.password"
-                type="button"
-                class="ml-1 rounded p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                @click.stop="visiblePasswordIds.has(row.id) ? visiblePasswordIds.delete(row.id) : visiblePasswordIds.add(row.id)"
-              >
-                <Icon :name="visiblePasswordIds.has(row.id) ? 'eyeOff' : 'eye'" size="sm" />
-              </button>
             </div>
             <span v-else class="text-sm text-gray-400">-</span>
           </template>
@@ -1037,7 +1029,6 @@ const editStatusOptions = computed(() => [
 ])
 
 const proxies = ref<Proxy[]>([])
-const visiblePasswordIds = reactive(new Set<number>())
 const copyMenuProxyId = ref<number | null>(null)
 const loading = ref(false)
 const searchQuery = ref('')
@@ -1408,7 +1399,7 @@ const handleEdit = (proxy: Proxy) => {
   editForm.host = proxy.host
   editForm.port = proxy.port
   editForm.username = proxy.username || ''
-  editForm.password = proxy.password || ''
+  editForm.password = ''
   editForm.status = proxy.status === 'expired' ? 'inactive' : proxy.status
   editForm.expires_at = proxy.expires_at ? proxy.expires_at.slice(0, 10) : ''
   editForm.fallback_mode = proxy.fallback_mode || 'none'
@@ -2012,29 +2003,15 @@ const closeAccountsModal = () => {
 }
 
 // ── Proxy URL copy ──
-function buildAuthPart(row: any): string {
-  const user = row.username ? encodeURIComponent(row.username) : ''
-  const pass = row.password ? encodeURIComponent(row.password) : ''
-  if (user && pass) return `${user}:${pass}@`
-  if (user) return `${user}@`
-  if (pass) return `:${pass}@`
-  return ''
-}
-
 function buildProxyUrl(row: any): string {
-  return `${row.protocol}://${buildAuthPart(row)}${row.host}:${row.port}`
+  return `${row.protocol}://${row.host}:${row.port}`
 }
 
 function getCopyFormats(row: any) {
-  const hasAuth = row.username || row.password
   const fullUrl = buildProxyUrl(row)
   const formats = [
     { label: fullUrl, value: fullUrl },
   ]
-  if (hasAuth) {
-    const withoutProtocol = fullUrl.replace(/^[^:]+:\/\//, '')
-    formats.push({ label: withoutProtocol, value: withoutProtocol })
-  }
   formats.push({ label: `${row.host}:${row.port}`, value: `${row.host}:${row.port}` })
   return formats
 }

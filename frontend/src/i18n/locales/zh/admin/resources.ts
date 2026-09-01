@@ -79,6 +79,7 @@ export default {
       dataExportConfirm: '确认导出',
       dataExported: '数据导出成功',
       dataExportFailed: '数据导出失败',
+      credentialConfigured: '已配置密码',
       columns: {
         name: '名称',
         protocol: '协议',
