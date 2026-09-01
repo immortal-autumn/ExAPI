@@ -66,6 +66,20 @@ func (grokImportOAuthClientStub) ConvertSSOToBuild(context.Context, string, stri
 	return &xai.TokenResponse{AccessToken: "access-token", RefreshToken: "refresh-token", ExpiresIn: 3600}, nil
 }
 
+type grokImportOAuthClientPanicStub struct{}
+
+func (grokImportOAuthClientPanicStub) ExchangeCode(context.Context, string, string, string, string, string) (*xai.TokenResponse, error) {
+	panic("unexpected OAuth client call")
+}
+
+func (grokImportOAuthClientPanicStub) RefreshToken(context.Context, string, string, string) (*xai.TokenResponse, error) {
+	panic("unexpected OAuth client call")
+}
+
+func (grokImportOAuthClientPanicStub) ConvertSSOToBuild(context.Context, string, string) (*xai.TokenResponse, error) {
+	panic("unexpected OAuth client call")
+}
+
 func TestGrokSSOBatchImportKeepsCreatedAccountsWhenOneAutomaticProbeFails(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	adminService := newGrokImportAdminService()
@@ -95,6 +109,31 @@ func TestGrokSSOBatchImportKeepsCreatedAccountsWhenOneAutomaticProbeFails(t *tes
 	}
 	calls, _, _ := prober.snapshot()
 	require.Equal(t, map[int64]int{501: 1, 502: 1, 503: 1}, calls)
+}
+
+func TestGrokSSOToOAuthImportRejectsOversizedRequestBeforeOAuthCall(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	adminService := newGrokImportAdminService()
+	oauthService := service.NewGrokOAuthService(nil, grokImportOAuthClientPanicStub{})
+	defer oauthService.Stop()
+	handler := NewGrokOAuthHandler(oauthService, adminService, nil, nil)
+
+	router := gin.New()
+	router.POST("/api/v1/admin/grok/sso-to-oauth", handler.CreateAccountsFromSSO)
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/admin/grok/sso-to-oauth",
+		strings.NewReader(`{"sso_tokens":["sso-one"]}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	request.ContentLength = maxImportBytes + 1
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "Import exceeds 25 MiB request limit")
 }
 
 func TestAccountCreateWithoutAutomaticGrokProbeServiceStillSucceeds(t *testing.T) {

@@ -2,8 +2,10 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -309,8 +311,7 @@ type grokSSOImportWorkerResult struct {
 
 func (h *GrokOAuthHandler) CreateAccountsFromSSO(c *gin.Context) {
 	var req GrokSSOToOAuthRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
+	if !bindGrokSSOImportJSON(c, &req) {
 		return
 	}
 	tokens, err := normalizeSSOImportTokens(req.SSOTokens, req.SSOToken)
@@ -358,6 +359,24 @@ func (h *GrokOAuthHandler) CreateAccountsFromSSO(c *gin.Context) {
 		}
 	}
 	response.Success(c, result)
+}
+
+func bindGrokSSOImportJSON(c *gin.Context, destination any) bool {
+	if c.Request.ContentLength > maxImportBytes {
+		response.Error(c, http.StatusRequestEntityTooLarge, "Import exceeds 25 MiB request limit")
+		return false
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxImportBytes)
+	if err := c.ShouldBindJSON(destination); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			response.Error(c, http.StatusRequestEntityTooLarge, "Import exceeds 25 MiB request limit")
+		} else {
+			response.BadRequest(c, "Invalid request: "+err.Error())
+		}
+		return false
+	}
+	return true
 }
 
 func (h *GrokOAuthHandler) safeCreateAccountFromSSOToken(ctx context.Context, req GrokSSOToOAuthRequest, token string, index, total int) (result grokSSOImportWorkerResult) {
