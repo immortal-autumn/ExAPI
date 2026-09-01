@@ -1,5 +1,49 @@
 # Phase log
 
+## 2026-09-01 — Phase 2.1 provider-error presentation boundary
+
+Issues: provider-body UI exposure (frontend portion of `SEC-005`/`L10N-004`); backend
+storage path independently reviewed and retained because it already sanitizes and
+truncates bodies before persistence.
+
+RED:
+
+```text
+pnpm exec vitest run src/components/user/__tests__/UserErrorDetailModal.spec.ts \
+  src/views/admin/ops/components/__tests__/OpsErrorDetailModal.spec.ts
+  2 failed: raw provider body was rendered; user modal did not fetch on initial show.
+```
+
+Implementation:
+
+- Added `errorBodySummary` allowlist helper that emits only format, bounded length,
+  status and machine-readable type/code metadata.
+- User and operator error-detail modals render the summary and an explicit localized
+  redaction notice; raw response text is never inserted into the DOM.
+- Made the user detail watcher immediate so opening an already-selected modal loads
+  its detail.
+- Added English and Chinese copy plus focused negative-leak tests and a checkout-local
+  evidence note under `tmp/`.
+
+GREEN:
+
+```text
+Focused frontend tests: 5 tests PASS
+Full frontend Vitest: 264 files / 1,421 tests PASS
+Frontend typecheck: PASS
+Frontend build: PASS
+Bundle and private-bundle budgets: PASS
+Changed-file ESLint: PASS
+Backend Ops sanitization focused suite: PASS
+Release contract and upstream lock checks: PASS
+```
+
+Independent review: backend review found no additional response-boundary storage bug;
+frontend implementation reviewed and committed as `403a6a928`.
+
+Deployment: **NOT DEPLOYED**. No production service, database, Redis, or OPC files
+were modified.
+
 ## 2026-07-15 — Phase 0 baseline
 
 - Goal ledger created: `.hermes/plans/2026-07-15-exapi-full-remediation-goal.md`.

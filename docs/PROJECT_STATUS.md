@@ -50,6 +50,10 @@ security scans:
 - `27f6b9697` and `4cb556a42`: fresh Antigravity capability diagnostics,
   bounded probe reasons, and provider-body redaction; both passed GitHub CI and
   security scanning but are not yet promoted to production.
+- `403a6a928`: user and operator error-detail views now render only bounded,
+  redacted provider-response metadata; the first-open user detail modal also
+  loads its selected record deterministically. Focused and full frontend tests,
+  typecheck, build, and bundle gates pass.
 
 The review branch also contains work hardening proxy partial updates: omitted
 lifecycle and credential fields are preserved, while explicit null/empty values
