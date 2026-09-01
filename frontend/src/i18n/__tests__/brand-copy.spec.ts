@@ -13,7 +13,7 @@ function stringify(value: unknown): string {
 }
 
 describe('i18n brand copy', () => {
-  it('does not expose Sub2API in primary onboarding/setup copy', () => {
+  it('does not expose Sub2API in primary product copy', () => {
     const text = [enMisc, zhMisc, enLanding, zhLanding].map(stringify).join('\n')
     expect(text).not.toContain('Sub2API')
     expect(text).toContain('ExAPI')

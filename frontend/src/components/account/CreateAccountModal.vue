@@ -53,7 +53,7 @@
           :required="!isGrokSSOInputMethod"
           class="input"
           :placeholder="t('admin.accounts.enterAccountName')"
-          data-tour="account-form-name"
+          data-testid="account-form-name"
         />
       </div>
       <div>
@@ -70,7 +70,7 @@
       <!-- Platform Selection - Segmented Control Style -->
       <div>
         <label class="input-label">{{ t('admin.accounts.platform') }}</label>
-        <div class="mt-2 flex flex-wrap rounded-lg bg-gray-100 p-1 dark:bg-dark-700" data-tour="account-form-platform">
+        <div class="mt-2 flex flex-wrap rounded-lg bg-gray-100 p-1 dark:bg-dark-700" data-testid="account-form-platform">
           <button
             type="button"
             @click="form.platform = 'anthropic'"
@@ -166,7 +166,7 @@
       <!-- Account Type Selection (Anthropic) -->
       <div v-if="form.platform === 'anthropic'">
         <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
-        <div class="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4" data-tour="account-form-type">
+        <div class="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4" data-testid="account-form-type">
           <button
             type="button"
             @click="accountCategory = 'oauth-based'"
@@ -296,7 +296,7 @@
       <!-- Account Type Selection (OpenAI) -->
       <div v-if="form.platform === 'openai'">
         <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
-        <div class="mt-2 grid grid-cols-2 gap-3" data-tour="account-form-type">
+        <div class="mt-2 grid grid-cols-2 gap-3" data-testid="account-form-type">
           <button
             type="button"
             @click="accountCategory = 'oauth-based'"
@@ -355,7 +355,7 @@
       <!-- Account Type Selection (Grok) -->
       <div v-if="form.platform === 'grok'">
         <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
-        <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3" data-tour="account-form-type">
+        <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="account-form-type">
           <button
             type="button"
             data-testid="grok-account-type-build"
@@ -454,7 +454,7 @@
             {{ t('admin.accounts.gemini.helpButton') }}
           </button>
         </div>
-        <div class="mt-2 grid grid-cols-3 gap-3" data-tour="account-form-type">
+        <div class="mt-2 grid grid-cols-3 gap-3" data-testid="account-form-type">
           <button
             type="button"
             @click="accountCategory = 'oauth-based'"
@@ -2776,7 +2776,7 @@
             type="number"
             min="1"
             class="input"
-            data-tour="account-form-priority"
+            data-testid="account-form-priority"
           />
           <p class="input-hint">{{ t('admin.accounts.priorityHint') }}</p>
         </div>
@@ -3212,7 +3212,7 @@
           :groups="groups"
           :platform="form.platform"
           :mixed-scheduling="mixedScheduling"
-          data-tour="account-form-groups"
+          data-testid="account-form-groups"
         />
       </div>
 
@@ -3265,7 +3265,7 @@
           form="create-account-form"
           :disabled="submitting"
           class="btn btn-primary"
-          data-tour="account-form-submit"
+          data-testid="account-form-submit"
         >
           <svg
             v-if="submitting"

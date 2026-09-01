@@ -49,13 +49,6 @@ vi.mock('@/stores/app', () => ({
   useAppStore: () => ({ showError, showSuccess }),
 }))
 
-vi.mock('@/stores/onboarding', () => ({
-  useOnboardingStore: () => ({
-    isCurrentStep: vi.fn(() => false),
-    nextStep: vi.fn(),
-  }),
-}))
-
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
   return {
@@ -170,7 +163,7 @@ const mountView = async () => {
 }
 
 const openCreateModelsList = async (wrapper: VueWrapper) => {
-  await wrapper.get('[data-tour="groups-create-btn"]').trigger('click')
+  await wrapper.get('[data-testid="groups-create-btn"]').trigger('click')
   await wrapper.get('[data-testid="create-models-list-toggle"]').trigger('click')
 }
 
@@ -268,7 +261,7 @@ describe('GroupsView model-list candidate loading', () => {
       .mockResolvedValueOnce(['gpt-5'])
 
     await openCreateModelsList(wrapper)
-    await wrapper.get('[data-tour="group-form-platform"]').setValue('openai')
+    await wrapper.get('[data-testid="group-form-platform"]').setValue('openai')
     await flushPromises()
     // Platform changes intentionally reset this optional feature to disabled.
     await wrapper.get('[data-testid="create-models-list-toggle"]').trigger('click')

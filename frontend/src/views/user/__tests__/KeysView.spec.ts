@@ -17,9 +17,6 @@ const {
   showError,
   showSuccess,
   copyToClipboard,
-  isCurrentStep,
-  nextStep,
-  getDriverInstance,
 } = vi.hoisted(() => ({
   listKeys: vi.fn(),
   createKey: vi.fn(),
@@ -31,9 +28,6 @@ const {
   showError: vi.fn(),
   showSuccess: vi.fn(),
   copyToClipboard: vi.fn(),
-  isCurrentStep: vi.fn(),
-  nextStep: vi.fn(),
-  getDriverInstance: vi.fn().mockReturnValue(null),
 }))
 
 const messages: Record<string, string> = {
@@ -98,19 +92,6 @@ vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
     showError,
     showSuccess,
-  }),
-}))
-
-vi.mock('@/stores/onboarding', () => ({
-  useOnboardingStore: () => ({
-    isCurrentStep,
-    nextStep,
-    getDriverInstance,
-    setDriverInstance: vi.fn(),
-    setControlMethods: vi.fn(),
-    clearControlMethods: vi.fn(),
-    setReplayCallback: vi.fn(),
-    isDriverActive: vi.fn().mockReturnValue(false),
   }),
 }))
 
@@ -310,8 +291,6 @@ describe('user KeysView column settings', () => {
     showError.mockReset()
     showSuccess.mockReset()
     copyToClipboard.mockReset()
-    isCurrentStep.mockReset()
-    nextStep.mockReset()
 
     listKeys.mockResolvedValue({
       items: [{ ...createApiKey(), key: '', key_prefix: 'sk-test-' }],
@@ -326,7 +305,6 @@ describe('user KeysView column settings', () => {
     getDashboardApiKeysUsage.mockResolvedValue({ stats: {} })
     getAvailableGroups.mockResolvedValue([])
     getUserGroupRates.mockResolvedValue({})
-    isCurrentStep.mockReturnValue(false)
   })
 
   it('does not offer use or import actions for keys loaded from storage', async () => {
@@ -342,7 +320,7 @@ describe('user KeysView column settings', () => {
     const wrapper = await mountView()
 
     await getButtonByText(wrapper, 'Create API Key').trigger('click')
-    await wrapper.get('input[data-tour="key-form-name"]').setValue('operator-key')
+    await wrapper.get('input[data-testid="key-form-name"]').setValue('operator-key')
     const formGroupSelect = wrapper.findAllComponents({ name: 'Select' })[2]
     await formGroupSelect.vm.$emit('update:modelValue', 42)
     await wrapper.get('form#key-form').trigger('submit')

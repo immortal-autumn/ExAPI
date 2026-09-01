@@ -73,7 +73,7 @@
               </button>
             </div>
           </div>
-          <button @click="showCreateModal = true" class="btn btn-primary" data-tour="keys-create-btn">
+          <button @click="showCreateModal = true" class="btn btn-primary" data-testid="keys-create-btn">
             <Icon name="plus" size="md" class="mr-2" />
             {{ t('keys.createKey') }}
           </button>
@@ -422,7 +422,7 @@
             required
             class="input"
             :placeholder="t('keys.namePlaceholder')"
-            data-tour="key-form-name"
+            data-testid="key-form-name"
           />
         </div>
 
@@ -434,7 +434,7 @@
             :placeholder="t('keys.selectGroup')"
             :searchable="true"
             :search-placeholder="t('keys.searchGroup')"
-            data-tour="key-form-group"
+            data-testid="key-form-group"
           >
             <template #selected="{ option }">
               <GroupBadge
@@ -880,7 +880,7 @@
             type="submit"
             :disabled="submitting"
             class="btn btn-primary"
-            data-tour="key-form-submit"
+            data-testid="key-form-submit"
           >
             <svg
               v-if="submitting"
@@ -1064,7 +1064,6 @@
 	import { ref, reactive, computed, onMounted, onUnmounted, type ComponentPublicInstance } from 'vue'
 	import { useI18n } from 'vue-i18n'
 	import { useAppStore } from '@/stores/app'
-	import { useOnboardingStore } from '@/stores/onboarding'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 
 const { t } = useI18n()
@@ -1115,7 +1114,6 @@ interface GroupOption {
 }
 
 const appStore = useAppStore()
-const onboardingStore = useOnboardingStore()
 const { copyToClipboard } = useClipboard()
 
 
@@ -1680,10 +1678,6 @@ const handleSubmit = async () => {
       )
       rawCreatedKey = created.key
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
-      // Only advance tour if active, on submit step, and creation succeeded
-      if (onboardingStore.isCurrentStep('[data-tour="key-form-submit"]')) {
-        onboardingStore.nextStep(500)
-      }
     }
     closeModals()
     if (rawCreatedKey) {
@@ -1693,7 +1687,6 @@ const handleSubmit = async () => {
     loadApiKeys()
   } catch (error: unknown) {
     appStore.showError(extractApiErrorMessage(error, t('keys.failedToSave')))
-    // Don't advance tour on error
   } finally {
     submitting.value = false
   }

@@ -23,34 +23,11 @@
 </template>
 
 <script setup lang="ts">
-import '@/styles/onboarding.css'
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { useAppStore } from '@/stores/app'
-import { useAuthStore } from '@/stores/auth'
-import { useOnboardingTour } from '@/composables/useOnboardingTour'
-import { useOnboardingStore } from '@/stores/onboarding'
-import { isSingleUserPrivateControlPlaneBrowser } from '@/router/singleUserGatewayMode'
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
 
 const appStore = useAppStore()
-const authStore = useAuthStore()
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
-const isAdmin = computed(() => authStore.user?.role === 'admin')
-const privateGatewayControlPlane = isSingleUserPrivateControlPlaneBrowser()
-
-const { replayTour } = useOnboardingTour({
-  storageKey: isAdmin.value ? 'admin_guide' : 'user_guide',
-  autoStart: !privateGatewayControlPlane
-})
-
-const onboardingStore = useOnboardingStore()
-
-onMounted(() => {
-  if (!privateGatewayControlPlane) {
-    onboardingStore.setReplayCallback(replayTour)
-  }
-})
-
-defineExpose({ replayTour })
 </script>

@@ -103,7 +103,7 @@
             <button
               @click="openCreateModal"
               class="btn btn-primary"
-              data-tour="groups-create-btn"
+              data-testid="groups-create-btn"
             >
               <Icon name="plus" size="md" class="mr-2" />
               {{ t("admin.groups.createGroup") }}
@@ -467,7 +467,7 @@
             required
             class="input"
             :placeholder="t('admin.groups.enterGroupName')"
-            data-tour="group-form-name"
+            data-testid="group-form-name"
           />
         </div>
         <div>
@@ -488,7 +488,7 @@
           <Select
             v-model="createForm.platform"
             :options="platformOptions"
-            data-tour="group-form-platform"
+            data-testid="group-form-platform"
             @change="createForm.copy_accounts_from_group_ids = []"
           />
           <p class="input-hint">{{ t("admin.groups.platformHint") }}</p>
@@ -593,7 +593,7 @@
             min="0.001"
             required
             class="input"
-            data-tour="group-form-multiplier"
+            data-testid="group-form-multiplier"
           />
           <p class="input-hint">{{ t("admin.groups.rateMultiplierHint") }}</p>
         </div>
@@ -619,7 +619,7 @@
         />
         <div
           v-if="createForm.subscription_type !== 'subscription'"
-          data-tour="group-form-exclusive"
+          data-testid="group-form-exclusive"
         >
           <div class="mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -2044,7 +2044,7 @@
             form="create-group-form"
             :disabled="submitting"
             class="btn btn-primary"
-            data-tour="group-form-submit"
+            data-testid="group-form-submit"
           >
             <svg
               v-if="submitting"
@@ -2092,7 +2092,7 @@
             type="text"
             required
             class="input"
-            data-tour="edit-group-form-name"
+            data-testid="edit-group-form-name"
           />
         </div>
         <div>
@@ -2113,7 +2113,7 @@
             v-model="editForm.platform"
             :options="platformOptions"
             :disabled="true"
-            data-tour="group-form-platform"
+            data-testid="group-form-platform"
           />
           <p class="input-hint">{{ t("admin.groups.platformNotEditable") }}</p>
         </div>
@@ -2219,7 +2219,7 @@
             min="0.001"
             required
             class="input"
-            data-tour="group-form-multiplier"
+            data-testid="group-form-multiplier"
           />
         </div>
         <div>
@@ -3666,7 +3666,7 @@
             form="edit-group-form"
             :disabled="submitting"
             class="btn btn-primary"
-            data-tour="group-form-submit"
+            data-testid="group-form-submit"
           >
             <svg
               v-if="submitting"
@@ -4191,7 +4191,6 @@
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useAppStore } from "@/stores/app";
-import { useOnboardingStore } from "@/stores/onboarding";
 import { operatorAPI as adminAPI } from "@/api/operator";
 import type {
   AdminGroup,
@@ -4268,7 +4267,6 @@ import {
 
 const { t } = useI18n();
 const appStore = useAppStore();
-const onboardingStore = useOnboardingStore();
 
 const ALWAYS_VISIBLE_COLUMNS = new Set(["name", "actions"]);
 // Default hidden columns (hidden on first load / after schema bumps).
@@ -5691,16 +5689,11 @@ const handleCreateGroup = async () => {
     appStore.showSuccess(t("admin.groups.groupCreated"));
     closeCreateModal();
     loadGroups();
-    // Only advance tour if active, on submit step, and creation succeeded
-    if (onboardingStore.isCurrentStep('[data-tour="group-form-submit"]')) {
-      onboardingStore.nextStep(500);
-    }
   } catch (error: any) {
     appStore.showError(
       error.response?.data?.detail || t("admin.groups.failedToCreate"),
     );
     console.error("Error creating group:", error);
-    // Don't advance tour on error
   } finally {
     submitting.value = false;
   }

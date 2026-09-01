@@ -10,9 +10,11 @@ const componentPath = resolve(dirname(fileURLToPath(import.meta.url)), '../AppLa
 const componentSource = readFileSync(componentPath, 'utf8')
 
 describe('AppLayout private product onboarding boundary', () => {
-  it('does not auto-start or register the SaaS onboarding tour', () => {
-    expect(componentSource).toContain('autoStart: !privateGatewayControlPlane')
-    expect(componentSource).toContain('if (!privateGatewayControlPlane)')
-    expect(componentSource).toContain('onboardingStore.setReplayCallback(replayTour)')
+  it('does not load or register the SaaS onboarding tour', () => {
+    expect(componentSource).not.toContain('useOnboardingTour')
+    expect(componentSource).not.toContain('useOnboardingStore')
+    expect(componentSource).not.toContain('onboarding.css')
+    expect(componentSource).not.toContain('setReplayCallback')
+    expect(componentSource).not.toContain('autoStart')
   })
 })
