@@ -6,21 +6,21 @@
 
 ## 当前发布
 
-最后审阅：**2026-08-24（Europe/London）**
+最后审阅：**2026-09-01（Europe/London）**
 
 | 项目 | 当前值 |
 |---|---|
-| 产品版本 | `0.2.6` |
+| 产品版本 | `0.2.7` |
 | GitHub 仓库 | `immortal-autumn/ExAPI` |
-| Git tag | `v0.2.6` |
+| Git tag | `v0.2.7` |
 | 主分支 | `main`（已快进到审阅提交） |
 | 发布分支 | `revision/exapi-v0.2.1` |
-| 审阅提交 | `8363e0decd68786e02c9620e616e17f1284e0ff2` |
-| OCI 镜像 | `ghcr.io/immortal-autumn/sub2api2personal@sha256:5ef74f0df89989ae7922fa819ac67ea159c8769871173fba33548baf0a708b43` |
-| GitHub Release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.6> |
-| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/32739586602> |
+| 审阅提交 | `a1c8bb6a7a4e49d67fbdb81aadc67de4ef12e7c1` |
+| OCI 镜像 | `ghcr.io/immortal-autumn/sub2api2personal@sha256:628dbccd43e5348989ae83c6c7c494bcbe85227824a1acfedee10f77dd7f1795` |
+| GitHub Release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.7> |
+| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33308484734> |
 
-镜像经过多架构构建、OCI 标签、SPDX SBOM、SLSA/ SBOM attestations 和
+镜像经过多架构构建、OCI 标签、SPDX SBOM、SLSA/SBOM attestations 和
 `gh attestation verify` 验证。生产环境只使用上述 immutable digest，不使用
 `latest` 等可变标签。GHCR 包名仍保留 `sub2api2personal` 以兼容现有部署。
 
@@ -34,6 +34,8 @@
 - `faca8d3e0`：代理创建/更新请求的进行中防重复提交保护；
 - `99cfb8a64`：代理 JSON 导入请求的进行中防重复提交保护。
 - `18d0b7390`：代理部分更新契约；省略字段保留现值，显式可空值可清除已存设置。
+- `27f6b9697` 与 `4cb556a42`：新鲜 Antigravity 能力诊断、有限探测原因和 provider body
+  脱敏；两次提交均已通过 GitHub CI 与安全扫描，但尚未 promotion 到生产。
 
 审查分支还包含代理部分更新契约加固：省略的生命周期和凭据字段会保留现值，显式
 null/空值则会清除对应可空设置。这部分尚未纳入上面的生产版本，也没有部署；在按
@@ -49,7 +51,7 @@ null/空值则会清除对应可空设置。这部分尚未纳入上面的生产
 `/opt/sub2api/.env` 和 `docker-compose.local.yml` 保留旧的本地 provenance 及 v0.2.5
 回滚 digest；生产 promotion 明确使用上面的版本化文件。
 
-应用容器版本为 `0.2.6`，OCI revision 为上述提交，状态 healthy、重启次数为 0。
+应用容器版本为 `0.2.7`，OCI revision 为上述提交，状态 healthy、重启次数为 0。
 PostgreSQL 和 Redis 仅作为既有依赖保留，容器 ID、启动时间、数据挂载和健康状态均
 未改变。v0.2.5 的环境、Compose 文件和 digest 仍可用于无 schema 变化的应用回滚。
 
