@@ -1,5 +1,42 @@
 # Phase log
 
+## 2026-09-01 — Phase 1 administrator-only frontend build boundary
+
+Scope: the private control plane must not instantiate or ship the former SaaS
+onboarding tour. The change is frontend-only; backend APIs and private route
+contracts are unchanged.
+
+Implementation:
+
+- Removed `useOnboardingTour` setup, replay callback registration, and global
+  onboarding CSS from `AppLayout`.
+- Removed sidebar route-to-tour advancement and submit-time tour callbacks from
+  group and API-key workflows.
+- Deleted the unused Driver.js tour store/composable/step definitions and
+  stylesheet, removed `driver.js` from `package.json`/lockfile, and removed
+  onboarding locale payloads in both supported languages.
+- Renamed retained deterministic workflow hooks from `data-tour` to
+  `data-testid`; no tour runtime references remain under `frontend/src`.
+
+GREEN:
+
+```text
+Focused frontend Vitest: 8 files / 97 tests PASS
+Full frontend Vitest: 264 files / 1,421 tests PASS
+Frontend typecheck: PASS
+Frontend production build: PASS (672 modules transformed)
+Bundle budget: PASS (3,255.20 KB / 3,450 KB)
+Private bundle budget: PASS
+Changed-file ESLint: PASS
+git diff --check: PASS
+```
+
+Evidence: `tmp/usability-review/current/phase-1-admin-frontend-boundary-2026-09-01.md`.
+Commit: `e2ebfda27` (`refactor(frontend): remove onboarding tour from admin control plane`).
+Remote CI and security scanning are required before promotion. Deployment:
+**NOT DEPLOYED**; no OPC, database, Redis, provider account, or credential state
+was modified.
+
 ## 2026-09-01 — Phase 2.1 provider-error presentation boundary
 
 Issues: provider-body UI exposure (frontend portion of `SEC-005`/`L10N-004`); backend

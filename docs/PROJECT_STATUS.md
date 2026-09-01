@@ -54,6 +54,11 @@ security scans:
   redacted provider-response metadata; the first-open user detail modal also
   loads its selected record deterministically. Focused and full frontend tests,
   typecheck, build, and bundle gates pass.
+- `e2ebfda27`: removed the Driver.js onboarding runtime, global onboarding
+  stylesheet, tour store/composable/steps, and stale onboarding locale payloads
+  from the administrator control-plane build. Stable workflow hooks are now
+  `data-testid` selectors; focused and full frontend tests, typecheck, build,
+  bundle budgets, and changed-file lint pass.
 
 The review branch also contains work hardening proxy partial updates: omitted
 lifecycle and credential fields are preserved, while explicit null/empty values
