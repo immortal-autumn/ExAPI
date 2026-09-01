@@ -95,7 +95,7 @@
                     <button
                       type="button"
                       data-test="regenerate-admin-api-key"
-                      @click="regenerateAdminApiKey"
+                      @click="openConfirm('regenerate')"
                       :disabled="adminApiKeyOperating"
                       class="btn btn-secondary btn-sm"
                     >
@@ -107,7 +107,8 @@
                     </button>
                     <button
                       type="button"
-                      @click="deleteAdminApiKey"
+                      data-test="delete-admin-api-key"
+                      @click="openConfirm('delete')"
                       :disabled="adminApiKeyOperating"
                       class="btn btn-secondary btn-sm text-red-600 hover:text-red-700 dark:text-red-400"
                     >
@@ -146,18 +147,42 @@
                   </p>
                 </div>
               </div>
+
+              <ConfirmDialog
+                :show="pendingAction !== null"
+                :title="pendingAction === 'delete'
+                  ? t('admin.settings.adminApiKey.delete')
+                  : t('admin.settings.adminApiKey.regenerate')"
+                :message="pendingAction === 'delete'
+                  ? t('admin.settings.adminApiKey.deleteConfirm')
+                  : t('admin.settings.adminApiKey.regenerateConfirm')"
+                :confirm-text="pendingAction === 'delete'
+                  ? t('admin.settings.adminApiKey.delete')
+                  : t('admin.settings.adminApiKey.regenerate')"
+                :cancel-text="t('common.cancel')"
+                :danger="pendingAction === 'delete'"
+                :loading="confirmLoading"
+                @confirm="confirmPendingAction"
+                @cancel="clearPendingAction"
+              />
           </SettingsSectionCard>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import Icon from '@/components/icons/Icon.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import SettingsSectionCard from '../SettingsSectionCard.vue'
 
 type AnyHandler = (...args: any[]) => void
 
-defineProps<{
+const { t } = useI18n()
+
+type PendingAction = 'regenerate' | 'delete' | null
+
+const props = defineProps<{
   adminApiKeyLoading: boolean
   adminApiKeyExists: boolean
   adminApiKeyOperating: boolean
@@ -169,5 +194,31 @@ defineProps<{
   copyNewKey: AnyHandler
 }>()
 
-const { t } = useI18n()
+const pendingAction = ref<PendingAction>(null)
+const confirmLoading = ref(false)
+
+const openConfirm = (action: Exclude<PendingAction, null>) => {
+  if (props.adminApiKeyOperating) return
+  pendingAction.value = action
+}
+
+const clearPendingAction = () => {
+  if (confirmLoading.value) return
+  pendingAction.value = null
+}
+
+const confirmPendingAction = async () => {
+  if (!pendingAction.value || confirmLoading.value) return
+  confirmLoading.value = true
+  try {
+    if (pendingAction.value === 'regenerate') {
+      await Promise.resolve(props.regenerateAdminApiKey())
+    } else if (pendingAction.value === 'delete') {
+      await Promise.resolve(props.deleteAdminApiKey())
+    }
+    pendingAction.value = null
+  } finally {
+    confirmLoading.value = false
+  }
+}
 </script>

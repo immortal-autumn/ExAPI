@@ -7,11 +7,15 @@ const {
   probeUpstreamBillingMock,
   importCodexSessionMock,
   createOpenAICodexPATMock,
+  antigravityValidateRefreshTokenMock,
+  createFromSSOMock,
 } = vi.hoisted(() => ({
   createAccountMock: vi.fn(),
   probeUpstreamBillingMock: vi.fn(),
   importCodexSessionMock: vi.fn(),
   createOpenAICodexPATMock: vi.fn(),
+  antigravityValidateRefreshTokenMock: vi.fn(),
+  createFromSSOMock: vi.fn(),
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -35,6 +39,9 @@ vi.mock('@/api/operator', () => ({
       importCodexSession: importCodexSessionMock,
       createOpenAICodexPAT: createOpenAICodexPATMock,
     },
+    grok: {
+      createFromSSO: createFromSSOMock,
+    },
     settings: {
       getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] }),
       getSettings: vi.fn().mockResolvedValue({}),
@@ -50,6 +57,31 @@ vi.mock('@/api/admin/accounts', () => {
   return {
     getAntigravityDefaultModelMapping,
     default: { getAntigravityDefaultModelMapping },
+  }
+})
+
+vi.mock('@/composables/useAntigravityOAuth', async () => {
+  const { ref } = await import('vue')
+  return {
+    useAntigravityOAuth: () => ({
+      authUrl: ref(''),
+      sessionId: ref(''),
+      state: ref(''),
+      loading: ref(false),
+      error: ref(''),
+      resetState: vi.fn(),
+      generateAuthUrl: vi.fn(),
+      exchangeAuthCode: vi.fn(),
+      validateRefreshToken: antigravityValidateRefreshTokenMock,
+      buildCredentials: (tokenInfo: any, fallbackRefreshToken?: string) => ({
+        access_token: tokenInfo.access_token,
+        refresh_token: tokenInfo.refresh_token || fallbackRefreshToken,
+        email: tokenInfo.email
+      }),
+      buildExtraInfo: (tokenInfo: any) => ({
+        email: tokenInfo.email
+      })
+    })
   }
 })
 
@@ -79,7 +111,7 @@ const OAuthAuthorizationFlowStub = defineComponent({
     initialInputMethod: String,
   },
   data: () => ({ inputMethod: 'manual' }),
-  emits: ['import-codex-session', 'import-codex-pat'],
+  emits: ['import-codex-session', 'import-codex-pat', 'validate-refresh-token', 'import-sso'],
   template: `
     <div>
       <button data-testid="import-codex-session" @click="$emit('import-codex-session', 'session-json')">session</button>
@@ -162,6 +194,8 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
       warnings: [],
     })
     createOpenAICodexPATMock.mockReset().mockResolvedValue({})
+    antigravityValidateRefreshTokenMock.mockReset()
+    createFromSSOMock.mockReset()
   })
 
   it('sends false explicitly for normal OpenAI account creation by default', async () => {
@@ -268,6 +302,45 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     expect(createAccountMock.mock.calls[0]?.[0]?.upstream_billing_probe_enabled).toBe(false)
   })
 
+  it('allows blank Antigravity OAuth names and falls back to email/default during refresh-token batch import', async () => {
+    antigravityValidateRefreshTokenMock.mockImplementation(async (token: string) => {
+      if (token === 'rt-a') {
+        return {
+          access_token: 'access-a',
+          refresh_token: 'refresh-a',
+          email: 'alpha@example.com'
+        }
+      }
+      if (token === 'rt-b') {
+        return {
+          access_token: 'access-b',
+          refresh_token: 'refresh-b'
+        }
+      }
+      return null
+    })
+    createAccountMock.mockResolvedValue({ id: 77, platform: 'antigravity', type: 'oauth' })
+
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'Antigravity')
+    await selectButtonByText(wrapper, 'OAuth')
+
+    expect(wrapper.get('input[data-testid="account-form-name"]').attributes('required')).toBeUndefined()
+
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    const flow = wrapper.getComponent(OAuthAuthorizationFlowStub)
+    flow.vm.$emit('validate-refresh-token', 'rt-a\nrt-b')
+    await flushPromises()
+
+    expect(antigravityValidateRefreshTokenMock).toHaveBeenCalledWith('rt-a', null)
+    expect(antigravityValidateRefreshTokenMock).toHaveBeenCalledWith('rt-b', null)
+    expect(createAccountMock).toHaveBeenCalledTimes(2)
+    expect(createAccountMock.mock.calls[0]?.[0]?.name).toBe('alpha@example.com #1')
+    expect(createAccountMock.mock.calls[1]?.[0]?.name).toBe('Antigravity OAuth Account #2')
+  })
+
   it('antigravity upstream 创建默认携带上游倍率探测开关', async () => {
     // antigravity upstream 走独立创建 helper，
     // 也必须与其余 API-key 平台一样默认开启探测并传递开关。
@@ -291,6 +364,21 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     expect(payload?.upstream_billing_probe_enabled).toBe(true)
     // 创建成功后前端立即发起一次首探（与其他 apikey 平台一致）。
     expect(probeUpstreamBillingMock).toHaveBeenCalledWith(42)
+  })
+
+  it('blocks Grok SSO imports that exceed the client token limit before calling the API', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'Grok')
+    await selectButtonByText(wrapper, 'admin.accounts.types.grokSsoFiles')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    const flow = wrapper.getComponent(OAuthAuthorizationFlowStub)
+    const oversizedInput = Array.from({ length: 5001 }, (_, index) => `sso-${index + 1}`).join('\n')
+    flow.vm.$emit('import-sso', oversizedInput)
+    await flushPromises()
+
+    expect(createFromSSOMock).not.toHaveBeenCalled()
   })
 
   it('leaves Codex session import billing ownership to the backend', async () => {

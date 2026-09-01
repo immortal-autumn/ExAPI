@@ -50,7 +50,7 @@
         <input
           v-model="form.name"
           type="text"
-          :required="!isGrokSSOInputMethod"
+          :required="!isGrokSSOInputMethod && !isAntigravityOAuthFlow"
           class="input"
           :placeholder="t('admin.accounts.enterAccountName')"
           data-testid="account-form-name"
@@ -4167,6 +4167,10 @@ const isGrokSSOInputMethod = computed(
     (oauthFlowRef.value?.inputMethod === 'sso_cookie' || grokOAuthEntry.value === 'sso_files')
 )
 
+const isAntigravityOAuthFlow = computed(
+  () => form.platform === 'antigravity' && accountCategory.value === 'oauth-based'
+)
+
 const isManualInputMethod = computed(() => {
   return oauthFlowRef.value?.inputMethod === 'manual'
 })
@@ -4997,7 +5001,8 @@ const handleSubmit = async () => {
   // For OAuth-based type, handle OAuth flow (goes to step 2)
   if (isOAuthFlow.value) {
     const grokBuildImport = form.platform === 'grok' && oauthFlowRef.value?.inputMethod === 'refresh_token'
-    if (!isGrokSSOInputMethod.value && !grokBuildImport && !form.name.trim()) {
+    const antigravityBuildImport = isAntigravityOAuthFlow.value
+    if (!isGrokSSOInputMethod.value && !grokBuildImport && !antigravityBuildImport && !form.name.trim()) {
       appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
       return
     }
@@ -5329,8 +5334,15 @@ const createAccountAndFinish = async (
       delete credentials.model_mapping
     }
   }
+
+  const credentialEmail = typeof credentials.email === 'string' ? credentials.email.trim() : ''
+  const resolvedName =
+    platform === 'antigravity' && type === 'oauth'
+      ? form.name.trim() || credentialEmail || 'Antigravity OAuth Account'
+      : form.name
+
   await doCreateAccount({
-    name: form.name,
+    name: resolvedName,
     notes: form.notes,
     platform,
     type,
@@ -5457,6 +5469,12 @@ const handleGrokImportSSO = async (ssoInput: string) => {
     .map((token) => token.trim())
     .filter((token) => token)
   if (ssoTokens.length === 0) return
+  if (ssoTokens.length > IMPORT_MAX_OBJECTS) {
+    grokOAuth.error.value = t('admin.accounts.oauth.grok.ssoFilesTooManyTokens', {
+      limit: IMPORT_MAX_OBJECTS,
+    })
+    return
+  }
   if (!validateGrokOAuthUpstreamConfig()) return
 
   grokOAuth.loading.value = true
@@ -5948,7 +5966,8 @@ const handleAntigravityValidateRT = async (refreshTokenInput: string) => {
         applyAntigravityProjectID(credentials, antigravityProjectId.value, 'create')
         
         // Generate account name with index for batch
-        const accountName = refreshTokens.length > 1 ? `${form.name} #${i + 1}` : form.name
+        const baseName = form.name.trim() || tokenInfo.email || 'Antigravity OAuth Account'
+        const accountName = refreshTokens.length > 1 ? `${baseName} #${i + 1}` : baseName
 
         // Note: Antigravity doesn't have buildExtraInfo, so we pass empty extra or rely on credentials
         const createPayload = withAntigravityConfirmFlag({
