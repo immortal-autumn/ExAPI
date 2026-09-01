@@ -7,19 +7,19 @@ belong in `deploy/`; this page records the currently reviewed facts.
 
 ## Current release
 
-Last reviewed: **2026-08-24 (Europe/London)**
+Last reviewed: **2026-09-01 (Europe/London)**
 
 | Item | Current value |
 |---|---|
-| Product version | `0.2.6` |
+| Product version | `0.2.7` |
 | GitHub repository | `immortal-autumn/ExAPI` |
-| Git tag | `v0.2.6` |
+| Git tag | `v0.2.7` |
 | Main branch | `main` (fast-forwarded to the reviewed commit) |
 | Release branch | `revision/exapi-v0.2.1` |
-| Reviewed commit | `8363e0decd68786e02c9620e616e17f1284e0ff2` |
-| OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:5ef74f0df89989ae7922fa819ac67ea159c8769871173fba33548baf0a708b43` |
-| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.6> |
-| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/32739586602> |
+| Reviewed commit | `a1c8bb6a7a4e49d67fbdb81aadc67de4ef12e7c1` |
+| OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:628dbccd43e5348989ae83c6c7c494bcbe85227824a1acfedee10f77dd7f1795` |
+| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.7> |
+| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33308484734> |
 | Upstream baseline | Sub2API `v0.1.171`, constrained by `upstream.lock.json` |
 
 The GitHub repository was renamed from `Sub2API2Personal` to `ExAPI` on
@@ -47,18 +47,21 @@ security scans:
 - `99cfb8a64`: proxy JSON-import in-flight submission guard.
 - `18d0b7390`: proxy partial-update contract; omitted fields are preserved and
   explicit nullable values can clear stored settings.
+- `27f6b9697` and `4cb556a42`: fresh Antigravity capability diagnostics,
+  bounded probe reasons, and provider-body redaction; both passed GitHub CI and
+  security scanning but are not yet promoted to production.
 
 The review branch also contains work hardening proxy partial updates: omitted
 lifecycle and credential fields are preserved, while explicit null/empty values
 clear nullable settings. This work is not part of the production release above
-and has not been deployed. Production remains on the reviewed v0.2.6 digest
+and has not been deployed. Production remains on the reviewed v0.2.7 digest
 until a separately validated release is promoted under the rollout procedure.
 
 ## Production deployment
 
 Production runs the digest above as Docker Compose project `sub2api` from
-`/opt/sub2api`. The application container reports version `0.2.6`, the reviewed
-commit, healthy status, and zero restarts after promotion and observation.
+`/opt/sub2api`. The application container reports version `0.2.7`, the reviewed
+commit, healthy status, and zero restarts at the 2026-09-01 read-only check.
 
 The deployment keeps versioned promotion inputs:
 
