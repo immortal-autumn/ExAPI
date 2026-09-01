@@ -42,10 +42,22 @@
 - `e2ebfda27`：从管理员控制面构建中移除 Driver.js 新手引导运行时、全局引导样式、引导
   store/composable/步骤定义及过期的中英文引导文案；稳定工作流钩子统一为
   `data-testid`。重点/完整前端测试、类型检查、构建、bundle 门禁和变更文件 lint 均通过。
+- `bf7e501aa`：将 Grok SSO 导入请求体限制为 25 MiB，并增加处理器测试，确认超限请求会在
+  调用 OAuth client 前被拒绝。
+- `593e13727`：允许 Antigravity OAuth 导入使用已验证邮箱或默认值自动命名；为管理员 API
+  Key 重新生成/删除增加确认弹窗；手工输入的超量 Grok SSO 批次在调用 API 前拦截。
+- `25baef30f`：为私有管理员 API Key 路由增加 operator-mode 包装视图，分组变更改走现有
+  管理员契约；显式解绑使用文档规定的 `group_id: 0` 哨兵。重点/完整前端检查以及本地
+  类型和 lint 门禁均通过；生产环境未修改。
+- `e34ef0eb9`：API Key 创建幂等响应现在只保存脱敏内容；首次响应保留一次性 secret，
+  持久化重放会省略 secret。实现和处理器重点测试记录在
+  [`phase-2-api-key-idempotency.md`](../tmp/usability-review/current/phase-2-api-key-idempotency.md)：
+  浏览器尚未自动附加幂等键，因为脱敏重放无法在首次响应丢失时恢复密钥；后续仍需
+  明确 API 契约。
 
 审查分支还包含代理部分更新契约加固：省略的生命周期和凭据字段会保留现值，显式
 null/空值则会清除对应可空设置。这部分尚未纳入上面的生产版本，也没有部署；在按
-发布流程完成单独验证并 promotion 前，生产仍保持 v0.2.6 的已审查 immutable digest。
+发布流程完成单独验证并 promotion 前，生产仍保持 v0.2.7 的已审查 immutable digest。
 
 ## OPC 生产部署
 

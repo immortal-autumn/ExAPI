@@ -59,6 +59,25 @@ security scans:
   from the administrator control-plane build. Stable workflow hooks are now
   `data-testid` selectors; focused and full frontend tests, typecheck, build,
   bundle budgets, and changed-file lint pass.
+- `bf7e501aa`: bounded Grok SSO import request bodies to 25 MiB and added a
+  handler test proving oversized requests are rejected before an OAuth client
+  call.
+- `593e13727`: allowed Antigravity OAuth imports to derive names from the
+  validated email/default, added confirmation dialogs for administrator API
+  key regeneration/deletion, and rejected oversized hand-entered Grok SSO
+  batches before the API call.
+- `25baef30f`: separated the private administrator API-key route with an
+  operator-mode wrapper and routed group changes through the existing admin
+  contract; explicit unbind now uses the documented `group_id: 0` sentinel.
+  Focused/full frontend checks and local type/lint gates pass; production has
+  not been changed.
+- `e34ef0eb9`: API-key create idempotency now stores only a sanitized response;
+  the first response retains the one-time secret while persisted replays omit
+  it. The implementation and focused handler tests are recorded in
+  [`phase-2-api-key-idempotency.md`](../tmp/usability-review/current/phase-2-api-key-idempotency.md):
+  the browser does not yet attach a key automatically because a secret-redacted
+  replay cannot recover a key when the original response is lost; this remains
+  an explicit follow-up API contract decision.
 
 The review branch also contains work hardening proxy partial updates: omitted
 lifecycle and credential fields are preserved, while explicit null/empty values
