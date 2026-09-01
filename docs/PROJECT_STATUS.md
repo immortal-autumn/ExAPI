@@ -45,6 +45,8 @@ security scans:
 - `3453be8cf`: proxy destructive-action UI guards;
 - `faca8d3e0`: proxy create/update in-flight submission guards;
 - `99cfb8a64`: proxy JSON-import in-flight submission guard.
+- `18d0b7390`: proxy partial-update contract; omitted fields are preserved and
+  explicit nullable values can clear stored settings.
 
 The review branch also contains work hardening proxy partial updates: omitted
 lifecycle and credential fields are preserved, while explicit null/empty values
