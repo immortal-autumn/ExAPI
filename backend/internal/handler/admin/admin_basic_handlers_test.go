@@ -383,6 +383,39 @@ func TestProxyHandlerDeleteRejectsNonPositiveID(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
+func TestProxyHandlerUpdateTracksOmittedAndExplicitNullableFields(t *testing.T) {
+	router, adminSvc := setupAdminRouter()
+
+	request := func(body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(
+			http.MethodPut,
+			"/api/v1/admin/proxies/4",
+			bytes.NewBufferString(body),
+		)
+		req.Header.Set("Content-Type", "application/json")
+		router.ServeHTTP(rec, req)
+		return rec
+	}
+
+	require.Equal(t, http.StatusOK, request(`{"host":"kept.example"}`).Code)
+	require.NotNil(t, adminSvc.lastUpdateProxyInput)
+	require.False(t, adminSvc.lastUpdateProxyInput.UsernameSet)
+	require.False(t, adminSvc.lastUpdateProxyInput.PasswordSet)
+	require.False(t, adminSvc.lastUpdateProxyInput.ExpiresAtSet)
+	require.False(t, adminSvc.lastUpdateProxyInput.FallbackModeSet)
+	require.False(t, adminSvc.lastUpdateProxyInput.BackupProxyIDSet)
+	require.False(t, adminSvc.lastUpdateProxyInput.ExpiryWarnDaysSet)
+
+	require.Equal(t, http.StatusOK, request(`{"username":null,"password":null,"expires_at":null,"fallback_mode":"none","backup_proxy_id":null,"expiry_warn_days":0}`).Code)
+	require.True(t, adminSvc.lastUpdateProxyInput.UsernameSet)
+	require.True(t, adminSvc.lastUpdateProxyInput.PasswordSet)
+	require.True(t, adminSvc.lastUpdateProxyInput.ExpiresAtSet)
+	require.True(t, adminSvc.lastUpdateProxyInput.FallbackModeSet)
+	require.True(t, adminSvc.lastUpdateProxyInput.BackupProxyIDSet)
+	require.True(t, adminSvc.lastUpdateProxyInput.ExpiryWarnDaysSet)
+}
+
 func TestRedeemHandlerEndpoints(t *testing.T) {
 	router, _ := setupAdminRouter()
 

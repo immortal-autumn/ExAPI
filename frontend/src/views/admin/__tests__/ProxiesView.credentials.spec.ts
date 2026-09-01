@@ -157,6 +157,29 @@ describe('ProxiesView credential minimization', () => {
     wrapper.unmount()
   })
 
+  it('sends explicit nulls when an operator clears username and password', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const editButton = wrapper.findAll('button').find(button => button.text() === 'common.edit')
+    expect(editButton).toBeTruthy()
+    await editButton!.trigger('click')
+
+    const vm = wrapper.vm as any
+    vm.editForm.username = ''
+    const passwordInput = wrapper.get('#edit-proxy-form input[type="password"]')
+    await passwordInput.setValue('')
+    await wrapper.get('#edit-proxy-form').trigger('submit')
+    await flushPromises()
+
+    expect(updateProxy).toHaveBeenCalledTimes(1)
+    expect(updateProxy).toHaveBeenCalledWith(7, expect.objectContaining({
+      username: null,
+      password: null,
+    }))
+    wrapper.unmount()
+  })
+
   it('ignores repeated standard-create submissions while the request is pending', async () => {
     let resolveCreate!: (value: Proxy) => void
     createProxy.mockImplementationOnce(() => new Promise(resolve => { resolveCreate = resolve }))

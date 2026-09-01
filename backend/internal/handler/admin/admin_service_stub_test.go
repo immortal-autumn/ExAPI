@@ -27,6 +27,7 @@ type stubAdminService struct {
 	createdProxies                      []*service.CreateProxyInput
 	updatedProxyIDs                     []int64
 	updatedProxies                      []*service.UpdateProxyInput
+	lastUpdateProxyInput                *service.UpdateProxyInput
 	testedProxyIDs                      []int64
 	lastBatchDeleteProxyIDs             []int64
 	batchDeleteProxiesErr               error
@@ -637,6 +638,7 @@ func (s *stubAdminService) UpdateProxy(ctx context.Context, id int64, input *ser
 	s.mu.Lock()
 	s.updatedProxyIDs = append(s.updatedProxyIDs, id)
 	s.updatedProxies = append(s.updatedProxies, input)
+	s.lastUpdateProxyInput = input
 	s.mu.Unlock()
 	proxy := service.Proxy{ID: id, Name: input.Name, Password: input.Password, Status: service.StatusActive}
 	return &proxy, nil

@@ -46,10 +46,11 @@ security scans:
 - `faca8d3e0`: proxy create/update in-flight submission guards;
 - `99cfb8a64`: proxy JSON-import in-flight submission guard.
 
-The next unpushed review scope is proxy deletion input/result correctness. It is
-not part of the production release above and has not been deployed. Production
-remains on the reviewed v0.2.6 digest until a separately validated release is
-promoted under the rollout procedure.
+The review branch also contains work hardening proxy partial updates: omitted
+lifecycle and credential fields are preserved, while explicit null/empty values
+clear nullable settings. This work is not part of the production release above
+and has not been deployed. Production remains on the reviewed v0.2.6 digest
+until a separately validated release is promoted under the rollout procedure.
 
 ## Production deployment
 

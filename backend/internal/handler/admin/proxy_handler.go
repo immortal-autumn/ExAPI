@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -52,6 +53,36 @@ type UpdateProxyRequest struct {
 	FallbackMode   string `json:"fallback_mode" binding:"omitempty,oneof=none proxy direct"`
 	BackupProxyID  *int64 `json:"backup_proxy_id"`
 	ExpiryWarnDays int    `json:"expiry_warn_days" binding:"omitempty,min=0"`
+
+	usernameSet       bool
+	passwordSet       bool
+	expiresAtSet      bool
+	fallbackModeSet   bool
+	backupProxyIDSet  bool
+	expiryWarnDaysSet bool
+}
+
+// UnmarshalJSON records whether nullable/zero-valued patch fields were
+// present. This lets the update API distinguish omitted fields (preserve the
+// current value) from explicit null/empty values (clear the value).
+func (r *UpdateProxyRequest) UnmarshalJSON(data []byte) error {
+	type plain UpdateProxyRequest
+	var decoded plain
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	*r = UpdateProxyRequest(decoded)
+	_, r.usernameSet = fields["username"]
+	_, r.passwordSet = fields["password"]
+	_, r.expiresAtSet = fields["expires_at"]
+	_, r.fallbackModeSet = fields["fallback_mode"]
+	_, r.backupProxyIDSet = fields["backup_proxy_id"]
+	_, r.expiryWarnDaysSet = fields["expiry_warn_days"]
+	return nil
 }
 
 // List handles listing all proxies with pagination
@@ -188,17 +219,23 @@ func (h *ProxyHandler) Update(c *gin.Context) {
 		expiresAt = &t
 	}
 	proxy, err := h.adminService.UpdateProxy(c.Request.Context(), proxyID, &service.UpdateProxyInput{
-		Name:           strings.TrimSpace(req.Name),
-		Protocol:       strings.TrimSpace(req.Protocol),
-		Host:           strings.TrimSpace(req.Host),
-		Port:           req.Port,
-		Username:       strings.TrimSpace(req.Username),
-		Password:       strings.TrimSpace(req.Password),
-		Status:         strings.TrimSpace(req.Status),
-		ExpiresAt:      expiresAt,
-		FallbackMode:   strings.TrimSpace(req.FallbackMode),
-		BackupProxyID:  req.BackupProxyID,
-		ExpiryWarnDays: req.ExpiryWarnDays,
+		Name:              strings.TrimSpace(req.Name),
+		Protocol:          strings.TrimSpace(req.Protocol),
+		Host:              strings.TrimSpace(req.Host),
+		Port:              req.Port,
+		Username:          strings.TrimSpace(req.Username),
+		UsernameSet:       req.usernameSet,
+		Password:          strings.TrimSpace(req.Password),
+		PasswordSet:       req.passwordSet,
+		Status:            strings.TrimSpace(req.Status),
+		ExpiresAt:         expiresAt,
+		ExpiresAtSet:      req.expiresAtSet,
+		FallbackMode:      strings.TrimSpace(req.FallbackMode),
+		FallbackModeSet:   req.fallbackModeSet,
+		BackupProxyID:     req.BackupProxyID,
+		BackupProxyIDSet:  req.backupProxyIDSet,
+		ExpiryWarnDays:    req.ExpiryWarnDays,
+		ExpiryWarnDaysSet: req.expiryWarnDaysSet,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)
