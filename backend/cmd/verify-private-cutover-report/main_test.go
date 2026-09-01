@@ -49,3 +49,24 @@ func TestValidateReportEvidencePathsRejectsFinalAliases(t *testing.T) {
 	_, _, err = validateReportEvidencePaths(report, hardlink)
 	require.ErrorContains(t, err, "must not alias")
 }
+
+func TestReadMigrationReportRejectsOversizedFile(t *testing.T) {
+	directory := t.TempDir()
+	report := filepath.Join(directory, "report.json")
+	contents := make([]byte, maxMigrationReportBytes+1)
+	require.NoError(t, os.WriteFile(report, contents, 0o600))
+
+	_, err := readMigrationReport(report)
+	require.ErrorContains(t, err, "exceeds")
+}
+
+func TestReadMigrationReportAcceptsProtectedBoundedFile(t *testing.T) {
+	directory := t.TempDir()
+	report := filepath.Join(directory, "report.json")
+	contents := []byte(`{"schema_version":1}`)
+	require.NoError(t, os.WriteFile(report, contents, 0o600))
+
+	got, err := readMigrationReport(report)
+	require.NoError(t, err)
+	require.Equal(t, contents, got)
+}
