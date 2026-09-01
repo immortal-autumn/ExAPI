@@ -205,7 +205,7 @@ func (h *ProxyHandler) ImportData(c *gin.Context) {
 						Kind:     "proxy",
 						Name:     item.Name,
 						ProxyKey: key,
-						Message:  "update status failed: " + err.Error(),
+						Message:  "failed to synchronize existing proxy status: " + err.Error(),
 					})
 				}
 			}
@@ -291,7 +291,7 @@ func (h *ProxyHandler) ImportData(c *gin.Context) {
 					Kind:     "proxy",
 					Name:     item.Name,
 					ProxyKey: key,
-					Message:  "update status failed: " + err.Error(),
+					Message:  "failed to synchronize imported proxy status: " + err.Error(),
 				})
 			}
 		}
