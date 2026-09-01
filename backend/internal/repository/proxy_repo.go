@@ -276,8 +276,14 @@ func enqueueProxyProbeAccountChanges(ctx context.Context, exec sqlExecutor, acco
 }
 
 func (r *proxyRepository) Delete(ctx context.Context, id int64) error {
-	_, err := r.client.Proxy.Delete().Where(proxy.IDEQ(id)).Exec(ctx)
-	return err
+	deleted, err := r.client.Proxy.Delete().Where(proxy.IDEQ(id)).Exec(ctx)
+	if err != nil {
+		return err
+	}
+	if deleted == 0 {
+		return service.ErrProxyNotFound
+	}
+	return nil
 }
 
 func (r *proxyRepository) List(ctx context.Context, params pagination.PaginationParams) ([]service.Proxy, *pagination.PaginationResult, error) {

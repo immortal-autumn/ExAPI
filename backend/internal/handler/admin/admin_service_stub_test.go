@@ -28,6 +28,8 @@ type stubAdminService struct {
 	updatedProxyIDs                     []int64
 	updatedProxies                      []*service.UpdateProxyInput
 	testedProxyIDs                      []int64
+	lastBatchDeleteProxyIDs             []int64
+	batchDeleteProxiesErr               error
 	getUserErr                          error
 	createAccountErr                    error
 	createSparkShadowErr                error
@@ -645,6 +647,12 @@ func (s *stubAdminService) DeleteProxy(ctx context.Context, id int64) error {
 }
 
 func (s *stubAdminService) BatchDeleteProxies(ctx context.Context, ids []int64) (*service.ProxyBatchDeleteResult, error) {
+	s.mu.Lock()
+	s.lastBatchDeleteProxyIDs = append([]int64(nil), ids...)
+	s.mu.Unlock()
+	if s.batchDeleteProxiesErr != nil {
+		return nil, s.batchDeleteProxiesErr
+	}
 	return &service.ProxyBatchDeleteResult{DeletedIDs: ids}, nil
 }
 

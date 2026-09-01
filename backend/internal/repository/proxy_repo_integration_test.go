@@ -92,6 +92,11 @@ func (s *ProxyRepoSuite) TestDelete() {
 	s.Require().Error(err, "expected error after delete")
 }
 
+func (s *ProxyRepoSuite) TestDelete_NotFound() {
+	err := s.repo.Delete(s.ctx, 999999)
+	s.Require().ErrorIs(err, service.ErrProxyNotFound)
+}
+
 // --- List / ListWithFilters ---
 
 func (s *ProxyRepoSuite) TestList() {

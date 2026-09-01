@@ -212,7 +212,7 @@ func (h *ProxyHandler) Update(c *gin.Context) {
 // DELETE /api/v1/admin/proxies/:id
 func (h *ProxyHandler) Delete(c *gin.Context) {
 	proxyID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
+	if err != nil || proxyID <= 0 {
 		response.BadRequest(c, "Invalid proxy ID")
 		return
 	}
@@ -239,7 +239,13 @@ func (h *ProxyHandler) BatchDelete(c *gin.Context) {
 		return
 	}
 
-	result, err := h.adminService.BatchDeleteProxies(c.Request.Context(), req.IDs)
+	ids := normalizeInt64IDList(req.IDs)
+	if len(ids) == 0 {
+		response.BadRequest(c, "ids is required")
+		return
+	}
+
+	result, err := h.adminService.BatchDeleteProxies(c.Request.Context(), ids)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

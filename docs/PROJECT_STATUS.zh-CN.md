@@ -24,6 +24,20 @@
 `gh attestation verify` 验证。生产环境只使用上述 immutable digest，不使用
 `latest` 等可变标签。GHCR 包名仍保留 `sub2api2personal` 以兼容现有部署。
 
+## 管理员专用化审查分支
+
+非生产审查分支 `revision/exapi-v0.2.1` 截至 2026-09-01 已继续完成管理员界面加固。
+以下可独立回滚的提交均已通过各自的本地重点/完整检查，以及 GitHub CI 和安全扫描：
+
+- `30f5dc180`：日常代理凭据最小暴露；
+- `3453be8cf`：代理破坏性操作的界面防护；
+- `faca8d3e0`：代理创建/更新请求的进行中防重复提交保护；
+- `99cfb8a64`：代理 JSON 导入请求的进行中防重复提交保护。
+
+下一项未推送的审查范围是代理删除接口的输入和结果正确性。它尚未纳入上面的生产
+版本，也没有部署；在按发布流程完成单独验证并 promotion 前，生产仍保持 v0.2.6 的
+已审查 immutable digest。
+
 ## OPC 生产部署
 
 生产部署位于 `/opt/sub2api`，Compose project 为 `sub2api`，当前输入为：

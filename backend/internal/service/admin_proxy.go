@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -159,6 +160,7 @@ func (s *adminServiceImpl) DeleteProxy(ctx context.Context, id int64) error {
 
 func (s *adminServiceImpl) BatchDeleteProxies(ctx context.Context, ids []int64) (*ProxyBatchDeleteResult, error) {
 	result := &ProxyBatchDeleteResult{}
+	ids = normalizeProxyIDList(ids)
 	if len(ids) == 0 {
 		return result, nil
 	}
@@ -190,6 +192,31 @@ func (s *adminServiceImpl) BatchDeleteProxies(ctx context.Context, ids []int64) 
 	}
 
 	return result, nil
+}
+
+// normalizeProxyIDList keeps destructive batch operations deterministic and
+// prevents duplicate or non-positive IDs from being processed more than once.
+// The HTTP handler rejects an empty normalized list; keeping the same guard in
+// the service protects callers that invoke the service directly.
+func normalizeProxyIDList(ids []int64) []int64 {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	out := make([]int64, 0, len(ids))
+	seen := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
 }
 
 func (s *adminServiceImpl) GetProxyAccounts(ctx context.Context, proxyID int64) ([]ProxyAccountSummary, error) {

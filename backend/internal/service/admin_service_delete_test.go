@@ -281,10 +281,13 @@ func (s *groupRepoStub) UpdateSortOrders(ctx context.Context, updates []GroupSor
 }
 
 type proxyRepoStub struct {
-	deleteErr    error
-	countErr     error
-	accountCount int64
-	deletedIDs   []int64
+	deleteErr        error
+	deleteErrByID    map[int64]error
+	countErr         error
+	accountCount     int64
+	accountCountByID map[int64]int64
+	deletedIDs       []int64
+	countedIDs       []int64
 }
 
 func (s *proxyRepoStub) Create(ctx context.Context, proxy *Proxy) error {
@@ -305,6 +308,9 @@ func (s *proxyRepoStub) Update(ctx context.Context, proxy *Proxy) error {
 
 func (s *proxyRepoStub) Delete(ctx context.Context, id int64) error {
 	s.deletedIDs = append(s.deletedIDs, id)
+	if err, ok := s.deleteErrByID[id]; ok {
+		return err
+	}
 	return s.deleteErr
 }
 
@@ -333,8 +339,12 @@ func (s *proxyRepoStub) ExistsByHostPortAuth(ctx context.Context, host string, p
 }
 
 func (s *proxyRepoStub) CountAccountsByProxyID(ctx context.Context, proxyID int64) (int64, error) {
+	s.countedIDs = append(s.countedIDs, proxyID)
 	if s.countErr != nil {
 		return 0, s.countErr
+	}
+	if count, ok := s.accountCountByID[proxyID]; ok {
+		return count, nil
 	}
 	return s.accountCount, nil
 }
@@ -661,12 +671,12 @@ func TestAdminService_DeleteProxy_Success(t *testing.T) {
 	require.Equal(t, []int64{7}, repo.deletedIDs)
 }
 
-func TestAdminService_DeleteProxy_Idempotent(t *testing.T) {
-	repo := &proxyRepoStub{}
+func TestAdminService_DeleteProxy_NotFound(t *testing.T) {
+	repo := &proxyRepoStub{deleteErr: ErrProxyNotFound}
 	svc := &adminServiceImpl{proxyRepo: repo}
 
 	err := svc.DeleteProxy(context.Background(), 404)
-	require.NoError(t, err)
+	require.ErrorIs(t, err, ErrProxyNotFound)
 	require.Equal(t, []int64{404}, repo.deletedIDs)
 }
 
@@ -686,6 +696,36 @@ func TestAdminService_DeleteProxy_Error(t *testing.T) {
 
 	err := svc.DeleteProxy(context.Background(), 33)
 	require.ErrorIs(t, err, deleteErr)
+}
+
+func TestAdminService_BatchDeleteProxies_NormalizesIDsAndReportsMissing(t *testing.T) {
+	repo := &proxyRepoStub{
+		accountCountByID: map[int64]int64{3: 1},
+		deleteErrByID:    map[int64]error{2: ErrProxyNotFound},
+	}
+	svc := &adminServiceImpl{proxyRepo: repo}
+
+	result, err := svc.BatchDeleteProxies(context.Background(), []int64{3, 1, 3, 2, 0, -4, 1})
+	require.NoError(t, err)
+	require.Equal(t, []int64{1}, result.DeletedIDs)
+	require.Equal(t, []ProxyBatchDeleteSkipped{
+		{ID: 2, Reason: ErrProxyNotFound.Error()},
+		{ID: 3, Reason: ErrProxyInUse.Error()},
+	}, result.Skipped)
+	require.Equal(t, []int64{1, 2}, repo.deletedIDs)
+	require.Equal(t, []int64{1, 2, 3}, repo.countedIDs)
+}
+
+func TestAdminService_BatchDeleteProxies_AllInvalidIDsAreIgnored(t *testing.T) {
+	repo := &proxyRepoStub{}
+	svc := &adminServiceImpl{proxyRepo: repo}
+
+	result, err := svc.BatchDeleteProxies(context.Background(), []int64{0, -1})
+	require.NoError(t, err)
+	require.Empty(t, result.DeletedIDs)
+	require.Empty(t, result.Skipped)
+	require.Empty(t, repo.deletedIDs)
+	require.Empty(t, repo.countedIDs)
 }
 
 func TestAdminService_DeleteRedeemCode_Success(t *testing.T) {

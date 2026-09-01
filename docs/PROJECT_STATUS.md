@@ -34,6 +34,23 @@ multi-architecture image build, OCI label verification, SPDX SBOM generation,
 and provenance/SBOM attestations. The attested manifest digest is the same
 digest recorded above; the release also passed `gh attestation verify`.
 
+## Administrator hardening review branch
+
+The non-production review branch `revision/exapi-v0.2.1` has continued
+administrator-surface hardening through 2026-09-01. The following independently
+revertible commits have passed their local focused/full checks and GitHub CI and
+security scans:
+
+- `30f5dc180`: routine proxy credential minimization;
+- `3453be8cf`: proxy destructive-action UI guards;
+- `faca8d3e0`: proxy create/update in-flight submission guards;
+- `99cfb8a64`: proxy JSON-import in-flight submission guard.
+
+The next unpushed review scope is proxy deletion input/result correctness. It is
+not part of the production release above and has not been deployed. Production
+remains on the reviewed v0.2.6 digest until a separately validated release is
+promoted under the rollout procedure.
+
 ## Production deployment
 
 Production runs the digest above as Docker Compose project `sub2api` from

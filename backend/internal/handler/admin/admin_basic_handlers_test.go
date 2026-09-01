@@ -341,6 +341,48 @@ func TestProxyHandlerEndpoints(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 }
 
+func TestProxyHandlerBatchDeleteNormalizesIDs(t *testing.T) {
+	router, adminSvc := setupAdminRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/admin/proxies/batch-delete",
+		bytes.NewBufferString(`{"ids":[4,2,4,0,-1]}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, []int64{2, 4}, adminSvc.lastBatchDeleteProxyIDs)
+}
+
+func TestProxyHandlerBatchDeleteRejectsInvalidIDs(t *testing.T) {
+	router, adminSvc := setupAdminRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/admin/proxies/batch-delete",
+		bytes.NewBufferString(`{"ids":[0,-1]}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Empty(t, adminSvc.lastBatchDeleteProxyIDs)
+}
+
+func TestProxyHandlerDeleteRejectsNonPositiveID(t *testing.T) {
+	router, _ := setupAdminRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/proxies/0", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
 func TestRedeemHandlerEndpoints(t *testing.T) {
 	router, _ := setupAdminRouter()
 
