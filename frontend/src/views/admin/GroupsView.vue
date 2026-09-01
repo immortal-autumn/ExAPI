@@ -3702,8 +3702,9 @@
       :confirm-text="t('common.delete')"
       :cancel-text="t('common.cancel')"
       :danger="true"
+      :loading="deleteSubmitting"
       @confirm="confirmDelete"
-      @cancel="showDeleteDialog = false"
+      @cancel="cancelDelete"
     />
 
     <ConfirmDialog
@@ -4675,6 +4676,7 @@ const submitting = ref(false);
 const sortSubmitting = ref(false);
 const editingGroup = ref<AdminGroup | null>(null);
 const deletingGroup = ref<AdminGroup | null>(null);
+const deleteSubmitting = ref(false);
 const duplicatingGroupIds = reactive(new Set<number>());
 const showRateMultipliersModal = ref(false);
 const rateMultipliersGroup = ref<AdminGroup | null>(null);
@@ -6174,24 +6176,34 @@ const previewCompositeRoute = async () => {
 };
 
 const handleDelete = (group: AdminGroup) => {
+  if (deleteSubmitting.value) return;
   deletingGroup.value = group;
   showDeleteDialog.value = true;
 };
 
-const confirmDelete = async () => {
-  if (!deletingGroup.value) return;
+const cancelDelete = () => {
+  if (deleteSubmitting.value) return;
+  showDeleteDialog.value = false;
+  deletingGroup.value = null;
+};
 
+const confirmDelete = async () => {
+  if (!deletingGroup.value || deleteSubmitting.value) return;
+
+  deleteSubmitting.value = true;
   try {
     await adminAPI.groups.delete(deletingGroup.value.id);
     appStore.showSuccess(t("admin.groups.groupDeleted"));
     showDeleteDialog.value = false;
     deletingGroup.value = null;
-    loadGroups();
+    await loadGroups();
   } catch (error: any) {
     appStore.showError(
       error.response?.data?.detail || t("admin.groups.failedToDelete"),
     );
     console.error("Error deleting group:", error);
+  } finally {
+    deleteSubmitting.value = false;
   }
 };
 

@@ -8,6 +8,7 @@ import GroupsView from '@/views/admin/GroupsView.vue'
 const {
   listGroups,
   duplicateGroup,
+  deleteGroup,
   getModelsListCandidates,
   getUsageSummary,
   getCapacitySummary,
@@ -17,6 +18,7 @@ const {
 } = vi.hoisted(() => ({
   listGroups: vi.fn(),
   duplicateGroup: vi.fn(),
+  deleteGroup: vi.fn(),
   getModelsListCandidates: vi.fn(),
   getUsageSummary: vi.fn(),
   getCapacitySummary: vi.fn(),
@@ -37,7 +39,7 @@ vi.mock('@/api/operator', () => ({
       getAll: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
-      delete: vi.fn(),
+      delete: deleteGroup,
       updateSortOrder: vi.fn()
     },
     accounts: {
@@ -136,6 +138,17 @@ const DataTableStub = defineComponent({
   template: '<div><div v-for="row in data" :key="row.id"><slot name="cell-actions" :row="row" /></div></div>'
 })
 
+const ConfirmDialogStub = defineComponent({
+  props: ['show', 'loading'],
+  emits: ['confirm', 'cancel'],
+  template: `
+    <div v-if="show" data-testid="confirm-dialog" :data-loading="String(loading)">
+      <button data-testid="confirm-delete" :disabled="loading" @click="$emit('confirm')">confirm</button>
+      <button data-testid="cancel-delete" :disabled="loading" @click="$emit('cancel')">cancel</button>
+    </div>
+  `
+})
+
 function mountView() {
   return mount(GroupsView, {
     global: {
@@ -145,7 +158,7 @@ function mountView() {
         DataTable: DataTableStub,
         Pagination: true,
         BaseDialog: true,
-        ConfirmDialog: true,
+        ConfirmDialog: ConfirmDialogStub,
         EmptyState: true,
         Select: true,
         PlatformIcon: true,
@@ -166,6 +179,7 @@ describe('GroupsView duplicate action', () => {
     for (const fn of [
       listGroups,
       duplicateGroup,
+      deleteGroup,
       getModelsListCandidates,
       getUsageSummary,
       getCapacitySummary,
@@ -189,6 +203,7 @@ describe('GroupsView duplicate action', () => {
       name: 'Primary (Copy)',
       status: 'inactive'
     })
+    deleteGroup.mockResolvedValue(undefined)
     getModelsListCandidates.mockResolvedValue([])
     getUsageSummary.mockResolvedValue([])
     getCapacitySummary.mockResolvedValue([])
@@ -268,6 +283,53 @@ describe('GroupsView duplicate action', () => {
     expect(showSuccess).toHaveBeenCalledWith('admin.groups.duplicateSuccess')
     expect(showError).toHaveBeenCalledWith('admin.groups.failedToLoad')
     expect(showError).not.toHaveBeenCalledWith('admin.groups.duplicateFailed')
+    wrapper.unmount()
+  })
+
+  it('sends one delete while confirmation is pending and refreshes after success', async () => {
+    let resolveDelete!: () => void
+    deleteGroup.mockImplementationOnce(() => new Promise<void>((resolve) => { resolveDelete = resolve }))
+    const wrapper = mountView()
+    await flushPromises()
+
+    const deleteButton = wrapper.findAll('button').find(button => button.text() === 'common.delete')
+    expect(deleteButton).toBeTruthy()
+    await deleteButton!.trigger('click')
+
+    const confirmButton = wrapper.get('[data-testid="confirm-delete"]')
+    void confirmButton.trigger('click')
+    void confirmButton.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(deleteGroup).toHaveBeenCalledTimes(1)
+    expect(deleteGroup).toHaveBeenCalledWith(42)
+    expect(wrapper.get('[data-testid="confirm-dialog"]').attributes('data-loading')).toBe('true')
+    expect(confirmButton.attributes('disabled')).toBeDefined()
+
+    resolveDelete()
+    await flushPromises()
+
+    expect(showSuccess).toHaveBeenCalledWith('admin.groups.groupDeleted')
+    expect(listGroups).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[data-testid="confirm-dialog"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('restores delete confirmation after failure so the operator can retry or cancel', async () => {
+    deleteGroup.mockRejectedValueOnce(new Error('delete failed'))
+    const wrapper = mountView()
+    await flushPromises()
+
+    const deleteButton = wrapper.findAll('button').find(button => button.text() === 'common.delete')
+    await deleteButton!.trigger('click')
+    await wrapper.get('[data-testid="confirm-delete"]').trigger('click')
+    await flushPromises()
+
+    expect(showError).toHaveBeenCalledWith('admin.groups.failedToDelete')
+    expect(wrapper.get('[data-testid="confirm-dialog"]').attributes('data-loading')).toBe('false')
+
+    await wrapper.get('[data-testid="cancel-delete"]').trigger('click')
+    expect(wrapper.find('[data-testid="confirm-dialog"]').exists()).toBe(false)
     wrapper.unmount()
   })
 })

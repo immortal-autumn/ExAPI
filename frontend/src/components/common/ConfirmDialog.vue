@@ -10,21 +10,30 @@
         <button
           @click="handleCancel"
           type="button"
-          class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-200 dark:hover:bg-dark-600 dark:focus:ring-offset-dark-800"
+          :disabled="loading"
+          :class="[
+            'rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-200 dark:hover:bg-dark-600 dark:focus:ring-offset-dark-800',
+          ]"
         >
           {{ cancelText }}
         </button>
         <button
           @click="handleConfirm"
           type="button"
+          :disabled="loading"
+          :aria-busy="loading"
           :class="[
-            'rounded-md px-4 py-2 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-dark-800',
+            'inline-flex items-center rounded-md px-4 py-2 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-dark-800',
             danger
               ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
               : 'bg-primary-600 hover:bg-primary-700 focus:ring-primary-500'
           ]"
         >
-          {{ confirmText }}
+          <svg v-if="loading" class="-ml-1 mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+          {{ loading ? t('common.processing') : confirmText }}
         </button>
       </div>
     </template>
@@ -45,6 +54,7 @@ interface Props {
   confirmText?: string
   cancelText?: string
   danger?: boolean
+  loading?: boolean
 }
 
 interface Emits {
@@ -62,10 +72,12 @@ const cancelText = computed(() => props.cancelText || t('common.cancel'))
 const emit = defineEmits<Emits>()
 
 const handleConfirm = () => {
+  if (props.loading) return
   emit('confirm')
 }
 
 const handleCancel = () => {
+  if (props.loading) return
   emit('cancel')
 }
 </script>
