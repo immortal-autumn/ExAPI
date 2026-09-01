@@ -478,20 +478,20 @@ type CreateProxyInput struct {
 }
 
 type UpdateProxyInput struct {
-	Name              string
-	Protocol          string
-	Host              string
-	Port              int
-	Username          string
+	Name     string
+	Protocol string
+	Host     string
+	Port     int
+	Username string
 	// UsernameSet distinguishes an omitted username from an explicit empty
 	// value, which clears stored proxy authentication.
-	UsernameSet       bool
-	Password          string
+	UsernameSet bool
+	Password    string
 	// PasswordSet distinguishes an omitted password from an explicit empty
 	// value, which clears stored proxy authentication.
-	PasswordSet       bool
-	Status            string
-	ExpiresAt         *time.Time
+	PasswordSet bool
+	Status      string
+	ExpiresAt   *time.Time
 	// The *Set flags preserve partial-update semantics for nullable/zero values.
 	ExpiresAtSet      bool
 	FallbackMode      string
