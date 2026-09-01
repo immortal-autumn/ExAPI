@@ -108,4 +108,51 @@ describe('Proxy ImportDataModal', () => {
     expect(wrapper.emitted('imported')).toHaveLength(1)
     expect(wrapper.emitted('close')).toHaveLength(1)
   })
+
+  it('导入请求进行中时忽略重复提交', async () => {
+    const { operatorAPI } = await import('@/api/operator')
+    let resolveImport!: (value: {
+      proxy_created: number
+      proxy_reused: number
+      proxy_failed: number
+      account_created: number
+      account_failed: number
+    }) => void
+    vi.mocked(operatorAPI.proxies.importData).mockImplementationOnce(
+      () => new Promise(resolve => { resolveImport = resolve })
+    )
+    const wrapper = mount(ImportDataModal, {
+      props: { show: true },
+      global: {
+        stubs: {
+          BaseDialog: { template: '<div><slot /><slot name="footer" /></div>' }
+        }
+      }
+    })
+
+    const input = wrapper.find('input[type="file"]')
+    const content = JSON.stringify({ proxies: [{ name: 'only-once' }], accounts: [] })
+    const file = new File([content], 'once.json', { type: 'application/json' })
+    Object.defineProperty(file, 'text', { value: () => Promise.resolve(content) })
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+
+    const form = wrapper.find('form')
+    void form.trigger('submit')
+    await flushPromises()
+    void form.trigger('submit')
+    await wrapper.vm.$nextTick()
+
+    expect(operatorAPI.proxies.importData).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('button.btn-primary').attributes('disabled')).toBeDefined()
+
+    resolveImport({
+      proxy_created: 1,
+      proxy_reused: 0,
+      proxy_failed: 0,
+      account_created: 0,
+      account_failed: 0,
+    })
+    await flushPromises()
+  })
 })

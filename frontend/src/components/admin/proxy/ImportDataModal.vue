@@ -27,7 +27,7 @@
             </div>
             <div class="text-xs text-gray-500 dark:text-dark-400">JSON (.json)</div>
           </div>
-          <button type="button" class="btn btn-secondary shrink-0" @click="openFilePicker">
+          <button type="button" class="btn btn-secondary shrink-0" :disabled="importing" @click="openFilePicker">
             {{ t('common.chooseFile') }}
           </button>
         </div>
@@ -36,6 +36,7 @@
           type="file"
           class="hidden"
           accept="application/json,.json"
+          :disabled="importing"
           @change="handleFileChange"
         />
       </div>
@@ -139,10 +140,12 @@ watch(
 )
 
 const openFilePicker = () => {
+  if (importing.value) return
   fileInput.value?.click()
 }
 
 const handleFileChange = (event: Event) => {
+  if (importing.value) return
   const target = event.target as HTMLInputElement
   const selected = target.files?.[0] || null
   if (!selected) return
@@ -189,6 +192,7 @@ const readFileAsText = async (sourceFile: File): Promise<string> => {
 }
 
 const handleImport = async () => {
+  if (importing.value) return
   if (!file.value) {
     appStore.showError(t('admin.proxies.dataImportSelectFile'))
     return
