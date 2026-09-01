@@ -800,8 +800,9 @@
       :confirm-text="t('common.delete')"
       :cancel-text="t('common.cancel')"
       :danger="true"
+      :loading="deletingProxySubmitting"
       @confirm="confirmDelete"
-      @cancel="showDeleteDialog = false"
+      @cancel="cancelDelete"
     />
 
     <!-- Batch Delete Confirmation Dialog -->
@@ -812,8 +813,9 @@
       :confirm-text="t('common.delete')"
       :cancel-text="t('common.cancel')"
       :danger="true"
+      :loading="batchDeleteSubmitting"
       @confirm="confirmBatchDelete"
-      @cancel="showBatchDeleteDialog = false"
+      @cancel="cancelBatchDelete"
     />
     <ConfirmDialog
       :show="showExportDataDialog"
@@ -1058,6 +1060,8 @@ const showBatchDeleteDialog = ref(false)
 const showExportDataDialog = ref(false)
 const showAccountsModal = ref(false)
 const submitting = ref(false)
+const deletingProxySubmitting = ref(false)
+const batchDeleteSubmitting = ref(false)
 const exportingData = ref(false)
 const testingProxyIds = ref<Set<number>>(new Set())
 const qualityCheckingProxyIds = ref<Set<number>>(new Set())
@@ -1071,7 +1075,6 @@ const {
   isSelected,
   select,
   deselect,
-  clear: clearSelectedProxies,
   removeMany: removeSelectedProxies,
   toggleVisible,
   batchUpdate
@@ -1922,6 +1925,7 @@ const handleExportData = async () => {
 }
 
 const handleDelete = (proxy: Proxy) => {
+  if (deletingProxySubmitting.value) return
   if ((proxy.account_count || 0) > 0) {
     appStore.showError(t('admin.proxies.deleteBlockedInUse'))
     return
@@ -1931,35 +1935,52 @@ const handleDelete = (proxy: Proxy) => {
 }
 
 const openBatchDelete = () => {
-  if (selectedCount.value === 0) {
+  if (batchDeleteSubmitting.value || selectedCount.value === 0) {
     return
   }
   showBatchDeleteDialog.value = true
 }
 
-const confirmDelete = async () => {
-  if (!deletingProxy.value) return
+const cancelDelete = () => {
+  if (deletingProxySubmitting.value) return
+  showDeleteDialog.value = false
+  deletingProxy.value = null
+}
 
+const cancelBatchDelete = () => {
+  if (batchDeleteSubmitting.value) return
+  showBatchDeleteDialog.value = false
+}
+
+const confirmDelete = async () => {
+  const target = deletingProxy.value
+  if (!target || deletingProxySubmitting.value) return
+
+  deletingProxySubmitting.value = true
   try {
-    await adminAPI.proxies.delete(deletingProxy.value.id)
+    await adminAPI.proxies.delete(target.id)
     appStore.showSuccess(t('admin.proxies.proxyDeleted'))
     showDeleteDialog.value = false
-    removeSelectedProxies([deletingProxy.value.id])
+    removeSelectedProxies([target.id])
     deletingProxy.value = null
-    loadProxies()
+    await loadProxies()
   } catch (error: any) {
     appStore.showError(error.response?.data?.detail || t('admin.proxies.failedToDelete'))
     console.error('Error deleting proxy:', error)
+  } finally {
+    deletingProxySubmitting.value = false
   }
 }
 
 const confirmBatchDelete = async () => {
+  if (batchDeleteSubmitting.value) return
   const ids = Array.from(selectedProxyIds.value)
   if (ids.length === 0) {
     showBatchDeleteDialog.value = false
     return
   }
 
+  batchDeleteSubmitting.value = true
   try {
     const result = await adminAPI.proxies.batchDelete(ids)
     const deleted = result.deleted_ids?.length || 0
@@ -1971,12 +1992,14 @@ const confirmBatchDelete = async () => {
       appStore.showInfo(t('admin.proxies.batchDeleteSkipped', { skipped }))
     }
 
-    clearSelectedProxies()
+    removeSelectedProxies(result.deleted_ids || [])
     showBatchDeleteDialog.value = false
-    loadProxies()
+    await loadProxies()
   } catch (error: any) {
     appStore.showError(error.response?.data?.detail || t('admin.proxies.batchDeleteFailed'))
     console.error('Error batch deleting proxies:', error)
+  } finally {
+    batchDeleteSubmitting.value = false
   }
 }
 
