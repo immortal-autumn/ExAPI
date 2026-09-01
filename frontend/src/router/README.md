@@ -1,276 +1,128 @@
-# Vue Router Configuration
+# Private operator router
 
-## Overview
+This directory defines the browser route contract for ExAPI. The product has
+one mode: an administrator-only control plane reached through the private
+control listener. English is the default UI language; every operator-facing
+route and retirement message has English and Simplified Chinese locale keys.
 
-This directory contains the Vue Router configuration for the ExAPI frontend application. The router implements a comprehensive navigation system with authentication guards, role-based access control, and lazy loading.
+本目录定义 ExAPI 的浏览器路由契约。产品只有一种模式：通过私有控制监听器
+访问的管理员专用控制面。界面默认使用英文；所有管理员路由和退役提示都提供
+英文及简体中文文案。
 
-## Files
+## Route contract
 
-- **index.ts**: Main router configuration with route definitions and navigation guards
-- **meta.d.ts**: TypeScript type definitions for route meta fields
+### Compatibility redirects
 
-## Route Structure
+| Path | Destination | Purpose |
+| --- | --- | --- |
+| `/`, `/home`, `/admin` | `/admin/dashboard` | Stable entry points |
+| `/keys` | `/admin/api-keys` | Legacy API-key bookmark |
+| `/admin/channels` | `/admin/channels/pricing` | Legacy channel bookmark |
 
-### Public Routes (No Authentication Required)
+### Operator routes
 
-| Path        | Component    | Description            |
-| ----------- | ------------ | ---------------------- |
-| `/login`    | LoginView    | User login page        |
-| `/register` | RegisterView | User registration page |
+All routes below require the private control-plane boundary and administrator
+identity. The backend remains authoritative; a browser route is not an access
+control mechanism.
 
-### User Routes (Authentication Required)
+| Path | View | Purpose |
+| --- | --- | --- |
+| `/admin/dashboard` | `admin/DashboardView.vue` | Cockpit overview |
+| `/admin/api-keys` | `admin/AdminAPIKeysView.vue` | Operator API-key management |
+| `/batch-image` | `user/BatchImageGuideView.vue` | Operator batch-image jobs |
+| `/admin/accounts` | `admin/AccountsView.vue` | Provider accounts and OAuth imports |
+| `/admin/groups` | `admin/GroupsView.vue` | Routing groups and pricing |
+| `/admin/proxies` | `admin/ProxiesView.vue` | Proxy lifecycle and diagnostics |
+| `/admin/channels/pricing` | `admin/ChannelsView.vue` | Channel pricing and mappings |
+| `/admin/channels/monitor` | `admin/ChannelMonitorView.vue` | Channel health monitoring |
+| `/admin/ops` | `admin/ops/OpsDashboard.vue` | Runtime operations and alerts |
+| `/admin/usage` | `admin/UsageView.vue` | Gateway usage records |
+| `/admin/audit-logs` | `admin/AuditLogView.vue` | Immutable operator audit view |
+| `/admin/risk-control` | `admin/RiskControlView.vue` | Content/risk controls |
+| `/admin/prompt-audit` | `features/prompt-audit/PromptAuditView.vue` | Prompt input audit |
+| `/admin/settings` | `admin/PrivateSettingsView.vue` | Private gateway settings |
 
-| Path         | Component     | Description                  |
-| ------------ | ------------- | ---------------------------- |
-| `/`          | -             | Redirects to `/dashboard`    |
-| `/dashboard` | DashboardView | User dashboard with stats    |
-| `/keys`      | KeysView      | API key management           |
-| `/usage`     | UsageView     | Usage records and statistics |
-| `/redeem`    | RedeemView    | Redeem code interface        |
-| `/profile`   | ProfileView   | User profile settings        |
+### Retired customer routes
 
-### Admin Routes (Admin Role Required)
+Former customer entry points such as `/register`, `/dashboard`, `/profile`,
+`/payment/*`, `/subscriptions/*`, `/redeem/*`, and `/affiliate/*` are retained
+only as an explicit retirement page for bookmarked browser URLs. They do not
+load customer components or customer API clients. The backend returns
+`410 Gone` with code `CUSTOMER_SURFACE_RETIRED` for retired customer API roots.
 
-| Path               | Component          | Description                     |
-| ------------------ | ------------------ | ------------------------------- |
-| `/admin`           | -                  | Redirects to `/admin/dashboard` |
-| `/admin/dashboard` | AdminDashboardView | Admin dashboard                 |
-| `/admin/users`     | AdminUsersView     | User management                 |
-| `/admin/groups`    | AdminGroupsView    | Group management                |
-| `/admin/accounts`  | AdminAccountsView  | Account management              |
-| `/admin/proxies`   | AdminProxiesView   | Proxy management                |
-| `/admin/redeem`    | AdminRedeemView    | Redeem code management          |
+旧客户入口（如 `/register`、`/dashboard`、`/profile`、`/payment/*`、
+`/subscriptions/*`、`/redeem/*` 和 `/affiliate/*`）仅为书签兼容保留退役页面。
+它们不会加载普通用户组件或客户 API 客户端。后端对已退役的客户 API 根路径
+返回带有 `CUSTOMER_SURFACE_RETIRED` 代码的 `410 Gone`。
 
-### Special Routes
+Unknown paths use `NotFoundView.vue`. A retired route and an unknown route are
+intentionally different: retirement communicates a deliberate product removal,
+while 404 communicates that no route exists.
 
-| Path              | Component    | Description    |
-| ----------------- | ------------ | -------------- |
-| `/:pathMatch(.*)` | NotFoundView | 404 error page |
+## Navigation lifecycle
 
-## Navigation Guards
+`createAppRouter` in `index.ts` performs the following lifecycle:
 
-### Authentication Guard (beforeEach)
+1. Establishes the peer-authenticated operator identity with `authStore.checkAuth()`.
+2. Resolves the localized document title.
+3. Loads risk-control settings before risk-control routes and redirects only on an
+   explicit, successfully loaded disable flag.
+4. Starts and ends navigation-loading state and prefetches the next route.
+5. Retries one dynamic chunk load after a deployment update, then reports a
+   persistent cache error without an infinite reload loop.
 
-The router implements a comprehensive navigation guard that:
+`requiresAuth` and `requiresAdmin` metadata documents the control-plane contract
+for shared components. The private listener, operator middleware, and backend
+handlers enforce the actual boundary.
 
-1. **Sets Page Title**: Updates document title based on route meta
-2. **Checks Authentication**:
-   - Public routes (`requiresAuth: false`) are accessible without login
-   - Protected routes require authentication
-   - Redirects to `/login` if not authenticated
-3. **Prevents Double Login**:
-   - Redirects authenticated users away from login/register pages
-4. **Role-Based Access Control**:
-   - Admin routes (`requiresAdmin: true`) require admin role
-   - Non-admin users are redirected to `/dashboard`
-5. **Preserves Intended Destination**:
-   - Saves original URL in query parameter for post-login redirect
+`index.ts` 中的 `createAppRouter` 生命周期如下：
 
-### Flow Diagram
+1. 通过 `authStore.checkAuth()` 建立对等节点认证的管理员身份。
+2. 解析本地化页面标题。
+3. 在进入风控路由前加载风控设置，只有成功加载且明确关闭时才重定向。
+4. 管理导航加载状态，并预取下一路由。
+5. 部署更新导致动态 chunk 加载失败时最多重试一次，避免无限刷新。
 
-```
-User navigates to route
-        ↓
-Set page title from meta
-        ↓
-Is route public? ──Yes──→ Already authenticated? ──Yes──→ Redirect to /dashboard
-        ↓ No                                        ↓ No
-        ↓                                      Allow access
-        ↓
-Is user authenticated? ──No──→ Redirect to /login with redirect query
-        ↓ Yes
-        ↓
-Requires admin role? ──Yes──→ Is user admin? ──No──→ Redirect to /dashboard
-        ↓ No                                  ↓ Yes
-        ↓                                     ↓
-Allow access ←────────────────────────────────┘
-```
+`requiresAuth` 与 `requiresAdmin` 元数据用于记录共享组件契约；真正的边界由
+私有监听器、管理员中间件和后端 handler 强制执行。
 
-## Route Meta Fields
+## Lazy loading and security
 
-Each route can define the following meta fields:
+All operator views use dynamic imports. Keep customer/payment/auth modules out of
+the private initial graph; `frontend/check-private-bundle.mjs` rejects forbidden
+chunks and API strings during the production build. Never treat route hiding as
+authorization, and never add secrets, tokens, environment files, or database
+exports to the frontend bundle.
 
-```typescript
-interface RouteMeta {
-  requiresAuth?: boolean // Default: true (requires authentication)
-  requiresAdmin?: boolean // Default: false (admin access only)
-  title?: string // Page title
-  breadcrumbs?: Array<{
-    // Breadcrumb navigation
-    label: string
-    to?: string
-  }>
-  icon?: string // Icon for navigation menu
-  hideInMenu?: boolean // Hide from navigation menu
-}
-```
+所有管理员视图都使用动态导入。应将客户、支付、认证模块排除在私有初始图之外；
+生产构建期间 `frontend/check-private-bundle.mjs` 会拒绝禁用 chunk 和 API 字符串。
+路由隐藏不能替代授权，前端 bundle 也不得包含密钥、token、环境文件或数据库导出。
 
-## Lazy Loading
+## Testing
 
-All route components use dynamic imports for code splitting:
+Run from `frontend/`:
 
-```typescript
-component: () => import('@/views/user/DashboardView.vue')
+```bash
+pnpm vitest run src/router/__tests__/singleUserRouteMatrix.spec.ts \
+  src/router/__tests__/singleUserGatewayRoutes.spec.ts \
+  src/components/layout/__tests__/AppSidebar.spec.ts
+pnpm vue-tsc --noEmit
 ```
 
-Benefits:
+The route matrix must contain only the private operator contract, compatibility
+redirects, explicit retirement routes, and the catch-all 404 route. When a route
+changes, update `privateRoutes.ts`, `singleUserProduct.ts`, the relevant locale
+keys, and this document in the same reviewed change.
 
-- Reduced initial bundle size
-- Faster initial page load
-- Components loaded on-demand
-- Automatic code splitting by Vite
+从 `frontend/` 目录运行：
 
-## Authentication Store Integration
-
-The router integrates with the Pinia auth store (`@/stores/auth`):
-
-```typescript
-const authStore = useAuthStore()
-
-// Check authentication status
-authStore.isAuthenticated
-
-// Check admin role
-authStore.isAdmin
+```bash
+pnpm vitest run src/router/__tests__/singleUserRouteMatrix.spec.ts \
+  src/router/__tests__/singleUserGatewayRoutes.spec.ts \
+  src/components/layout/__tests__/AppSidebar.spec.ts
+pnpm vue-tsc --noEmit
 ```
 
-## Usage Examples
-
-### Programmatic Navigation
-
-```typescript
-import { useRouter } from 'vue-router'
-
-const router = useRouter()
-
-// Navigate to a route
-router.push('/dashboard')
-
-// Navigate with query parameters
-router.push({
-  path: '/usage',
-  query: { filter: 'today' }
-})
-
-// Navigate to admin route (will be blocked if not admin)
-router.push('/admin/users')
-```
-
-### Route Links
-
-```vue
-<template>
-  <!-- Simple link -->
-  <router-link to="/dashboard">Dashboard</router-link>
-
-  <!-- Named route -->
-  <router-link :to="{ name: 'Keys' }">API Keys</router-link>
-
-  <!-- With query parameters -->
-  <router-link :to="{ path: '/usage', query: { page: 1 } }"> Usage </router-link>
-</template>
-```
-
-### Checking Current Route
-
-```typescript
-import { useRoute } from 'vue-router'
-
-const route = useRoute()
-
-// Check if on admin page
-const isAdminPage = route.path.startsWith('/admin')
-
-// Get route meta
-const requiresAdmin = route.meta.requiresAdmin
-```
-
-## Scroll Behavior
-
-The router implements automatic scroll management:
-
-- **Browser Navigation**: Restores saved scroll position
-- **New Routes**: Scrolls to top of page
-- **Hash Links**: Scrolls to anchor (when implemented)
-
-## Error Handling
-
-The router includes error handling for navigation failures:
-
-```typescript
-router.onError((error) => {
-  console.error('Router error:', error)
-})
-```
-
-## Testing Routes
-
-To test navigation guards and route access:
-
-1. **Public Route Access**: Visit `/login` without authentication
-2. **Protected Route**: Try accessing `/dashboard` without login (should redirect)
-3. **Admin Access**: Login as regular user, try `/admin/users` (should redirect to dashboard)
-4. **Admin Success**: Login as admin, access `/admin/users` (should succeed)
-5. **404 Handling**: Visit non-existent route (should show 404 page)
-
-## Development Tips
-
-### Adding New Routes
-
-1. Add route definition in `routes` array
-2. Create corresponding view component
-3. Set appropriate meta fields (`requiresAuth`, `requiresAdmin`)
-4. Use lazy loading with `() => import()`
-5. Update this README with route documentation
-
-### Debugging Navigation
-
-Enable Vue Router debug mode:
-
-```typescript
-// In browser console
-window.__VUE_ROUTER__ = router
-
-// Check current route
-router.currentRoute.value
-```
-
-### Common Issues
-
-**Issue**: 404 on page refresh
-
-- **Cause**: Server not configured for SPA
-- **Solution**: Configure server to serve `index.html` for all routes
-
-**Issue**: Navigation guard runs twice
-
-- **Cause**: Multiple `next()` calls
-- **Solution**: Ensure only one `next()` call per code path
-
-**Issue**: User data not loaded
-
-- **Cause**: Auth store not initialized
-- **Solution**: Call `authStore.checkAuth()` in App.vue or main.ts
-
-## Security Considerations
-
-1. **Client-Side Only**: Navigation guards are client-side; server must also validate
-2. **Token Validation**: API should verify JWT token on every request
-3. **Role Checking**: Backend must verify admin role, not just frontend
-4. **XSS Protection**: Vue automatically escapes template content
-5. **CSRF Protection**: Use CSRF tokens for state-changing operations
-
-## Performance Optimization
-
-1. **Lazy Loading**: All routes use dynamic imports
-2. **Code Splitting**: Vite automatically splits route chunks
-3. **Prefetching**: Consider adding route prefetch for common paths
-4. **Route Caching**: Vue Router caches component instances
-
-## Future Enhancements
-
-- [ ] Add breadcrumb navigation system
-- [ ] Implement route-based permissions beyond admin/user
-- [ ] Add route transition animations
-- [ ] Implement route prefetching for anticipated navigation
-- [ ] Add navigation analytics tracking
+路由矩阵只能包含私有管理员契约、兼容重定向、明确的退役页面以及 404 兜底路由。
+修改路由时，应在同一个评审变更中同步更新 `privateRoutes.ts`、
+`singleUserProduct.ts`、相关本地化文案和本文档。

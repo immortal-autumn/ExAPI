@@ -7,7 +7,7 @@ belong in `deploy/`; this page records the currently reviewed facts.
 
 ## Current release
 
-Last reviewed: **2026-09-01 (Europe/London)**
+Last reviewed: **2026-09-02 (Europe/London)**
 
 | Item | Current value |
 |---|---|
@@ -78,6 +78,17 @@ security scans:
   the browser does not yet attach a key automatically because a secret-redacted
   replay cannot recover a key when the original response is lost; this remains
   an explicit follow-up API contract decision.
+- `efca8436b`: extended the stable `410 Gone` retired-customer contract to the
+  historical personal-profile API prefix `/api/v1/users` and the public
+  model-plaza prefix `/api/v1/model-plaza`, with strict segment-boundary tests.
+  Production has not been changed.
+- `049ece0f3`: closed the remaining dynamic subscription gap under
+  `/api/v1/admin/groups/:id/subscriptions`; exact resource-segment matching
+  now returns the same bilingual `410 Gone` contract without retiring the
+  operational group API. Production has not been changed.
+- `9dacfcf2f`: bounded offline migration-report verification to 4 MiB and
+  added descriptor/path identity and post-read stability checks to fail closed
+  on replacement or mutation. Production has not been changed.
 
 The review branch also contains work hardening proxy partial updates: omitted
 lifecycle and credential fields are preserved, while explicit null/empty values
