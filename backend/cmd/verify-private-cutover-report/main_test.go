@@ -70,3 +70,16 @@ func TestReadMigrationReportAcceptsProtectedBoundedFile(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, contents, got)
 }
+
+func TestEnsureReportPathIdentityRejectsSymlink(t *testing.T) {
+	directory := t.TempDir()
+	report := filepath.Join(directory, "report.json")
+	link := filepath.Join(directory, "report-link.json")
+	contents := []byte(`{"schema_version":1}`)
+	require.NoError(t, os.WriteFile(report, contents, 0o600))
+	require.NoError(t, os.Symlink(report, link))
+	info, err := os.Stat(report)
+	require.NoError(t, err)
+
+	require.ErrorContains(t, ensureReportPathIdentity(link, info), "non-regular or symlink")
+}

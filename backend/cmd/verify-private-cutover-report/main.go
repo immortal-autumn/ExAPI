@@ -152,9 +152,12 @@ func readMigrationReport(path string) ([]byte, error) {
 }
 
 func ensureReportPathIdentity(path string, expected os.FileInfo) error {
-	current, err := os.Stat(path)
+	current, err := os.Lstat(path)
 	if err != nil {
 		return fmt.Errorf("stat migration report path: %w", err)
+	}
+	if current.Mode()&os.ModeSymlink != 0 || !current.Mode().IsRegular() || current.Mode().Perm() != 0o600 {
+		return errors.New("migration report path changed to a non-regular or symlink file")
 	}
 	if !os.SameFile(expected, current) {
 		return errors.New("migration report path changed while being read")
