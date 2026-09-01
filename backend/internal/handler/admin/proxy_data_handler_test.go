@@ -3,6 +3,7 @@ package admin
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -291,4 +292,39 @@ func TestProxyImportDataReusesAndTriggersLatencyProbe(t *testing.T) {
 		defer adminSvc.mu.Unlock()
 		return len(adminSvc.testedProxyIDs) == 1
 	}, time.Second, 10*time.Millisecond)
+}
+
+func TestProxyImportDataReportsStatusSynchronizationFailure(t *testing.T) {
+	router, adminSvc := setupProxyDataRouter()
+	adminSvc.proxies = []service.Proxy{{
+		ID: 1, Name: "proxy-a", Protocol: "http", Host: "127.0.0.1", Port: 8080,
+		Username: "user", Password: "pass", Status: service.StatusActive,
+	}}
+	adminSvc.updateProxyErr = errors.New("proxy update unavailable")
+
+	payload := map[string]any{
+		"data": map[string]any{
+			"type": dataType, "version": dataVersion,
+			"proxies": []map[string]any{{
+				"proxy_key": "http|127.0.0.1|8080|user|pass", "name": "proxy-a",
+				"protocol": "http", "host": "127.0.0.1", "port": 8080,
+				"username": "user", "password": "pass", "status": "inactive",
+			}},
+			"accounts": []map[string]any{},
+		},
+	}
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/proxies/data", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp proxyImportResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, 1, resp.Data.ProxyReused)
+	require.Equal(t, 1, resp.Data.ProxyFailed)
+	require.Len(t, resp.Data.Errors, 1)
+	require.Contains(t, resp.Data.Errors[0].Message, "synchronize existing proxy status")
 }

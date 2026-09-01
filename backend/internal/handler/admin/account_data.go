@@ -462,7 +462,7 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 							existingBackupProxyID = &bid
 						}
 					}
-					_, _ = h.adminService.UpdateProxy(ctx, existingID, &service.UpdateProxyInput{
+					if _, updateErr := h.adminService.UpdateProxy(ctx, existingID, &service.UpdateProxyInput{
 						Status:            normalizedStatus,
 						ExpiresAt:         existingExpiresAt,
 						ExpiresAtSet:      true,
@@ -478,7 +478,15 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 						Port:              proxy.Port,
 						Username:          proxy.Username,
 						Password:          proxy.Password,
-					})
+					}); updateErr != nil {
+						result.ProxyFailed++
+						result.Errors = append(result.Errors, DataImportError{
+							Kind:     "proxy",
+							Name:     item.Name,
+							ProxyKey: key,
+							Message:  fmt.Sprintf("failed to synchronize existing proxy status: %v", updateErr),
+						})
+					}
 				}
 			}
 			continue
@@ -540,7 +548,7 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 
 		if normalizedStatus != "" && normalizedStatus != created.Status {
 			// 新建后同步 status 时，传入完整字段，避免零值覆盖刚创建的有效期/fallback 配置。
-			_, _ = h.adminService.UpdateProxy(ctx, created.ID, &service.UpdateProxyInput{
+			if _, updateErr := h.adminService.UpdateProxy(ctx, created.ID, &service.UpdateProxyInput{
 				Status:            normalizedStatus,
 				ExpiresAt:         expiresAt,
 				ExpiresAtSet:      true,
@@ -556,7 +564,15 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 				Port:              created.Port,
 				Username:          created.Username,
 				Password:          created.Password,
-			})
+			}); updateErr != nil {
+				result.ProxyFailed++
+				result.Errors = append(result.Errors, DataImportError{
+					Kind:     "proxy",
+					Name:     item.Name,
+					ProxyKey: key,
+					Message:  fmt.Sprintf("failed to synchronize imported proxy status: %v", updateErr),
+				})
+			}
 		}
 	}
 
