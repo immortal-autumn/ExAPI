@@ -1333,6 +1333,7 @@ const parseBatchInput = () => {
 }
 
 const handleBatchCreate = async () => {
+  if (submitting.value) return
   if (batchParseResult.valid === 0) return
 
   submitting.value = true
@@ -1358,6 +1359,7 @@ const handleBatchCreate = async () => {
 }
 
 const handleCreateProxy = async () => {
+  if (submitting.value) return
   if (!createForm.name.trim()) {
     appStore.showError(t('admin.proxies.nameRequired'))
     return
@@ -1421,6 +1423,7 @@ const closeEditModal = () => {
 }
 
 const handleUpdateProxy = async () => {
+  if (submitting.value) return
   if (!editingProxy.value) return
   if (!editForm.name.trim()) {
     appStore.showError(t('admin.proxies.nameRequired'))

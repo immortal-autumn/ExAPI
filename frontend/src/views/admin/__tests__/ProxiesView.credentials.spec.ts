@@ -5,9 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Proxy } from '@/types'
 import ProxiesView from '@/views/admin/ProxiesView.vue'
 
-const { listProxies, getAllWithCount, updateProxy, copyToClipboard, showError } = vi.hoisted(() => ({
+const { listProxies, getAllWithCount, createProxy, batchCreateProxies, updateProxy, copyToClipboard, showError } = vi.hoisted(() => ({
   listProxies: vi.fn(),
   getAllWithCount: vi.fn(),
+  createProxy: vi.fn(),
+  batchCreateProxies: vi.fn(),
   updateProxy: vi.fn(),
   copyToClipboard: vi.fn(),
   showError: vi.fn(),
@@ -18,9 +20,9 @@ vi.mock('@/api/operator', () => ({
     proxies: {
       list: listProxies,
       getAllWithCount,
+      create: createProxy,
+      batchCreate: batchCreateProxies,
       update: updateProxy,
-      create: vi.fn(),
-      batchCreate: vi.fn(),
       testProxy: vi.fn(),
       checkProxyQuality: vi.fn(),
       exportData: vi.fn(),
@@ -107,6 +109,8 @@ describe('ProxiesView credential minimization', () => {
       items: [proxy], total: 1, page: 1, page_size: 20, pages: 1,
     })
     getAllWithCount.mockReset().mockResolvedValue([proxy])
+    createProxy.mockReset().mockResolvedValue(proxy)
+    batchCreateProxies.mockReset().mockResolvedValue({ created: 1, skipped: 0 })
     updateProxy.mockReset().mockResolvedValue(proxy)
     copyToClipboard.mockReset()
     showError.mockReset()
@@ -150,6 +154,66 @@ describe('ProxiesView credential minimization', () => {
 
     expect(updateProxy).toHaveBeenCalledTimes(1)
     expect(updateProxy).toHaveBeenCalledWith(7, expect.not.objectContaining({ password: expect.anything() }))
+    wrapper.unmount()
+  })
+
+  it('ignores repeated standard-create submissions while the request is pending', async () => {
+    let resolveCreate!: (value: Proxy) => void
+    createProxy.mockImplementationOnce(() => new Promise(resolve => { resolveCreate = resolve }))
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.findAll('button').find(button => button.text() === 'admin.proxies.createProxy')!.trigger('click')
+    const form = wrapper.get('#create-proxy-form')
+    const vm = wrapper.vm as any
+    vm.createForm.name = 'New proxy'
+    vm.createForm.host = 'new.proxy.example'
+    vm.createForm.port = 8080
+    void form.trigger('submit')
+    void form.trigger('submit')
+    await wrapper.vm.$nextTick()
+
+    expect(createProxy).toHaveBeenCalledTimes(1)
+    resolveCreate(proxy)
+    await flushPromises()
+    wrapper.unmount()
+  })
+
+  it('ignores repeated edit submissions while the request is pending', async () => {
+    let resolveUpdate!: (value: Proxy) => void
+    updateProxy.mockImplementationOnce(() => new Promise(resolve => { resolveUpdate = resolve }))
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
+    const form = wrapper.get('#edit-proxy-form')
+    void form.trigger('submit')
+    void form.trigger('submit')
+    await wrapper.vm.$nextTick()
+
+    expect(updateProxy).toHaveBeenCalledTimes(1)
+    resolveUpdate(proxy)
+    await flushPromises()
+    wrapper.unmount()
+  })
+
+  it('ignores repeated batch-create submissions while the request is pending', async () => {
+    let resolveBatch!: (value: { created: number; skipped: number }) => void
+    batchCreateProxies.mockImplementationOnce(() => new Promise(resolve => { resolveBatch = resolve }))
+    const wrapper = mountView()
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    vm.createMode = 'batch'
+    vm.batchParseResult.valid = 1
+    vm.batchParseResult.proxies = [{ protocol: 'http', host: 'batch.proxy.example', port: 8080, username: '', password: '' }]
+    void vm.handleBatchCreate()
+    void vm.handleBatchCreate()
+    await wrapper.vm.$nextTick()
+
+    expect(batchCreateProxies).toHaveBeenCalledTimes(1)
+    resolveBatch({ created: 1, skipped: 0 })
+    await flushPromises()
     wrapper.unmount()
   })
 })
