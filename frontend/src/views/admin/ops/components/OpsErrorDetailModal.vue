@@ -116,10 +116,13 @@
 
       </div>
 
-      <!-- Response content (client request -> error_body; upstream -> upstream_error_detail/message) -->
+      <!-- Response content is reduced to safe diagnostic metadata before rendering. -->
       <div class="rounded-xl bg-gray-50 p-6 dark:bg-dark-900">
         <h3 class="text-sm font-black uppercase tracking-wider text-gray-900 dark:text-white">{{ t('admin.ops.errorDetail.responseBody') }}</h3>
-        <pre class="mt-4 max-h-[520px] overflow-auto rounded-xl border border-gray-200 bg-white p-4 text-xs text-gray-800 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-100"><code>{{ prettyJSON(primaryResponseBody || '') }}</code></pre>
+        <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          {{ t('admin.ops.errorDetail.responseBodyRedacted') }}
+        </p>
+        <pre class="mt-4 max-h-[520px] overflow-auto rounded-xl border border-gray-200 bg-white p-4 text-xs text-gray-800 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-100"><code>{{ prettyJSON(primaryResponseBodySummary || {}) }}</code></pre>
       </div>
 
       <!-- Upstream errors list (only for request errors) -->
@@ -187,7 +190,7 @@
             <pre
               v-if="expandedUpstreamDetailIds.has(ev.id)"
               class="mt-3 max-h-[240px] overflow-auto rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs text-gray-800 dark:border-dark-700 dark:bg-dark-900 dark:text-gray-100"
-            ><code>{{ prettyJSON(getUpstreamResponsePreview(ev)) }}</code></pre>
+            ><code>{{ prettyJSON(buildRedactedResponseBodySummary(getUpstreamResponsePreview(ev), { upstreamStatusCode: ev.status_code ?? null }) || {}) }}</code></pre>
           </div>
         </div>
       </div>
@@ -204,6 +207,7 @@ import { useAppStore } from '@/stores/app'
 import { opsAPI, type OpsErrorDetail } from '@/api/admin/ops'
 import { formatDateTime } from '@/utils/format'
 import { resolvePrimaryResponseBody, resolveUpstreamPayload } from '../utils/errorDetailResponse'
+import { buildRedactedResponseBodySummary } from '@/utils/errorBodySummary'
 
 interface Props {
   show: boolean
@@ -228,8 +232,11 @@ const showUpstreamList = computed(() => props.errorType === 'request')
 
 const requestId = computed(() => detail.value?.request_id || detail.value?.client_request_id || '')
 
-const primaryResponseBody = computed(() => {
-  return resolvePrimaryResponseBody(detail.value, props.errorType)
+const primaryResponseBodySummary = computed(() => {
+  const raw = resolvePrimaryResponseBody(detail.value, props.errorType)
+  return buildRedactedResponseBodySummary(raw, {
+    upstreamStatusCode: detail.value?.upstream_status_code ?? null
+  })
 })
 
 
@@ -315,12 +322,12 @@ function close() {
   emit('update:show', false)
 }
 
-function prettyJSON(raw?: string): string {
-  if (!raw) return 'N/A'
+function prettyJSON(raw?: unknown): string {
+  if (raw == null) return 'N/A'
   try {
-    return JSON.stringify(JSON.parse(raw), null, 2)
+    return JSON.stringify(raw, null, 2)
   } catch {
-    return raw
+    return String(raw)
   }
 }
 

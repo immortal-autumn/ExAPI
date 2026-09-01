@@ -402,6 +402,8 @@ export default {
       detail: {
         title: 'Error Request Detail',
         responseBody: 'Response Body',
+        redactedBodyNote: 'Sensitive provider details are redacted in this view.',
+        responseBodyRedacted: 'The raw provider body is redacted. Only safe metadata is shown below.',
         upstreamStatus: 'Upstream Status',
         loadFailed: 'Failed to load detail, please try again',
       },

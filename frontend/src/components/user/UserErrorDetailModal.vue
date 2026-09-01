@@ -62,21 +62,25 @@
       </div>
 
       <!-- Error Body -->
-      <div v-if="detail.error_body">
+      <div v-if="errorBodySummary">
         <span class="font-medium text-gray-500 dark:text-dark-400">{{ t('usage.errors.detail.responseBody') }}</span>
-        <pre class="mt-1 overflow-auto max-h-[40vh] whitespace-pre-wrap break-all rounded-lg bg-gray-50 dark:bg-dark-900 border border-gray-200 dark:border-dark-700 p-3 text-xs text-gray-800 dark:text-dark-200">{{ detail.error_body }}</pre>
+        <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">
+          {{ t('usage.errors.detail.responseBodyRedacted') }}
+        </p>
+        <pre class="mt-2 overflow-auto max-h-[40vh] whitespace-pre-wrap break-all rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-800 dark:border-dark-700 dark:bg-dark-900 dark:text-dark-200">{{ prettyJSON(errorBodySummary) }}</pre>
       </div>
     </div>
   </BaseDialog>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import { getMyErrorDetail } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
 import type { UserErrorRequestDetail } from '@/types'
+import { buildRedactedResponseBodySummary } from '@/utils/errorBodySummary'
 
 const props = defineProps<{
   show: boolean
@@ -92,6 +96,13 @@ const { t } = useI18n()
 const loading = ref(false)
 const loadError = ref(false)
 const detail = ref<UserErrorRequestDetail | null>(null)
+const errorBodySummary = computed(() =>
+  detail.value
+    ? buildRedactedResponseBodySummary(detail.value.error_body, {
+        upstreamStatusCode: detail.value.upstream_status_code ?? null
+      })
+    : null
+)
 
 watch(
   () => [props.show, props.errorId] as const,
@@ -102,7 +113,8 @@ watch(
       detail.value = null
       loadError.value = false
     }
-  }
+  },
+  { immediate: true }
 )
 
 async function fetchDetail(id: number) {
@@ -123,5 +135,9 @@ function statusClass(code: number) {
   if (code >= 500) return 'badge-danger'
   if (code === 429) return 'badge-warning'
   return 'badge-gray'
+}
+
+function prettyJSON(value: unknown): string {
+  return JSON.stringify(value, null, 2)
 }
 </script>

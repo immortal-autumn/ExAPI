@@ -407,6 +407,8 @@ export default {
       detail: {
         title: '错误请求详情',
         responseBody: '上游响应内容',
+        redactedBodyNote: '此视图会对敏感的上游细节进行脱敏。',
+        responseBodyRedacted: '原始上游正文已脱敏，仅显示安全元数据。',
         upstreamStatus: '上游状态码',
         loadFailed: '加载详情失败，请稍后重试',
       },
