@@ -12,7 +12,9 @@ const retiredCustomerSurfaceCode = "CUSTOMER_SURFACE_RETIRED"
 var retiredCustomerSurfacePrefixes = []string{
 	"/api/v1/auth",
 	"/api/v1/user",
+	"/api/v1/users",
 	"/api/v1/channels",
+	"/api/v1/model-plaza",
 	"/api/v1/announcements",
 	"/api/v1/redeem",
 	"/api/v1/subscriptions",

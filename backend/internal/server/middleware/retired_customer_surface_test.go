@@ -17,8 +17,11 @@ func TestRetiredCustomerSurface(t *testing.T) {
 		"/api/v1/auth/login",
 		"/api/v1/auth/oauth/oidc/callback",
 		"/api/v1/user/profile",
+		"/api/v1/users/me",
 		"/api/v1/redeem/history",
 		"/api/v1/subscriptions/active",
+		"/api/v1/model-plaza",
+		"/api/v1/model-plaza/groups",
 		"/api/v1/payment/webhook/stripe",
 		"/api/v1/settings/email-unsubscribe",
 		"/api/v1/admin/users/42",
@@ -80,6 +83,8 @@ func TestRetiredCustomerSurfaceUsesSegmentBoundaries(t *testing.T) {
 	for _, path := range []string{
 		"/api/v1/authentic",
 		"/api/v1/userland",
+		"/api/v1/users-export",
+		"/api/v1/model-plaza-preview",
 		"/api/v1/payment-methods",
 		"/api/v1/admin/users-export",
 	} {
