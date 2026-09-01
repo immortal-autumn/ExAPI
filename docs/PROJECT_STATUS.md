@@ -89,6 +89,15 @@ security scans:
 - `9dacfcf2f`: bounded offline migration-report verification to 4 MiB and
   added descriptor/path identity and post-read stability checks to fail closed
   on replacement or mutation. Production has not been changed.
+- `bfbc68c94`: proxy backup imports now surface post-create and post-reuse
+  `UpdateProxy` failures in structured results and failure counts instead of
+  reporting a misleadingly complete import. Production has not been changed.
+- `2d3d24d5f`: migration-report path checks now use `Lstat` and reject a
+  symlink or non-regular replacement during verification. Production has not
+  been changed.
+- `ea8c669c7`: proxy-only imports now count post-create and post-reuse status
+  synchronization failures in `proxy_failed`, matching their structured error
+  entries. Production has not been changed.
 
 The review branch also contains work hardening proxy partial updates: omitted
 lifecycle and credential fields are preserved, while explicit null/empty values
