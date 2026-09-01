@@ -14,6 +14,8 @@ const {
   getDashboardApiKeysUsage,
   getAvailableGroups,
   getUserGroupRates,
+  updateAdminApiKeyGroup,
+  updateUserApiKey,
   showError,
   showSuccess,
   copyToClipboard,
@@ -25,6 +27,8 @@ const {
   getDashboardApiKeysUsage: vi.fn(),
   getAvailableGroups: vi.fn(),
   getUserGroupRates: vi.fn(),
+  updateAdminApiKeyGroup: vi.fn(),
+  updateUserApiKey: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
   copyToClipboard: vi.fn(),
@@ -65,7 +69,7 @@ vi.mock('@/api', () => ({
   keysAPI: {
     list: listKeys,
     create: createKey,
-    update: vi.fn(),
+    update: updateUserApiKey,
     delete: deleteKey,
     toggleStatus: vi.fn(),
   },
@@ -75,6 +79,12 @@ vi.mock('@/api', () => ({
   userGroupsAPI: {
     getAvailable: getAvailableGroups,
     getUserGroupRates,
+  },
+}))
+
+vi.mock('@/api/admin/apiKeys', () => ({
+  default: {
+    updateApiKeyGroup: updateAdminApiKeyGroup,
   },
 }))
 
@@ -189,6 +199,7 @@ const DataTableStub = {
           <slot name="cell-id" :value="row.id" :row="row" />
         </div>
         <slot name="cell-name" :value="row.name" :row="row" />
+        <slot name="cell-group" :row="row" />
         <div data-test="current-concurrency">
           <slot name="cell-current_concurrency" :value="row.current_concurrency" :row="row" />
         </div>
@@ -305,6 +316,10 @@ describe('user KeysView column settings', () => {
     getDashboardApiKeysUsage.mockResolvedValue({ stats: {} })
     getAvailableGroups.mockResolvedValue([])
     getUserGroupRates.mockResolvedValue({})
+    updateAdminApiKeyGroup.mockReset()
+    updateUserApiKey.mockReset()
+    updateAdminApiKeyGroup.mockResolvedValue({ api_key: createApiKey() })
+    updateUserApiKey.mockResolvedValue(createApiKey())
   })
 
   it('does not offer use or import actions for keys loaded from storage', async () => {
@@ -316,7 +331,7 @@ describe('user KeysView column settings', () => {
   })
 
   it('shows a generated key exactly once and clears it after acknowledgement', async () => {
-    getAvailableGroups.mockResolvedValue([{ id: 42, name: 'OpenAI' }])
+    getAvailableGroups.mockResolvedValue([{ id: 42, name: 'OpenAI', platform: 'openai' }])
     const wrapper = await mountView()
 
     await getButtonByText(wrapper, 'Create API Key').trigger('click')
@@ -354,6 +369,49 @@ describe('user KeysView column settings', () => {
     expect(deleteKey).toHaveBeenCalledTimes(1)
     resolveDelete({ message: 'deleted' })
     await flushPromises()
+  })
+
+  it('uses the admin zero sentinel when unbinding a group in operator mode', async () => {
+    listKeys.mockResolvedValue({
+      items: [{ ...createApiKey(), group_id: 42 }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1,
+    })
+    getAvailableGroups.mockResolvedValue([{ id: 42, name: 'OpenAI', platform: 'openai' }])
+    const wrapper = await mount(KeysView, {
+      props: { operatorMode: true },
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          AppLayout: AppLayoutStub,
+          TablePageLayout: TablePageLayoutStub,
+          DataTable: DataTableStub,
+          Pagination: PaginationStub,
+          BaseDialog: BaseDialogStub,
+          ConfirmDialog: ConfirmDialogStub,
+          EmptyState: true,
+          Select: SelectStub,
+          SearchInput: SearchInputStub,
+          Icon: IconStub,
+          UseKeyModal: true,
+          EndpointPopover: true,
+          GroupBadge: true,
+          GroupOptionItem: true,
+          Teleport: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="key-group-trigger"]').trigger('click')
+    await nextTick()
+    await wrapper.get('[data-testid="key-group-unbind"]').trigger('click')
+    await flushPromises()
+
+    expect(updateAdminApiKeyGroup).toHaveBeenCalledWith(1, null)
+    expect(updateUserApiKey).not.toHaveBeenCalled()
   })
 
   it('uses the default API key columns with low-frequency columns hidden', async () => {

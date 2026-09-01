@@ -24,7 +24,7 @@ export const privateRoutes: RouteRecordRaw[] = [
   {
     path: '/admin/api-keys',
     name: 'AdminAPIKeys',
-    component: () => import('@/views/user/KeysView.vue'),
+    component: () => import('@/views/admin/AdminAPIKeysView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, titleKey: 'keys.title' },
   },
   {

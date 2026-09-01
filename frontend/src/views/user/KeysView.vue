@@ -114,6 +114,7 @@
           <template #cell-group="{ row }">
             <div class="group/dropdown relative">
               <button
+                data-testid="key-group-trigger"
                 :ref="(el) => setGroupButtonRef(row.id, el)"
                 @click="openGroupSelector(row)"
                 class="-mx-2 -my-1 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 transition-all duration-200 hover:bg-gray-100 dark:hover:bg-dark-700"
@@ -1020,6 +1021,30 @@
         <!-- Group list -->
         <div class="max-h-80 overflow-y-auto p-1.5">
           <button
+            v-if="props.operatorMode && selectedKeyForGroup"
+            data-testid="key-group-unbind"
+            @click="changeGroup(selectedKeyForGroup, null)"
+            :class="[
+              'flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm transition-colors',
+              'border-b border-gray-100 dark:border-dark-700',
+              selectedKeyForGroup.group_id === null
+                ? 'bg-primary-50 dark:bg-primary-900/20'
+                : 'hover:bg-gray-100 dark:hover:bg-dark-700'
+            ]"
+          >
+            <span class="text-left text-gray-700 dark:text-gray-200">{{ t('keys.noGroup') }}</span>
+            <svg
+              v-if="selectedKeyForGroup.group_id === null"
+              class="h-4 w-4 shrink-0 text-primary-600 dark:text-primary-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              stroke-width="2"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </button>
+          <button
             v-for="option in filteredGroupOptions"
             :key="option.value ?? 'null'"
             @click="changeGroup(selectedKeyForGroup!, option.value)"
@@ -1089,6 +1114,11 @@ import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { useClipboard } from '@/composables/useClipboard'
+import adminApiKeysAPI from '@/api/admin/apiKeys'
+
+const props = withDefaults(defineProps<{ operatorMode?: boolean }>(), {
+  operatorMode: false,
+})
 
 
 
@@ -1565,7 +1595,14 @@ const changeGroup = async (key: ApiKey, newGroupId: number | null) => {
   if (key.group_id === newGroupId) return
 
   try {
-    await keysAPI.update(key.id, { group_id: newGroupId })
+    // The private operator contract uses 0 as an explicit unbind sentinel.
+    // Keep the legacy user endpoint untouched for non-operator consumers of
+    // this shared view.
+    if (props.operatorMode) {
+      await adminApiKeysAPI.updateApiKeyGroup(key.id, newGroupId)
+    } else {
+      await keysAPI.update(key.id, { group_id: newGroupId })
+    }
     appStore.showSuccess(t('keys.groupChangedSuccess'))
     loadApiKeys()
   } catch (error) {
