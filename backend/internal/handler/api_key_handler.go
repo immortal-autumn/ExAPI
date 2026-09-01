@@ -174,17 +174,49 @@ func (h *APIKeyHandler) Create(c *gin.Context) {
 		svcReq.RateLimit7d = *req.RateLimit7d
 	}
 
-	executeUserIdempotentJSON(c, "user.api_keys.create", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
+	if service.DefaultIdempotencyCoordinator() == nil {
+		key, err := h.apiKeyService.Create(c.Request.Context(), subject.UserID, svcReq)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		out := dto.APIKeyFromService(key)
+		// Direct calls still return the raw secret exactly once.
+		out.Key = key.Key
+		response.Success(c, out)
+		return
+	}
+
+	var created *dto.APIKey
+	result, err := executeUserIdempotentJSONResult(c, "user.api_keys.create", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
 		key, err := h.apiKeyService.Create(ctx, subject.UserID, svcReq)
 		if err != nil {
 			return nil, err
 		}
-		out := dto.APIKeyFromService(key)
-		// API keys are unrecoverable after creation. Return the raw key exactly
-		// once in this response; list/get/update mappers expose only key_prefix.
-		out.Key = key.Key
-		return out, nil
+		full := dto.APIKeyFromService(key)
+		// APIKeyFromService intentionally omits the raw secret for routine
+		// responses; this first create response is the one exception.
+		full.Key = key.Key
+		created = full
+		sanitized := *full
+		// API keys are unrecoverable after creation. Store only the reusable
+		// fields for idempotent replay so the secret never comes back from cache.
+		sanitized.Key = ""
+		return sanitized, nil
 	})
+	if err != nil {
+		return
+	}
+	if result != nil && result.Replayed {
+		c.Header("X-Idempotency-Replayed", "true")
+		response.Success(c, result.Data)
+		return
+	}
+	if created != nil {
+		response.Success(c, created)
+		return
+	}
+	response.Success(c, result.Data)
 }
 
 // Update handles updating an API key

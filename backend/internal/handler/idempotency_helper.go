@@ -21,15 +21,31 @@ func executeUserIdempotentJSON(
 	ttl time.Duration,
 	execute func(context.Context) (any, error),
 ) {
+	result, err := executeUserIdempotentJSONResult(c, scope, payload, ttl, execute)
+	if err != nil {
+		return
+	}
+	if result != nil && result.Replayed {
+		c.Header("X-Idempotency-Replayed", "true")
+	}
+	response.Success(c, result.Data)
+}
+
+func executeUserIdempotentJSONResult(
+	c *gin.Context,
+	scope string,
+	payload any,
+	ttl time.Duration,
+	execute func(context.Context) (any, error),
+) (*service.IdempotencyExecuteResult, error) {
 	coordinator := service.DefaultIdempotencyCoordinator()
 	if coordinator == nil {
 		data, err := execute(c.Request.Context())
 		if err != nil {
 			response.ErrorFrom(c, err)
-			return
+			return nil, err
 		}
-		response.Success(c, data)
-		return
+		return &service.IdempotencyExecuteResult{Data: data}, nil
 	}
 
 	actorScope := "user:0"
@@ -56,10 +72,7 @@ func executeUserIdempotentJSON(
 			c.Header("Retry-After", strconv.Itoa(retryAfter))
 		}
 		response.ErrorFrom(c, err)
-		return
+		return nil, err
 	}
-	if result != nil && result.Replayed {
-		c.Header("X-Idempotency-Replayed", "true")
-	}
-	response.Success(c, result.Data)
+	return result, nil
 }
