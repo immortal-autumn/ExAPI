@@ -54,5 +54,19 @@ func isRetiredCustomerPath(path string) bool {
 			return true
 		}
 	}
-	return false
+
+	// Subscription routes nested below an admin group were historically
+	// registered by the SaaS admin router. They cannot be represented by a
+	// static prefix without also retiring the operational group surface, so
+	// match the dynamic resource segment explicitly.
+	const groupSubscriptionsPrefix = "/api/v1/admin/groups/"
+	if !strings.HasPrefix(path, groupSubscriptionsPrefix) {
+		return false
+	}
+	remainder := strings.TrimPrefix(path, groupSubscriptionsPrefix)
+	parts := strings.SplitN(remainder, "/", 2)
+	if len(parts) != 2 || parts[0] == "" {
+		return false
+	}
+	return parts[1] == "subscriptions" || strings.HasPrefix(parts[1], "subscriptions/")
 }

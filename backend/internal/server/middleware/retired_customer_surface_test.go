@@ -25,6 +25,8 @@ func TestRetiredCustomerSurface(t *testing.T) {
 		"/api/v1/payment/webhook/stripe",
 		"/api/v1/settings/email-unsubscribe",
 		"/api/v1/admin/users/42",
+		"/api/v1/admin/groups/42/subscriptions",
+		"/api/v1/admin/groups/42/subscriptions/active",
 		"/api/v1/admin/affiliates/users",
 		"/api/v1/admin/payment/orders",
 	}
@@ -85,6 +87,8 @@ func TestRetiredCustomerSurfaceUsesSegmentBoundaries(t *testing.T) {
 		"/api/v1/userland",
 		"/api/v1/users-export",
 		"/api/v1/model-plaza-preview",
+		"/api/v1/admin/groups/42/subscriptions-preview",
+		"/api/v1/admin/groups//subscriptions",
 		"/api/v1/payment-methods",
 		"/api/v1/admin/users-export",
 	} {
