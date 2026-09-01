@@ -41,6 +41,12 @@ Release contract and upstream lock checks: PASS
 Independent review: backend review found no additional response-boundary storage bug;
 frontend implementation reviewed and committed as `403a6a928`.
 
+Remote verification for the resulting documentation SHA `1f02097ca`:
+
+- GitHub CI run `33559437114`: all jobs passed (backend unit/integration/race,
+  frontend, golangci-lint, shell, and contracts).
+- GitHub Security Scan run `33559437112`: passed.
+
 Deployment: **NOT DEPLOYED**. No production service, database, Redis, or OPC files
 were modified.
 
