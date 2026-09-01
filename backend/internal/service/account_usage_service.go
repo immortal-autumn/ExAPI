@@ -142,7 +142,7 @@ func (s *AccountUsageService) CachedAntigravityProbeModel(accountID int64) (stri
 	if s == nil || s.cache == nil || accountID == 0 {
 		return "", false
 	}
-	cached, ok := s.cache.antigravityCache.Load(accountID)
+	cached, _ := s.cache.antigravityCache.Load(accountID)
 	entry, ok := cached.(*antigravityUsageCache)
 	if !ok || entry == nil || entry.usageInfo == nil {
 		return "", false

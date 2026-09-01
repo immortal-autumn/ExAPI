@@ -268,7 +268,12 @@ func (s *AccountTestService) testAccountConnection(c *gin.Context, accountID int
 		}
 		return nil
 	}
-	probeModelID := resolveAccountTestProbeModelWithSource(s.probeModelSource, account, modelID, mode)
+	probeModelID := ""
+	if s.probeModelSource == nil {
+		probeModelID = resolveAccountTestProbeModel(account, modelID, mode)
+	} else {
+		probeModelID = resolveAccountTestProbeModelWithSource(s.probeModelSource, account, modelID, mode)
+	}
 	// Platform handlers historically apply their own defaults. Pass the
 	// resolved model through so an advertised Antigravity model is actually the
 	// one exercised by the inference request and persisted in the snapshot.

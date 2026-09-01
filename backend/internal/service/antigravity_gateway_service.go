@@ -419,7 +419,7 @@ func (s *AntigravityGatewayService) TestConnection(ctx context.Context, account 
 	}
 
 	if result.resp.StatusCode >= 400 {
-		return nil, newAccountTestProbeHTTPErrorWithPrefix(result.resp.StatusCode, respBody, modelID, "API")
+		return nil, newAccountTestProbeHTTPError(result.resp.StatusCode, respBody, modelID)
 	}
 
 	text := extractTextFromSSEResponse(respBody)
