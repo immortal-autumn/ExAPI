@@ -1,5 +1,7 @@
 # Grok SSO import request-body limit evidence
 
+简体中文：[中文记录](grok_sso_import_body_limit.zh-CN.md)
+
 Date: 2026-09-01
 
 ## Change
