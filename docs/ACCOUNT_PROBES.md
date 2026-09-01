@@ -26,7 +26,7 @@ The latest manual result is stored under
   "status": "success | failed",
   "checked_at": "RFC3339 UTC timestamp",
   "model": "resolved provider model",
-  "reason": "ok | quota_exhausted | authentication_failed | request_failed",
+  "reason": "ok | quota_exhausted | authentication_failed | model_unsupported | request_failed",
   "http_status": 429
 }
 ```
@@ -75,6 +75,18 @@ A successful response proves that the usage endpoint was reachable. It does
 not prove that inference for every listed model is currently accepted. Confirm
 inference separately with a manual test using a model advertised by the live
 quota result.
+
+When a recent in-memory Antigravity quota snapshot is available, an implicit
+manual probe (one that omits `model_id`) prefers a provider-recommended,
+non-exhausted text model from that snapshot. An explicit `model_id` always wins;
+if no fresh snapshot exists, the platform's stable default is retained. This
+selector is read-only and never triggers a quota refresh or changes scheduling.
+
+Probe failures use the bounded `model_unsupported` reason when the provider
+returns a machine-readable invalid/not-found model response (typically HTTP
+400/404/422). A 429 or `RESOURCE_EXHAUSTED` response remains
+`quota_exhausted`. Raw provider bodies are not persisted in the probe snapshot,
+logs, or SSE error event.
 
 ## Troubleshooting sequence
 

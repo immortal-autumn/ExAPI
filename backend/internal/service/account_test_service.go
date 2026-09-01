@@ -63,8 +63,30 @@ func isOpenAIImageModel(model string) bool {
 	return strings.HasPrefix(strings.ToLower(model), "gpt-image-")
 }
 
+// AccountTestProbeModelSource is a narrow, read-only dependency used to pick
+// a diagnostic model from a fresh provider capability/quota snapshot. Keeping
+// this contract small prevents a connection test from acquiring the side
+// effects of the full usage service (refreshes, state repair, persistence).
+type AccountTestProbeModelSource interface {
+	CachedAntigravityProbeModel(accountID int64) (string, bool)
+}
+
 func resolveAccountTestProbeModel(account *Account, modelID, mode string) string {
+	return resolveAccountTestProbeModelWithSource(nil, account, modelID, mode)
+}
+
+func resolveAccountTestProbeModelWithSource(source AccountTestProbeModelSource, account *Account, modelID, mode string) string {
 	model := strings.TrimSpace(modelID)
+	if model == "" && account != nil && account.Platform == PlatformAntigravity && source != nil {
+		if freshModel, ok := source.CachedAntigravityProbeModel(account.ID); ok {
+			// A provider-advertised model is useful only when this account's
+			// whitelist also admits it. Otherwise retain the stable default so
+			// the probe does not manufacture a guaranteed whitelist failure.
+			if len(account.GetModelMapping()) == 0 || account.IsModelSupported(freshModel) {
+				model = freshModel
+			}
+		}
+	}
 	if model == "" {
 		switch {
 		case account != nil && account.IsOpenAI():
@@ -100,6 +122,7 @@ func resolveAccountTestProbeModel(account *Account, modelID, mode string) string
 // AccountTestService handles account testing operations
 type AccountTestService struct {
 	accountRepo               AccountRepository
+	probeModelSource          AccountTestProbeModelSource
 	geminiTokenProvider       *GeminiTokenProvider
 	claudeTokenProvider       *ClaudeTokenProvider
 	grokTokenProvider         *GrokTokenProvider
@@ -121,8 +144,9 @@ func NewAccountTestService(
 	httpUpstream HTTPUpstream,
 	cfg *config.Config,
 	tlsFPProfileService *TLSFingerprintProfileService,
+	probeModelSource ...AccountTestProbeModelSource,
 ) *AccountTestService {
-	return &AccountTestService{
+	service := &AccountTestService{
 		accountRepo:               accountRepo,
 		geminiTokenProvider:       geminiTokenProvider,
 		claudeTokenProvider:       claudeTokenProvider,
@@ -132,6 +156,10 @@ func NewAccountTestService(
 		cfg:                       cfg,
 		tlsFPProfileService:       tlsFPProfileService,
 	}
+	if len(probeModelSource) > 0 {
+		service.probeModelSource = probeModelSource[0]
+	}
+	return service
 }
 
 func (s *AccountTestService) validateUpstreamBaseURL(raw string) (string, error) {
@@ -240,22 +268,29 @@ func (s *AccountTestService) testAccountConnection(c *gin.Context, accountID int
 		}
 		return nil
 	}
-	probeModelID := resolveAccountTestProbeModel(account, modelID, mode)
+	probeModelID := resolveAccountTestProbeModelWithSource(s.probeModelSource, account, modelID, mode)
+	// Platform handlers historically apply their own defaults. Pass the
+	// resolved model through so an advertised Antigravity model is actually the
+	// one exercised by the inference request and persisted in the snapshot.
+	testModelID := strings.TrimSpace(modelID)
+	if testModelID == "" {
+		testModelID = probeModelID
+	}
 
 	// Route to platform-specific test method. Persist a separate probe snapshot
 	// after the request completes so a failed provider test is visible in the
 	// account table without changing scheduler eligibility.
 	var testErr error
 	if account.IsOpenAI() {
-		testErr = s.testOpenAIAccountConnection(c, account, modelID, prompt, normalizeAccountTestMode(mode))
+		testErr = s.testOpenAIAccountConnection(c, account, testModelID, prompt, normalizeAccountTestMode(mode))
 	} else if account.IsGemini() {
-		testErr = s.testGeminiAccountConnection(c, account, modelID, prompt)
+		testErr = s.testGeminiAccountConnection(c, account, testModelID, prompt)
 	} else if account.Platform == PlatformGrok {
-		testErr = s.testGrokAccountConnection(c, account, modelID)
+		testErr = s.testGrokAccountConnection(c, account, testModelID)
 	} else if account.Platform == PlatformAntigravity {
-		testErr = s.routeAntigravityTest(c, account, modelID, prompt)
+		testErr = s.routeAntigravityTest(c, account, testModelID, prompt)
 	} else {
-		testErr = s.testClaudeAccountConnection(c, account, modelID)
+		testErr = s.testClaudeAccountConnection(c, account, testModelID)
 	}
 
 	if persistManualProbe {
@@ -373,14 +408,14 @@ func (s *AccountTestService) testClaudeAccountConnection(c *gin.Context, account
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		errMsg := fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body))
+		errMsg := fmt.Sprintf("API returned %d", resp.StatusCode)
 
 		// 403 表示账号被上游封禁，标记为 error 状态
 		if resp.StatusCode == http.StatusForbidden {
 			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
 		}
 
-		return s.sendErrorAndEnd(c, errMsg)
+		return s.sendAccountTestHTTPError(c, resp.StatusCode, body, testModelID)
 	}
 
 	// Process SSE stream
@@ -445,11 +480,11 @@ func (s *AccountTestService) testClaudeVertexServiceAccountConnection(c *gin.Con
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		errMsg := fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body))
+		errMsg := fmt.Sprintf("API returned %d", resp.StatusCode)
 		if resp.StatusCode == http.StatusForbidden {
 			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
 		}
-		return s.sendErrorAndEnd(c, errMsg)
+		return s.sendAccountTestHTTPError(c, resp.StatusCode, body, testModelID)
 	}
 
 	return s.processClaudeStream(c, resp.Body)
@@ -532,7 +567,7 @@ func (s *AccountTestService) testBedrockAccountConnection(c *gin.Context, ctx co
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return s.sendErrorAndEnd(c, fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body)))
+		return s.sendAccountTestHTTPError(c, resp.StatusCode, body, testModelID)
 	}
 
 	// Bedrock non-streaming response is standard Claude JSON, extract the text
@@ -740,10 +775,10 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		}
 		// 401 Unauthorized: 标记账号为永久错误
 		if resp.StatusCode == http.StatusUnauthorized && s.accountRepo != nil {
-			errMsg := fmt.Sprintf("Authentication failed (401): %s", string(body))
+			errMsg := "Authentication failed (401)"
 			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
 		}
-		return s.sendErrorAndEnd(c, fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body)))
+		return s.sendAccountTestHTTPError(c, resp.StatusCode, body, testModelID)
 	}
 
 	// Process SSE stream
@@ -863,7 +898,7 @@ func (s *AccountTestService) testGrokAccountConnection(c *gin.Context, account *
 				"grok payment required",
 			)
 		}
-		return s.sendErrorAndEnd(c, fmt.Sprintf("Grok Responses API returned %d: %s", resp.StatusCode, string(body)))
+		return s.sendAccountTestHTTPError(c, resp.StatusCode, body, testModelID, "Grok Responses API")
 	}
 
 	return s.processOpenAIStream(c, resp.Body)
@@ -923,10 +958,10 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 			s.reconcileOpenAI429State(ctx, account, resp.Header, body)
 		}
 		if resp.StatusCode == http.StatusUnauthorized && s.accountRepo != nil {
-			errMsg := fmt.Sprintf("Chat Completions authentication failed (401): %s", string(body))
+			errMsg := "Chat Completions authentication failed (401)"
 			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
 		}
-		return s.sendErrorAndEnd(c, fmt.Sprintf("Chat Completions API (/v1/chat/completions) returned %d: %s", resp.StatusCode, string(body)))
+		return s.sendAccountTestHTTPError(c, resp.StatusCode, body, testModelID, "Chat Completions API (/v1/chat/completions)")
 	}
 
 	return s.processOpenAIChatCompletionsStream(c, resp.Body)
@@ -1066,10 +1101,10 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusUnauthorized && s.accountRepo != nil {
-			errMsg := fmt.Sprintf("Authentication failed (401): %s", string(body))
+			errMsg := "Authentication failed (401)"
 			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
 		}
-		return s.sendErrorAndEnd(c, fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body)))
+		return s.sendAccountTestHTTPError(c, resp.StatusCode, body, testModelID)
 	}
 
 	s.sendEvent(c, TestEvent{Type: "content", Text: "Compact probe succeeded"})
@@ -1178,7 +1213,7 @@ func (s *AccountTestService) testGeminiAccountConnection(c *gin.Context, account
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return s.sendErrorAndEnd(c, fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body)))
+		return s.sendAccountTestHTTPError(c, resp.StatusCode, body, testModelID)
 	}
 
 	// Process SSE stream
@@ -1225,6 +1260,16 @@ func (s *AccountTestService) testAntigravityAccountConnection(c *gin.Context, ac
 	// 调用 AntigravityGatewayService.TestConnection（复用协议转换逻辑）
 	result, err := s.antigravityGatewayService.TestConnection(ctx, account, testModelID)
 	if err != nil {
+		// TestConnection returns a typed HTTP probe error when the provider
+		// rejected the request. Preserve its bounded classification for the
+		// manual snapshot while emitting no raw provider body.
+		var probeErr *accountTestProbeHTTPError
+		if errors.As(err, &probeErr) {
+			safeErrorMsg := probeErr.Error()
+			log.Printf("Account test error: %s", safeErrorMsg)
+			s.sendEvent(c, TestEvent{Type: "error", Error: safeErrorMsg})
+			return err
+		}
 		return s.sendErrorAndEnd(c, err.Error())
 	}
 
@@ -1807,7 +1852,7 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return s.sendErrorAndEnd(c, fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body)))
+		return s.sendAccountTestHTTPError(c, resp.StatusCode, body, modelID)
 	}
 
 	// Parse {"data": [{"b64_json": "...", "revised_prompt": "..."}]}
@@ -1979,9 +2024,25 @@ func (s *AccountTestService) sendEvent(c *gin.Context, event TestEvent) {
 
 // sendErrorAndEnd sends an error event and ends the stream
 func (s *AccountTestService) sendErrorAndEnd(c *gin.Context, errorMsg string) error {
-	log.Printf("Account test error: %s", errorMsg)
-	s.sendEvent(c, TestEvent{Type: "error", Error: errorMsg})
-	return fmt.Errorf("%s", errorMsg)
+	safeErrorMsg := sanitizeAccountTestErrorMessage(errorMsg)
+	log.Printf("Account test error: %s", safeErrorMsg)
+	s.sendEvent(c, TestEvent{Type: "error", Error: safeErrorMsg})
+	return fmt.Errorf("%s", safeErrorMsg)
+}
+
+// sendAccountTestHTTPError emits a bounded classification instead of the raw
+// provider response body. Returning the typed error preserves the reason for
+// the credential-free manual probe snapshot.
+func (s *AccountTestService) sendAccountTestHTTPError(c *gin.Context, statusCode int, body []byte, modelID string, prefix ...string) error {
+	errorPrefix := "API"
+	if len(prefix) > 0 && strings.TrimSpace(prefix[0]) != "" {
+		errorPrefix = prefix[0]
+	}
+	err := newAccountTestProbeHTTPErrorWithPrefix(statusCode, body, modelID, errorPrefix)
+	safeErrorMsg := err.Error()
+	log.Printf("Account test error: %s", safeErrorMsg)
+	s.sendEvent(c, TestEvent{Type: "error", Error: safeErrorMsg})
+	return err
 }
 
 // RunTestBackground executes an account test in-memory (no real HTTP client),

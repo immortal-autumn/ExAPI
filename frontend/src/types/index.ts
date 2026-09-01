@@ -1095,7 +1095,7 @@ export interface Account {
       checked_at?: string
       model?: string
       http_status?: number
-      reason?: 'ok' | 'quota_exhausted' | 'authentication_failed' | 'request_failed' | string
+      reason?: 'ok' | 'quota_exhausted' | 'authentication_failed' | 'model_unsupported' | 'request_failed' | string
     }
     model_rate_limits?: Record<string, { rate_limited_at: string; rate_limit_reset_at: string }>
     antigravity_credits_overages?: Record<string, { activated_at: string; active_until: string }>

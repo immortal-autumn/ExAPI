@@ -419,7 +419,7 @@ func (s *AntigravityGatewayService) TestConnection(ctx context.Context, account 
 	}
 
 	if result.resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("API 返回 %d: %s", result.resp.StatusCode, string(respBody))
+		return nil, newAccountTestProbeHTTPErrorWithPrefix(result.resp.StatusCode, respBody, modelID, "API")
 	}
 
 	text := extractTextFromSSEResponse(respBody)
@@ -434,8 +434,8 @@ func testConnectionHandleError(
 	requestedModel string, _ int64, _ string, _ bool,
 ) *handleModelRateLimitResult {
 	logger.LegacyPrintf("service.antigravity_gateway",
-		"%s test_handle_error status=%d model=%s account=%d body=%s",
-		prefix, statusCode, requestedModel, account.ID, truncateForLog(body, 200))
+		"%s test_handle_error status=%d model=%s account=%d reason=%s",
+		prefix, statusCode, requestedModel, account.ID, classifyAccountTestProbeHTTPBody(statusCode, body))
 	return nil
 }
 

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -130,6 +131,82 @@ type UsageCache struct {
 // NewUsageCache 创建 UsageCache 实例
 func NewUsageCache() *UsageCache {
 	return &UsageCache{}
+}
+
+// CachedAntigravityProbeModel returns a deterministic, text-capable model from
+// a fresh Antigravity quota snapshot. It is intentionally read-only: account
+// tests may consult this selector without triggering a provider request or
+// changing scheduler/account state. The bool is false when no fresh snapshot
+// is available, allowing callers to retain their safe platform default.
+func (s *AccountUsageService) CachedAntigravityProbeModel(accountID int64) (string, bool) {
+	if s == nil || s.cache == nil || accountID == 0 {
+		return "", false
+	}
+	cached, ok := s.cache.antigravityCache.Load(accountID)
+	entry, ok := cached.(*antigravityUsageCache)
+	if !ok || entry == nil || entry.usageInfo == nil {
+		return "", false
+	}
+	if time.Since(entry.timestamp) >= antigravityCacheTTL(entry.usageInfo) {
+		return "", false
+	}
+
+	info := entry.usageInfo
+	candidates := make([]string, 0, len(info.AntigravityQuota))
+	for modelID := range info.AntigravityQuota {
+		modelID = strings.TrimSpace(modelID)
+		if modelID == "" || strings.Contains(strings.ToLower(modelID), "image") {
+			continue
+		}
+		// Deprecated IDs are provider forwarding aliases, not models to probe.
+		if _, deprecated := info.ModelForwardingRules[modelID]; deprecated {
+			continue
+		}
+		candidates = append(candidates, modelID)
+	}
+	if len(candidates) == 0 {
+		return "", false
+	}
+	priority := map[string]int{
+		"claude-sonnet-4-5":        0,
+		"claude-sonnet-4-20250514": 1,
+		"claude-sonnet-4":          2,
+		"gemini-3-pro-preview":     3,
+		"gemini-2.5-pro":           4,
+		"gemini-3-flash-preview":   5,
+		"gemini-2.5-flash":         6,
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		pi, iok := priority[candidates[i]]
+		pj, jok := priority[candidates[j]]
+		if iok != jok {
+			return iok
+		}
+		if iok && pi != pj {
+			return pi < pj
+		}
+		return candidates[i] < candidates[j]
+	})
+
+	// Prefer provider-recommended models that still have quota, then any
+	// non-exhausted model, and finally a recommended/existing model even when
+	// all windows are exhausted so the probe can truthfully record 429.
+	for _, requireRecommended := range []bool{true, false} {
+		for _, requireQuota := range []bool{true, false} {
+			for _, modelID := range candidates {
+				detail := info.AntigravityQuotaDetails[modelID]
+				if requireRecommended && (detail == nil || detail.Recommended == nil || !*detail.Recommended) {
+					continue
+				}
+				quota := info.AntigravityQuota[modelID]
+				if requireQuota && (quota == nil || quota.Utilization >= 100) {
+					continue
+				}
+				return modelID, true
+			}
+		}
+	}
+	return candidates[0], true
 }
 
 // WindowStats 窗口期统计

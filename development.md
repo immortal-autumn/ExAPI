@@ -41,6 +41,10 @@ Do not rename or remove these during the refactor unless a separate migration pl
 - Keep an explicit operator-selected model authoritative.
 - Distinguish unsupported/stale model IDs from real account-wide quota
   exhaustion when the provider supplies enough evidence.
+- When a fresh Antigravity quota snapshot is already cached, use its
+  recommended, non-exhausted text model for an implicit diagnostic; never
+  trigger a quota refresh from the test path, and keep explicit `model_id`
+  selections authoritative.
 - Keep raw provider bodies out of account metadata, UI tooltips, and logs shown
   to ordinary operators.
 - Add Antigravity, Gemini, Claude, and OpenAI-compatible regression cases.

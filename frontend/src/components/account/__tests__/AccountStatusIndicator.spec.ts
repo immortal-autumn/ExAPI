@@ -216,6 +216,31 @@ describe('AccountStatusIndicator', () => {
     expect(wrapper.get('[role="tooltip"]').classes()).toContain('group-focus-within/probe:opacity-100')
   })
 
+  it('distinguishes an unsupported probe model from quota exhaustion', () => {
+    const wrapper = mount(AccountStatusIndicator, {
+      props: {
+        account: makeAccount({
+          extra: {
+            account_test_probe: {
+              status: 'failed',
+              checked_at: '2026-08-19T16:00:00Z',
+              http_status: 400,
+              reason: 'model_unsupported'
+            }
+          }
+        })
+      },
+      global: {
+        stubs: {
+          Icon: true
+        }
+      }
+    })
+
+    expect(wrapper.text()).toContain('admin.accounts.status.probeModelUnsupported')
+    expect(wrapper.text()).not.toContain('admin.accounts.status.probeQuotaExhausted')
+  })
+
   it('模型限流 + overages 启用 + AICredits key 生效 → 普通限流样式（积分耗尽，无 ⚡）', () => {
     const wrapper = mount(AccountStatusIndicator, {
       props: {

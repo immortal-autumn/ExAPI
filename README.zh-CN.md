@@ -98,6 +98,9 @@ SUB2API_DATA_ENCRYPTION_KEYS_JSON={"data-v1":"<base64-encoded-32-byte-key>"}
 Antigravity 的实时查询使用 `force=true` 绕过后端配额缓存。配额查询成功只说明
 配额接口可达，不等价于推理请求一定可用；仍需选择上游当前公布的模型执行手动探测。
 完整运维流程见 [`docs/ACCOUNT_PROBES.md`](docs/ACCOUNT_PROBES.md)。
+如果内存中已有新鲜配额快照，省略模型的探测会优先选择上游推荐且未耗尽的文本模型，
+不会再次发起配额查询；显式选择的模型始终优先。探测错误只暴露
+`model_unsupported`、`quota_exhausted` 等有限原因，不会返回上游原始响应正文。
 
 ## 安全声明
 

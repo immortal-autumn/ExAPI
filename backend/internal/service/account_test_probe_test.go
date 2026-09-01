@@ -20,6 +20,35 @@ type accountTestProbeRepo struct {
 	writeContextErr error
 }
 
+type accountTestProbeModelSourceStub struct {
+	model string
+	ok    bool
+}
+
+func (s accountTestProbeModelSourceStub) CachedAntigravityProbeModel(int64) (string, bool) {
+	return s.model, s.ok
+}
+
+func TestResolveAccountTestProbeModelUsesFreshAntigravitySnapshotOnlyForImplicitModel(t *testing.T) {
+	t.Parallel()
+
+	account := &Account{ID: 42, Platform: PlatformAntigravity, Type: AccountTypeOAuth}
+	source := accountTestProbeModelSourceStub{model: "gemini-2.5-pro", ok: true}
+
+	require.Equal(t, "gemini-2.5-pro", resolveAccountTestProbeModelWithSource(source, account, "", AccountTestModeDefault))
+	// An operator-selected model is authoritative, even when the fresh snapshot
+	// advertises a different model.
+	require.Equal(t, "claude-sonnet-4-5", resolveAccountTestProbeModelWithSource(source, account, "claude-sonnet-4-5", AccountTestModeDefault))
+	whitelisted := &Account{ID: 44, Platform: PlatformAntigravity, Type: AccountTypeOAuth, Credentials: map[string]any{
+		"model_mapping": map[string]any{"claude-sonnet-4-5": "claude-sonnet-4-5"},
+	}}
+	require.Equal(t, "claude-sonnet-4-5", resolveAccountTestProbeModelWithSource(source, whitelisted, "", AccountTestModeDefault), "unsupported fresh models must not bypass the account whitelist")
+	// Other platforms retain their existing fixed defaults and never consult the
+	// Antigravity-only source.
+	openAI := &Account{ID: 43, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	require.NotEqual(t, "gemini-2.5-pro", resolveAccountTestProbeModelWithSource(source, openAI, "", AccountTestModeDefault))
+}
+
 func (r *accountTestProbeRepo) UpdateAccountTestProbe(ctx context.Context, _ *Account, snapshot map[string]any) error {
 	r.writeContextErr = ctx.Err()
 	r.updates = map[string]any{AccountTestProbeExtraKey: snapshot}
@@ -56,6 +85,12 @@ func TestClassifyAccountTestProbeError(t *testing.T) {
 			err:    errors.New("upstream request failed after retries"),
 			reason: AccountTestProbeReasonRequestFailed,
 		},
+		{
+			name:       "unsupported advertised model",
+			err:        newAccountTestProbeHTTPError(http.StatusBadRequest, []byte(`{"error":{"status":"INVALID_ARGUMENT","message":"model not found: provider-secret"}}`), "claude-stale"),
+			statusCode: http.StatusBadRequest,
+			reason:     AccountTestProbeReasonModelUnsupported,
+		},
 	}
 
 	for _, tt := range tests {
@@ -65,6 +100,30 @@ func TestClassifyAccountTestProbeError(t *testing.T) {
 			require.Equal(t, tt.reason, reason)
 		})
 	}
+}
+
+func TestAccountTestProbeHTTPErrorDoesNotExposeProviderBody(t *testing.T) {
+	t.Parallel()
+
+	providerBody := []byte(`{"error":{"status":"RESOURCE_EXHAUSTED","message":"quota exhausted; access_token=provider-secret"}}`)
+	err := newAccountTestProbeHTTPError(http.StatusTooManyRequests, providerBody, "claude-sonnet-4-5")
+	require.Equal(t, AccountTestProbeReasonQuotaExhausted, func() string {
+		_, reason := classifyAccountTestProbeError(err)
+		return reason
+	}())
+	require.NotContains(t, err.Error(), "provider-secret")
+	require.NotContains(t, err.Error(), "RESOURCE_EXHAUSTED")
+	require.Contains(t, err.Error(), "429")
+}
+
+func TestSanitizeAccountTestErrorMessageRedactsCredentialLikeFields(t *testing.T) {
+	t.Parallel()
+
+	message := sanitizeAccountTestErrorMessage(`provider failed: access_token=secret-a authorization:Bearer secret-b api_key secret-c`)
+	require.NotContains(t, message, "secret-a")
+	require.NotContains(t, message, "secret-b")
+	require.NotContains(t, message, "secret-c")
+	require.NotContains(t, message, "access_token")
 }
 
 func TestAccountTestProbeCredentialIdentityIgnoresOAuthRotation(t *testing.T) {

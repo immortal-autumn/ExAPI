@@ -151,6 +151,7 @@ export default {
         probeFailed: 'Probe Failed',
         probeQuotaExhausted: 'The provider reported quota/resource exhaustion.',
         probeAuthenticationFailed: 'The provider rejected the account credentials.',
+        probeModelUnsupported: 'The provider does not advertise or accept the selected model.',
         probeRequestFailed: 'The provider connectivity probe failed.',
         probeLastChecked: 'last checked {time}',
         overloadedUntil: 'Overloaded until {time}',

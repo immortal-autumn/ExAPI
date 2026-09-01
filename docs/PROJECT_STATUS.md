@@ -135,6 +135,13 @@ not scheduler state:
   identity is unchanged.
 - The admin account table shows an accessible, localized **Probe Failed** badge
   independently of the active/schedulable badge.
+- Probe classification distinguishes `model_unsupported` from
+  `quota_exhausted` when the provider gives an invalid/not-found model signal.
+- If a fresh Antigravity quota snapshot is already cached, an implicit account
+  test prefers a recommended, non-exhausted text model. Explicit model choices
+  remain authoritative, and the selector never performs a quota refresh.
+- Provider response bodies are reduced to bounded status/classification errors
+  before they reach probe SSE output or account error state.
 
 Antigravity manual usage refreshes pass `force=true`, bypass both backend cache
 checks, and use a distinct singleflight key so the operator action reaches the

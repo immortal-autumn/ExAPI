@@ -119,6 +119,11 @@ cache. A successful quota query proves only that the quota endpoint is
 reachable; it does not prove that inference is currently accepted. Run a
 manual probe against a model currently advertised by the provider. The full
 operator workflow is in [`docs/ACCOUNT_PROBES.md`](docs/ACCOUNT_PROBES.md).
+If a fresh quota snapshot is already cached, an implicit probe selects a
+recommended, non-exhausted text model without issuing another quota request;
+an explicit model selection always wins. Probe errors expose only bounded
+reasons such as `model_unsupported` or `quota_exhausted`, never raw provider
+response bodies.
 
 ## Security notice
 

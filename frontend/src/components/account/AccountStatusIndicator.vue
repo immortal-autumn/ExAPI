@@ -303,6 +303,8 @@ const probeReasonText = computed(() => {
       return t('admin.accounts.status.probeQuotaExhausted')
     case 'authentication_failed':
       return t('admin.accounts.status.probeAuthenticationFailed')
+    case 'model_unsupported':
+      return t('admin.accounts.status.probeModelUnsupported')
     default:
       return t('admin.accounts.status.probeRequestFailed')
   }

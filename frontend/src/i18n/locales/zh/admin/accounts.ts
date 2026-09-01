@@ -354,6 +354,7 @@ export default {
         probeFailed: '探测失败',
         probeQuotaExhausted: '上游报告额度或资源已耗尽。',
         probeAuthenticationFailed: '上游拒绝了账号凭据。',
+        probeModelUnsupported: '上游未声明或不接受所选模型。',
         probeRequestFailed: '上游连通性探测失败。',
         probeLastChecked: '最近探测：{time}',
         overloadedUntil: '负载过重，重置时间：{time}',

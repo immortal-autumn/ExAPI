@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 type accountUsageCodexProbeRepo struct {
@@ -63,6 +65,55 @@ func TestShouldRefreshOpenAICodexSnapshot(t *testing.T) {
 		},
 	}, usage, now) {
 		t.Fatal("expected stale ws snapshot to trigger refresh")
+	}
+}
+
+func TestCachedAntigravityProbeModelPrefersFreshRecommendedAvailableModel(t *testing.T) {
+	t.Parallel()
+
+	cache := NewUsageCache()
+	usage := &UsageInfo{
+		AntigravityQuota: map[string]*AntigravityModelQuota{
+			"claude-stale":          {Utilization: 0},
+			"gemini-2.5-pro":        {Utilization: 0},
+			"claude-sonnet-4-5":     {Utilization: 25},
+			"claude-sonnet-4-5-old": {Utilization: 0},
+		},
+		AntigravityQuotaDetails: map[string]*AntigravityModelDetail{
+			"claude-stale":          {Recommended: boolPtr(false)},
+			"gemini-2.5-pro":        {Recommended: boolPtr(true)},
+			"claude-sonnet-4-5":     {Recommended: boolPtr(true)},
+			"claude-sonnet-4-5-old": {Recommended: boolPtr(true)},
+		},
+		ModelForwardingRules: map[string]string{"claude-stale": "claude-sonnet-4-5"},
+	}
+	cache.antigravityCache.Store(int64(7), &antigravityUsageCache{usageInfo: usage, timestamp: time.Now()})
+
+	svc := &AccountUsageService{cache: cache}
+	model, ok := svc.CachedAntigravityProbeModel(7)
+	require.True(t, ok)
+	require.Equal(t, "claude-sonnet-4-5", model)
+}
+
+func TestCachedAntigravityProbeModelFallsBackWhenSnapshotIsStaleOrEmpty(t *testing.T) {
+	t.Parallel()
+
+	cache := NewUsageCache()
+	cache.antigravityCache.Store(int64(8), &antigravityUsageCache{
+		usageInfo: &UsageInfo{AntigravityQuota: map[string]*AntigravityModelQuota{"claude-sonnet-4-5": {Utilization: 0}}},
+		timestamp: time.Now().Add(-apiCacheTTL - time.Second),
+	})
+	cache.antigravityCache.Store(int64(9), &antigravityUsageCache{
+		usageInfo: &UsageInfo{},
+		timestamp: time.Now(),
+	})
+
+	svc := &AccountUsageService{cache: cache}
+	if _, ok := svc.CachedAntigravityProbeModel(8); ok {
+		t.Fatal("stale snapshot must not drive probe model selection")
+	}
+	if _, ok := svc.CachedAntigravityProbeModel(9); ok {
+		t.Fatal("empty snapshot must not drive probe model selection")
 	}
 }
 

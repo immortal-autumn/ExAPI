@@ -225,6 +225,7 @@ func ProvideAccountTestService(
 	cfg *config.Config,
 	tlsFPProfileService *TLSFingerprintProfileService,
 	openAIGatewayService *OpenAIGatewayService,
+	accountUsageService *AccountUsageService,
 ) *AccountTestService {
 	service := NewAccountTestService(
 		accountRepo,
@@ -235,6 +236,7 @@ func ProvideAccountTestService(
 		httpUpstream,
 		cfg,
 		tlsFPProfileService,
+		accountUsageService,
 	)
 	service.agentIdentityWS = openAIGatewayService
 	return service
