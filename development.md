@@ -123,8 +123,13 @@ contract.
 - OAuth and setup-token account imports now derive a non-empty display name from
   an explicit operator name, validated email, or provider fallback. API-key,
   Bedrock, and Vertex account names remain explicitly required.
-- Focused account, private-route, typecheck, build, and release-contract gates
-  passed. These commits were not deployed to OPC.
+- Exposed the retained private security boundary in `PrivateSettingsView.vue`,
+  kept the security tab read-only (without a global save action), and localized
+  the affected security, OAuth, pagination, and 404 copy for English and
+  Simplified Chinese. Added retained-tab and security-tab regression coverage.
+- The full frontend suite (267 files, 1,435 tests), typecheck, lint, production
+  build, bundle budgets, Compose security, rollout contracts, and release
+  contract passed. The review-only commit `da3e56788` was not deployed to OPC.
 
 ### Phase 4 — Recovery and private-cutover rehearsal (completed for v0.2.10; 2026-09-02)
 

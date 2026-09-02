@@ -142,6 +142,16 @@ the release contract passed. These commits are on
 `revision/exapi-v0.2.1` only and have **not** been deployed to OPC or included in
 the v0.2.10 image.
 
+The latest review-only commit `da3e56788` exposes the retained private security
+boundary in the administrator settings view, prevents a read-only security tab
+from triggering a global settings save, and localizes the affected security,
+OAuth, pagination, and 404 copy in English and Simplified Chinese. It adds
+regression coverage for the security tab and retained-tab contract; the full
+frontend suite (267 files, 1,435 tests), typecheck, lint, production build,
+bundle budgets, and deployment contracts passed. This commit is on
+`revision/exapi-v0.2.1` only and has **not** been deployed to OPC or included in
+the v0.2.10 image.
+
 ## Production deployment
 
 Production is deployed as Docker Compose project `sub2api` from `/opt/sub2api`
