@@ -414,6 +414,64 @@ describe('user KeysView column settings', () => {
     expect(updateUserApiKey).not.toHaveBeenCalled()
   })
 
+  it('blocks a second group update for the same key while the first is pending', async () => {
+    let resolveGroupUpdate: (() => void) | undefined
+    updateAdminApiKeyGroup.mockImplementation(
+      () => new Promise((resolve) => {
+        resolveGroupUpdate = () => resolve({ api_key: createApiKey() })
+      })
+    )
+    listKeys.mockResolvedValue({
+      items: [{ ...createApiKey(), group_id: 42 }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1,
+    })
+    getAvailableGroups.mockResolvedValue([{ id: 42, name: 'OpenAI', platform: 'openai' }])
+
+    const wrapper = await mount(KeysView, {
+      props: { operatorMode: true },
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          AppLayout: AppLayoutStub,
+          TablePageLayout: TablePageLayoutStub,
+          DataTable: DataTableStub,
+          Pagination: PaginationStub,
+          BaseDialog: BaseDialogStub,
+          ConfirmDialog: ConfirmDialogStub,
+          EmptyState: true,
+          Select: SelectStub,
+          SearchInput: SearchInputStub,
+          Icon: IconStub,
+          UseKeyModal: true,
+          EndpointPopover: true,
+          GroupBadge: true,
+          GroupOptionItem: true,
+          Teleport: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    const trigger = wrapper.get('[data-testid="key-group-trigger"]')
+    await trigger.trigger('click')
+    await nextTick()
+    await wrapper.get('[data-testid="key-group-unbind"]').trigger('click')
+    await nextTick()
+
+    expect(updateAdminApiKeyGroup).toHaveBeenCalledTimes(1)
+    expect(trigger.isDisabled()).toBe(true)
+
+    await trigger.trigger('click')
+    expect(updateAdminApiKeyGroup).toHaveBeenCalledTimes(1)
+
+    resolveGroupUpdate?.()
+    await flushPromises()
+    expect(trigger.isDisabled()).toBe(false)
+  })
+
   it('uses the default API key columns with low-frequency columns hidden', async () => {
     const wrapper = await mountView()
 

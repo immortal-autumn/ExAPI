@@ -117,7 +117,8 @@
                 data-testid="key-group-trigger"
                 :ref="(el) => setGroupButtonRef(row.id, el)"
                 @click="openGroupSelector(row)"
-                class="-mx-2 -my-1 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 transition-all duration-200 hover:bg-gray-100 dark:hover:bg-dark-700"
+                :disabled="changingGroupKeyIds.has(row.id)"
+                class="-mx-2 -my-1 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 transition-all duration-200 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-dark-700"
                 :title="t('keys.clickToChangeGroup')"
               >
                 <GroupBadge
@@ -1285,6 +1286,9 @@ const dropdownRef = ref<HTMLElement | null>(null)
 const columnDropdownRef = ref<HTMLElement | null>(null)
 const dropdownPosition = ref<{ top?: number; bottom?: number; left: number } | null>(null)
 const groupButtonRefs = ref<Map<number, HTMLElement>>(new Map())
+// Group updates are destructive ordering-sensitive writes. Keep each key
+// locked until its request settles so rapid clicks cannot race on the server.
+const changingGroupKeyIds = reactive(new Set<number>())
 let abortController: AbortController | null = null
 
 // Get the currently selected key for group change
@@ -1556,6 +1560,7 @@ const toggleKeyStatus = async (key: ApiKey) => {
 }
 
 const openGroupSelector = (key: ApiKey) => {
+  if (changingGroupKeyIds.has(key.id)) return
   if (groupSelectorKeyId.value === key.id) {
     groupSelectorKeyId.value = null
     dropdownPosition.value = null
@@ -1590,10 +1595,12 @@ const openGroupSelector = (key: ApiKey) => {
 }
 
 const changeGroup = async (key: ApiKey, newGroupId: number | null) => {
+  if (changingGroupKeyIds.has(key.id)) return
   groupSelectorKeyId.value = null
   dropdownPosition.value = null
   if (key.group_id === newGroupId) return
 
+  changingGroupKeyIds.add(key.id)
   try {
     // The private operator contract uses 0 as an explicit unbind sentinel.
     // Keep the legacy user endpoint untouched for non-operator consumers of
@@ -1607,6 +1614,8 @@ const changeGroup = async (key: ApiKey, newGroupId: number | null) => {
     loadApiKeys()
   } catch (error) {
     appStore.showError(t('keys.failedToChangeGroup'))
+  } finally {
+    changingGroupKeyIds.delete(key.id)
   }
 }
 
