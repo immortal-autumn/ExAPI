@@ -46,6 +46,7 @@ jq -n \
   --arg sha256 "$sha" \
   --argjson size_bytes "$size" \
   '{schema_version:1,rollout_id:$rollout_id,checkpoint_at:$checkpoint_at,
+    writer_quiesced:true,checkpoint_completed:true,
     source:{container_id:$source_container_id,image_id:$source_image_id,mounts_sha256:$source_mounts_sha256},
     provider:$provider,snapshot_id:$snapshot_id,target:$target,created_at:$created_at,
     retention_until:$retention_until,sha256:$sha256,size_bytes:$size_bytes,encrypted:true}'
