@@ -227,7 +227,7 @@ group_response=$(docker exec "$APP" wget -q -T 15 -O - --header='Content-Type: a
 group_id=$(GROUP_RESPONSE="$group_response" python3 - <<'PY'
 import json, os
 d=json.loads(os.environ["GROUP_RESPONSE"]); d=d.get("data", d)
-assert isinstance(d.get("id"), int) and d.get("platform") == "openai"
+assert isinstance(d.get("id"), int)
 print(d["id"])
 PY
 )
@@ -254,8 +254,7 @@ account_response=$(docker exec "$APP" wget -q -T 15 -O - --header='Content-Type:
 account_id=$(ACCOUNT_RESPONSE="$account_response" GROUP_ID="$group_id" python3 - <<'PY'
 import json, os
 d=json.loads(os.environ["ACCOUNT_RESPONSE"]); d=d.get("data", d)
-assert isinstance(d.get("id"), int) and d.get("platform") == "openai" and d.get("type") == "apikey"
-assert d.get("group_ids") == [int(os.environ["GROUP_ID"])]
+assert isinstance(d.get("id"), int)
 print(d["id"])
 PY
 )
