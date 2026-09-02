@@ -94,6 +94,15 @@ arm64 digest `sha256:59fa4a44007bd57a7516b35ccefb1077107e8fdecd98b8546893c080ab8
 and SPDX SBOM SHA-256 `f071f64fcc656ed6d6f4ef4b17f435da294265cbb239b9772716b76b61010250`.
 The release workflow and artifact attestation passed.
 
+## v0.2.15 administrator-only review candidate
+
+The review branch now prepares v0.2.15 from the administrator-only hardening
+work and the Phase 0 baseline in `docs/ADMIN_ONLY_BASELINE.md`. This candidate
+is not production and has no release tag or OCI image yet. It must pass the
+full CI/security workflow, fresh restored-data and synthetic-provider canaries,
+and the signed rollout gates before any OPC cutover. Production remains on
+v0.2.14 until those checks complete.
+
 ## Administrator hardening review branch
 
 The release/review branch `revision/exapi-v0.2.1` has continued

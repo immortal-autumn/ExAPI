@@ -70,6 +70,12 @@ digest 为
 为 `f071f64fcc656ed6d6f4ef4b17f435da294265cbb239b9772716b76b61010250`。发布流程、artifact
 attestation、恢复、readiness、告警和私有化切换门禁均已通过，并已完成 OPC promotion。
 
+## v0.2.15 管理员专用审查候选版本
+
+审查分支现已将管理员专用加固工作和 `docs/ADMIN_ONLY_BASELINE.md` Phase 0 基线整理为 v0.2.15 候选版本。
+该候选尚未用于生产，也没有 release tag 或 OCI 镜像。必须先通过完整 CI/安全工作流、全新的恢复数据和
+synthetic-provider canary 以及签名 rollout 门禁，才能切换 OPC。所有检查完成前生产继续运行 v0.2.14。
+
 ## 管理员专用化审查分支
 
 发布/审查分支 `revision/exapi-v0.2.1` 截至 2026-09-01 已继续完成管理员界面加固。
