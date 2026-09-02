@@ -84,6 +84,10 @@ APP=$(env_value EXAPI_CONTAINER_NAME)
 POSTGRES=$(env_value EXAPI_POSTGRES_CONTAINER_NAME)
 REDIS=$(env_value EXAPI_REDIS_CONTAINER_NAME)
 PROVIDER=$(env_value EXAPI_PROVIDER_CONTAINER_NAME)
+POSTGRES_IMAGE=$(env_value POSTGRES_IMAGE)
+REDIS_IMAGE=$(env_value REDIS_IMAGE)
+[[ "$POSTGRES_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]] || die 'generated PostgreSQL image is not digest pinned'
+[[ "$REDIS_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]] || die 'generated Redis image is not digest pinned'
 NETWORK=${PROJECT}_sub2api-network
 [[ "$PROJECT" =~ ^exapi-syn-[a-z0-9-]+$ ]] || die 'generated project name is unsafe'
 for name in "$APP" "$POSTGRES" "$REDIS" "$PROVIDER"; do
