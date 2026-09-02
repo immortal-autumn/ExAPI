@@ -55,8 +55,20 @@ PY
     )
     marker=$(docker exec "$pg" sh -ec 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atqc "SELECT private_schema_version FROM exapi_private_state WHERE id=true"')
     [[ "$marker" == 2 ]] || { printf 'private marker is not schema version 2\n' >&2; exit 1; }
-    counts=$(docker exec "$pg" sh -ec 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -AtF "|" -c "SELECT (SELECT COUNT(*) FROM users),(SELECT COUNT(*) FROM accounts WHERE deleted_at IS NULL),(SELECT COUNT(*) FROM api_keys WHERE deleted_at IS NULL),(SELECT COUNT(*) FROM batch_image_jobs),(SELECT COUNT(*) FROM schema_migrations)"')
-    [[ "$counts" == 1\|23\|8\|0\|* ]] || { printf 'restored-data counts are not intact\n' >&2; exit 1; }
+    expected_counts_file=${EXAPI_RESTORED_COUNTS_FILE:?EXAPI_RESTORED_COUNTS_FILE is required for restored-data proof}
+    [[ -r "$expected_counts_file" ]] || { printf 'restored counts evidence is unreadable\n' >&2; exit 1; }
+    expected_counts=$(python3 - "$expected_counts_file" <<'PY'
+import json,sys
+data=json.load(open(sys.argv[1],encoding="utf-8"))
+counts=data.get("database_counts")
+keys=("users","active_accounts","active_api_keys","batch_image_jobs","schema_migrations","groups")
+if not isinstance(counts,dict) or any(type(counts.get(key)) is not int or counts[key] < 0 for key in keys):
+    raise SystemExit("logical restore evidence has invalid database_counts")
+print("|".join(str(counts[key]) for key in keys))
+PY
+    )
+    counts=$(docker exec "$pg" sh -ec 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -AtF "|" -c "SELECT (SELECT COUNT(*) FROM users),(SELECT COUNT(*) FROM accounts WHERE deleted_at IS NULL),(SELECT COUNT(*) FROM api_keys WHERE deleted_at IS NULL),(SELECT COUNT(*) FROM batch_image_jobs),(SELECT COUNT(*) FROM schema_migrations),(SELECT COUNT(*) FROM groups)"')
+    [[ "$counts" == "$expected_counts" ]] || { printf 'restored-data counts differ from logical restore evidence\n' >&2; exit 1; }
     logs=$(docker logs --since "$start_rfc3339" --until "$end_rfc3339" "$EXAPI_CONTAINER_NAME" 2>&1)
     grep -Fq 'prompt_guard.config_loaded' <<<"$logs" || { printf 'encrypted settings were not loaded during the observation\n' >&2; exit 1; }
     grep -Fq 'token_refresh' <<<"$logs" || { printf 'credential decryption was not exercised during the observation\n' >&2; exit 1; }

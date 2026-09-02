@@ -84,9 +84,26 @@ if [[ -n "${RESTORE_VERIFY_SQL_FILE:-}" ]]; then
     >"$OPS_TMP_DIR/verification-operator.txt"
 fi
 
+# Persist the restored database cardinalities so the later restored-data
+# network proof can compare the same disposable restore, rather than relying
+# on a stale hard-coded account/key count.
+database_counts=$(docker exec "$container" psql -U postgres -d exapi_restore -AtF "|" -c \
+  "SELECT (SELECT COUNT(*) FROM users),(SELECT COUNT(*) FROM accounts WHERE deleted_at IS NULL),(SELECT COUNT(*) FROM api_keys WHERE deleted_at IS NULL),(SELECT COUNT(*) FROM batch_image_jobs),(SELECT COUNT(*) FROM schema_migrations),(SELECT COUNT(*) FROM groups)")
+IFS='|' read -r count_users count_accounts count_api_keys count_batch_jobs count_migrations count_groups extra_counts <<<"$database_counts"
+[[ -z "${extra_counts:-}" && "$count_users" =~ ^[0-9]+$ && "$count_accounts" =~ ^[0-9]+$ && \
+  "$count_api_keys" =~ ^[0-9]+$ && "$count_batch_jobs" =~ ^[0-9]+$ && \
+  "$count_migrations" =~ ^[0-9]+$ && "$count_groups" =~ ^[0-9]+$ ]] || \
+  die 'restored database counts are not numeric'
+database_counts_json=$(python3 - "$count_users" "$count_accounts" "$count_api_keys" "$count_batch_jobs" "$count_migrations" "$count_groups" <<'PY'
+import json, sys
+keys = ("users", "active_accounts", "active_api_keys", "batch_image_jobs", "schema_migrations", "groups")
+print(json.dumps(dict(zip(keys, (int(value) for value in sys.argv[1:]))), sort_keys=True, separators=(",", ":")))
+PY
+)
+
 ROLLOUT_ID="$rollout_id" CONTAINER="$container" VOLUME="$volume" OBJECT_SHA="$expected_sha" \
 POSTGRES_IMAGE="$POSTGRES_IMAGE" REQUIRED_CHECKS_SHA="$required_checks_sha" \
-OPTIONAL_CHECKS_SHA="$optional_checks_sha" python3 - "$evidence" <<'PY'
+OPTIONAL_CHECKS_SHA="$optional_checks_sha" DATABASE_COUNTS_JSON="$database_counts_json" python3 - "$evidence" <<'PY'
 import json, os, sys
 from datetime import datetime, timezone
 data = {
@@ -101,6 +118,7 @@ data = {
     "required_validator_verified": True,
     "operator_validator_sha256": os.environ["OPTIONAL_CHECKS_SHA"] or None,
     "operator_validator_verified": bool(os.environ["OPTIONAL_CHECKS_SHA"]),
+    "database_counts": json.loads(os.environ["DATABASE_COUNTS_JSON"]),
     "network_mode": "none",
     "verified": True,
 }
