@@ -10,15 +10,15 @@
 
 | 项目 | 当前值 |
 |---|---|
-| 产品版本 | `0.2.10`（2026-09-02 已部署到 OPC） |
+| 产品版本 | `0.2.14`（2026-09-02 已部署到 OPC） |
 | GitHub 仓库 | `immortal-autumn/ExAPI` |
-| Git tag | `v0.2.10` |
+| Git tag | `v0.2.14` |
 | 主分支 | `main`（当前为 `f79ef301b`；发布分支保持独立） |
 | 发布分支 | `revision/exapi-v0.2.1` |
-| 审阅提交 | `f8cee085c3e7d815d5144659d3a92720f9aa8e95` |
-| OCI 镜像 | `ghcr.io/immortal-autumn/sub2api2personal@sha256:c56c876f70c49d3f05dffc7fc80417807b043da1d1261d1e3fc29b7a0daaeaa8` |
-| GitHub Release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.10> |
-| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33584593736> |
+| 审阅提交 | `4b0352fa87720425bf4fb5c23aa91e2c0e212c9e` |
+| OCI 镜像 | `ghcr.io/immortal-autumn/sub2api2personal@sha256:e8a6d161a1acb5d454a13526ef2914533d077fd5aefae7a412bc45f58513857d` |
+| GitHub Release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.14> |
+| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33625979848> |
 
 镜像经过多架构构建、OCI 标签、SPDX SBOM、SLSA/SBOM attestations 和
 `gh attestation verify` 验证。生产环境只使用上述 immutable digest，不使用
@@ -57,13 +57,18 @@ fail-closed 私有化切换矩阵仍保持覆盖：保留的 API key、usage/bil
 缺失可选表/列记录为跳过，不可置空的历史引用会中止事务；旧版 `user_external_identities`
 也有明确策略。
 
-## v0.2.14 发布候选准备
+## v0.2.14 发布与部署结果
 
 v0.2.13 发布流程在 promotion 前被替换：其 CI 唯一失败原因为新增 Go 测试 map 条目未按
 `gofmt` 对齐；该标签的镜像没有部署。格式修复已作为独立提交保存，
-`backend/cmd/server/VERSION` 现声明 `0.2.14`。候选必须使用新的带注释标签、immutable
-digest、attestation 和全新的 canary 证据。所有发布、恢复、readiness、告警和私有化切换
-门禁通过前，生产仍保持 v0.2.10。
+`backend/cmd/server/VERSION` 现声明 `0.2.14`。
+新的带注释标签从提交 `4b0352fa87720425bf4fb5c23aa91e2c0e212c9e` 发布。多架构 OCI manifest
+digest 为
+`sha256:e8a6d161a1acb5d454a13526ef2914533d077fd5aefae7a412bc45f58513857d`，amd64 digest 为
+`sha256:6e979419dd9ab1f1ebbccd664a1cc2b21cd439dfa5caa1ba63cbd99e2ff895b9`，arm64 digest 为
+`sha256:59fa4a44007bd57a7516b35ccefb1077107e8fdecd98b8546893c080ab876e70`，SPDX SBOM SHA-256
+为 `f071f64fcc656ed6d6f4ef4b17f435da294265cbb239b9772716b76b61010250`。发布流程、artifact
+attestation、恢复、readiness、告警和私有化切换门禁均已通过，并已完成 OPC promotion。
 
 ## 管理员专用化审查分支
 
@@ -144,40 +149,36 @@ OPC，也不包含在 v0.2.10 镜像中**。
 
 生产部署位于 `/opt/sub2api`，Compose project 为 `sub2api`，使用：
 
-- `/opt/sub2api/.env.v0.2.10`
-- `/opt/sub2api/docker-compose.v0.2.10.yml`
+- `/opt/sub2api/.env.v0.2.14`
+- `/opt/sub2api/docker-compose.v0.2.14.yml`
 
 应用容器固定为 immutable digest
-`sha256:c56c876f70c49d3f05dffc7fc80417807b043da1d1261d1e3fc29b7a0daaeaa8`，版本
-`0.2.10`，revision 为 `f8cee085c3e7d815d5144659d3a92720f9aa8e95`。应用、PostgreSQL
-和 Redis 均为 healthy；PostgreSQL/Redis 未被重建，最终观察中三者重启次数均为 0。
+`sha256:e8a6d161a1acb5d454a13526ef2914533d077fd5aefae7a412bc45f58513857d`，版本
+`0.2.14`，revision 为 `4b0352fa87720425bf4fb5c23aa91e2c0e212c9e`。应用、PostgreSQL
+和 Redis 均为 healthy；PostgreSQL/Redis 未被重建，三者重启次数均为 0。
 
-切换前刷新恢复集 `exapi-v0210-recovery-20260902e` 保存在加密、版本化的异地对象中：
-logical version `a236405f-4138-4860-8d2c-42eee5f98a0b`、snapshot ID
-`54b97de2-1731-449f-b339-11fcdead04a7`、secrets version
-`2d39e24e-f329-46fd-9254-029d68bc10af`，保留至 2027-09-03。私有切换归档已验证、加密
-且不可变，位于 OPC 的
-`tmp/rollouts/exapi-v0210-cutover-20260902a/private-cutover-resume/private-migration-archive.json`。
-本次 rollout 使用的 snapshot evidence quiescence/checkpoint 适配器修复已在发布分支以
-提交 `56691bdb5` 记录。
-restored-data canary 明确绑定独立恢复集 `exapi-v0210-recovery-20260902c`（logical
-version `13f467e3-26df-4059-ba4b-ea4dd7a9d5c3`）；e 集是紧邻切换前新建的刷新集，
-并作为回滚 snapshot/keyroot 来源。
+切换前恢复集 `exapi-v0214-recovery-20260902a` 保存在加密、版本化的异地对象中，保留至
+2027-09-03。logical restore 使用一次性目标
+`exapi-logical-restore-exapi-v0214-recovery-20260902a`、卷
+`exapi-logical-restore-exapi-v0214-recovery-20260902a-data`、数据库 `exapi_restore`，
+以及备份版本 `b6156b4a-75b4-4877-8684-7d58234dde0c`；独立 physical restore 使用
+snapshot `7af6943e-9a5d-4f06-bc8f-282e55ccc333`。两条恢复路径均验证了加密、完整性和
+网络隔离。
 
-## 发布前恢复与 canary 证据
+v0.2.14 restored-data canary（`exapi-v0214-restored-observe-20260902c`）和
+synthetic-provider canary（`exapi-v0214-synthetic-20260902a`）各运行 30 分钟，均完成
+60/60 readiness 检查，失败数、重启数和意外 5xx 均为 0，并取得相应 provider/出站或
+解密/完整性证明。异地监控同时验证了 503 critical alert 和 200 recovery alert。
 
-隔离的 v0.2.10 restored-data 与 synthetic-provider canary 均完成至少 30 分钟观察，
-readiness、provider smoke、内部网络/出站限制、恢复完整性和 disposable migration 均通过。
-2026-09-02 的 off-host 监控还验证了 `/ready` 从 unhealthy（503，06:06:50Z）到 healthy
-（200，06:07:12Z）的告警及恢复投递。仓库不保存密钥、凭据或数据库内容。
-
-最终 rollout manifest 位于 `tmp/rollout-manifest-v0.2.10.json`，SHA-256 为
-`bf4b22b86f1abf1f69840d7a639f88ce646215a51012481f84fb24ac259860fd`；已在 OPC 使用受保护
-的 cosign 密钥完成校验和签名，并以 COMPLIANCE 模式保留至 2027-09-03：
-`s3://exapi-rollout-records/exapi-v0210-production-20260902e`。对象版本为 manifest
-`a49e2e47-7cd8-498c-aa1d-e865f515044d`、checksum `544c19b0-db1e-4314-9877-a35284929e73`、
-签名包 `eaecb12c-7674-4f8c-b436-ad826455a0fa`、provenance 证明
-`7a3b55dc-c324-432b-aed6-bc16d24341a6`。
+最终 rollout manifest 位于
+[`tmp/rollouts/exapi-v0214-cutover-20260902a/rollout-manifest.json`](../tmp/rollouts/exapi-v0214-cutover-20260902a/rollout-manifest.json)，
+SHA-256 为 `b80f4b13211c78f19b9d5503cdf86c6e1c39461d558a07279a0caec0fcca2eb5`。该清单已
+验证、使用受保护 cosign 密钥签名、完成 provenance 验证，并以 COMPLIANCE 模式保留在
+`s3://exapi-rollout-records/exapi-v0214-cutover-20260902a` 至 2027-09-03。对象版本为：
+manifest `14dd653e-b76e-452d-8b49-f7b44121c967`、checksum
+`69f549d8-fb36-4701-bea4-f217ef07c967`、签名包
+`fcfbfb51-7081-476a-baf8-4e5010665d2f`、provenance 证明
+`0fd6d018-7fe9-414b-ae67-e41701e45cc2`。
 
 发布后的本地门禁仍全部通过：前端 Vitest `266` 个文件、`1432` 个测试通过，`vue-tsc`
 类型检查和两个 bundle 预算检查通过，snapshot evidence 单元测试 `5` 个通过，生产
@@ -185,27 +186,29 @@ rollout contract 通过。
 
 ## 生产观察
 
-`exapi-v0210-production-observe-20260902b` 运行 60 分钟、30 秒间隔，共 120 次
+`exapi-v0214-production-observe-20260902a` 运行 60 分钟、30 秒间隔，共 120 次
 readiness probe：
 
 - readiness failures `0`，unexpected 5xx `0`，重启 `0`；
-- error rate `0.0`，p95 `1.0 ms`，基线 `4.852 ms`；
+- error rate `0.0`，p95 `4.0 ms`，基线 `4.852 ms`；
 - 新增 P0/P1 告警 `0`，生产拓扑和依赖身份验证通过。
 
-当前机器是 allowlisted WireGuard peer `100.97.17.2`。从该 peer 访问 control
-`/ready`、`/api/v1/operator/me` 和只读账号列表均返回 200；公网 `/ready` 返回 200，
-公网根路径及公网 control route 返回 404。
+维护关闭后，公网 `/health` 和 `/ready` 均返回 200，WireGuard control endpoint
+`100.97.17.1:8027` 返回 200。当前机器是 allowlisted WireGuard peer `100.97.17.2`；
+从该 peer 访问 control `/ready`、`/api/v1/operator/me` 和只读账号列表均返回 200，公网
+根路径及公网 control route 返回 404。
 
-## v0.2.10 账号探测行为
+## v0.2.14 账号探测行为
 
 手动 provider 测试会将有界、脱敏的结果写入 `account.extra.account_test_probe`；该
-结果只用于显示与诊断，不会改变调度状态。账号凭据、路由、代理或重复账号变更会清理
-旧结果；原始 provider response body 不会进入 SSE 或账号错误状态。详细契约见
+结果只用于显示与诊断，不会改变调度状态。失败的手动测试不会改变 `account.status` 或
+`schedulable`；后台测试不会覆盖最新的手动结果；凭据、原始 provider response body、
+路由、代理或重复账号变更不会被写入快照，相关账号变更会清理旧结果。详细契约见
 [`ACCOUNT_PROBES.md`](ACCOUNT_PROBES.md)。
 
 ## 兼容性与回滚
 
-v0.2.10 的恢复校验记录 schema migration `246`、`private_schema_version=2` 和
+v0.2.14 的恢复校验记录 schema migration `246`、`private_schema_version=2` 和
 `batch_image_jobs=0`。本次已完成 ciphertext-only private cutover；回滚必须使用
 保留的 snapshot、上一版 immutable 应用 digest、上一版环境文件和匹配的 keyroots，
 禁止仅替换应用镜像，也不要重建 PostgreSQL/Redis。通用门禁和命令见

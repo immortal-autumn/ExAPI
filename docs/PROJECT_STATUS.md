@@ -11,15 +11,15 @@ Last reviewed: **2026-09-02 (Europe/London)**
 
 | Item | Current value |
 |---|---|
-| Product version | `0.2.10` (released and deployed to OPC on 2026-09-02) |
+| Product version | `0.2.14` (released and deployed to OPC on 2026-09-02) |
 | GitHub repository | `immortal-autumn/ExAPI` |
-| Git tag | `v0.2.10` |
+| Git tag | `v0.2.14` |
 | Main branch | `main` (currently `f79ef301b`; release branch remains separate) |
 | Release branch | `revision/exapi-v0.2.1` |
-| Reviewed commit | `f8cee085c3e7d815d5144659d3a92720f9aa8e95` |
-| OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:c56c876f70c49d3f05dffc7fc80417807b043da1d1261d1e3fc29b7a0daaeaa8` |
-| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.10> |
-| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33584593736> |
+| Reviewed commit | `4b0352fa87720425bf4fb5c23aa91e2c0e212c9e` |
+| OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:e8a6d161a1acb5d454a13526ef2914533d077fd5aefae7a412bc45f58513857d` |
+| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.14> |
+| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33625979848> |
 | Upstream baseline | Sub2API `v0.1.171`, constrained by `upstream.lock.json` |
 
 The GitHub repository was renamed from `Sub2API2Personal` to `ExAPI` on
@@ -28,11 +28,11 @@ The GitHub repository was renamed from `Sub2API2Personal` to `ExAPI` on
 must keep that compatibility decision explicit or publish a separately
 verified package migration.
 
-The v0.2.10 release workflow passed the Go module-tidy check, backend unit and
+The v0.2.14 release workflow passed the Go module-tidy check, backend unit and
 integration suites, race detector, frontend tests/type checks/build audit,
 multi-architecture image build, OCI label verification, SPDX SBOM generation,
 and provenance/SBOM attestations. The attested manifest digest is the same
-digest recorded above, and `gh attestation verify` passed. The v0.2.9 release
+digest recorded above, and `gh attestation verify` passed. The v0.2.10 release
 remains available as the preceding reviewed candidate. The prior v0.2.8 tag
 remains immutable but was never published because its commit still contained
 `backend/cmd/server/VERSION=0.2.7`; it must not be retagged.
@@ -79,15 +79,20 @@ row-count/identity checksums are recorded. Missing optional tables/columns are
 recorded as skipped, while a non-nullable historical reference aborts the
 transaction. Legacy `user_external_identities` rows are covered explicitly.
 
-## v0.2.14 release-candidate preparation
+## v0.2.14 release and deployment outcome
 
 The v0.2.13 release workflow was superseded before promotion: its CI failed
 only because two newly added Go test map entries were not `gofmt`-aligned. No
 image from that tag was deployed. The formatting fix is committed separately,
 `backend/cmd/server/VERSION` now declares `0.2.14`, and the candidate must use
 a new annotated tag, immutable digest, attestations, and fresh canary evidence.
-Production remains on v0.2.10 until every release, recovery, readiness, alert,
-and private-cutover gate passes.
+The new annotated tag was published from commit `4b0352fa87720425bf4fb5c23aa91e2c0e212c9e`.
+The attested multi-architecture OCI manifest is
+`sha256:e8a6d161a1acb5d454a13526ef2914533d077fd5aefae7a412bc45f58513857d`, with
+amd64 digest `sha256:6e979419dd9ab1f1ebbccd664a1cc2b21cd439dfa5caa1ba63cbd99e2ff895b9`,
+arm64 digest `sha256:59fa4a44007bd57a7516b35ccefb1077107e8fdecd98b8546893c080ab876e70`,
+and SPDX SBOM SHA-256 `f071f64fcc656ed6d6f4ef4b17f435da294265cbb239b9772716b76b61010250`.
+The release workflow and artifact attestation passed.
 
 ## Administrator hardening review branch
 
@@ -208,59 +213,53 @@ the v0.2.10 image. GitHub CI run `33607824144` and Security Scan run
 ## Production deployment
 
 Production is deployed as Docker Compose project `sub2api` from `/opt/sub2api`
-using the versioned inputs `/opt/sub2api/.env.v0.2.10` and
-`/opt/sub2api/docker-compose.v0.2.10.yml`. The application is pinned to
-`ghcr.io/immortal-autumn/sub2api2personal@sha256:c56c876f70c49d3f05dffc7fc80417807b043da1d1261d1e3fc29b7a0daaeaa8`,
-revision `f8cee085c3e7d815d5144659d3a92720f9aa8e95`, and reports version
-`0.2.10`. App, PostgreSQL, and Redis are healthy; PostgreSQL/Redis were not
-recreated and all three services have zero restarts in the final observation.
+using `/opt/sub2api/.env.v0.2.14` and
+`/opt/sub2api/docker-compose.v0.2.14.yml`. The application is pinned to the
+v0.2.14 manifest digest above, revision `4b0352fa87720425bf4fb5c23aa91e2c0e212c9e`,
+and reports version `0.2.14`. PostgreSQL and Redis were not recreated; their
+container IDs, start times, data mounts, and restart counts remain unchanged.
+All three services are healthy with zero restarts.
 
-The pre-cutover recovery set `exapi-v0210-recovery-20260902e` is retained in
-encrypted, versioned off-host objects. Its logical object version is
-`a236405f-4138-4860-8d2c-42eee5f98a0b`, snapshot ID is
-`54b97de2-1731-449f-b339-11fcdead04a7`, and secrets object version is
-`2d39e24e-f329-46fd-9254-029d68bc10af`; retention is through 2027-09-03.
-The restored-data canary is explicitly bound to the independently restored
-`exapi-v0210-recovery-20260902c` volume (logical version
-`13f467e3-26df-4059-ba4b-ea4dd7a9d5c3`); the e set is the fresh refresh taken
-immediately before cutover and is the rollback snapshot/keyroot source.
-The completed private cutover archive is verified, encrypted, and immutable at
-`tmp/rollouts/exapi-v0210-cutover-20260902a/private-cutover-resume/private-migration-archive.json`
-on OPC.
-The snapshot-evidence adapter quiescence/checkpoint fix used by this rollout is
-tracked as commit `56691bdb5` on the release branch.
+The pre-cutover recovery set `exapi-v0214-recovery-20260902a` is retained in
+encrypted, versioned off-host objects through 2027-09-03. The logical restore
+uses disposable target `exapi-logical-restore-exapi-v0214-recovery-20260902a`,
+volume `exapi-logical-restore-exapi-v0214-recovery-20260902a-data`, database
+`exapi_restore`, and backup version `b6156b4a-75b4-4877-8684-7d58234dde0c`.
+The independent physical restore uses snapshot
+`7af6943e-9a5d-4f06-bc8f-282e55ccc333`; both restore paths verified encryption,
+integrity, and network isolation.
 
-The 2026-09-02 external prerequisite run refreshed the off-host readiness
-monitor and synthetic-provider proof. A critical `/ready` transition returned
-503 and was delivered at 06:06:50Z; recovery returned 200 and was delivered at
-06:07:12Z. No credentials or database contents are stored in this repository.
+The v0.2.14 restored-data canary (`exapi-v0214-restored-observe-20260902c`) and
+synthetic-provider canary (`exapi-v0214-synthetic-20260902a`) each ran 30 minutes
+with 60/60 readiness checks, zero failures, zero restarts, zero unexpected 5xx,
+and provider/egress or decryption/integrity proofs as applicable. The controlled
+off-host monitor delivered both the 503 critical alert and the 200 recovery alert.
 
 The final rollout manifest is recorded locally at
-`tmp/rollout-manifest-v0.2.10.json` (SHA-256
-`bf4b22b86f1abf1f69840d7a639f88ce646215a51012481f84fb24ac259860fd`) and was
-validated and signed on OPC with the protected cosign key. The signed record is
-retained under `s3://exapi-rollout-records/exapi-v0210-production-20260902e`
-with COMPLIANCE retention through 2027-09-03. Object versions are:
-`manifest.json` `a49e2e47-7cd8-498c-aa1d-e865f515044d`, checksum
-`544c19b0-db1e-4314-9877-a35284929e73`, signature bundle
-`eaecb12c-7674-4f8c-b436-ad826455a0fa`, and provenance evidence
-`7a3b55dc-c324-432b-aed6-bc16d24341a6`.
+[`tmp/rollouts/exapi-v0214-cutover-20260902a/rollout-manifest.json`](../tmp/rollouts/exapi-v0214-cutover-20260902a/rollout-manifest.json),
+SHA-256 `b80f4b13211c78f19b9d5503cdf86c6e1c39461d558a07279a0caec0fcca2eb5`.
+It was validated, keyed-cosign signed, provenance-verified, and retained under
+`s3://exapi-rollout-records/exapi-v0214-cutover-20260902a` with COMPLIANCE
+retention through 2027-09-03. Object versions are:
+`manifest.json` `14dd653e-b76e-452d-8b49-f7b44121c967`, checksum
+`69f549d8-fb36-4701-bea4-f217ef07c967`, signature bundle
+`fcfbfb51-7081-476a-baf8-4e5010665d2f`, and provenance evidence
+`0fd6d018-7fe9-414b-ae67-e41701e45cc2`.
 
 Post-publication local gates remain green: frontend Vitest `266` files/
 `1432` tests passed, `vue-tsc` typecheck passed, both bundle budgets passed,
 the snapshot-evidence unit suite passed (`5` tests), and the production-rollout
 contract passed.
 
-The production observation ran for 60 minutes with 120 readiness probes:
+The final production observation (`exapi-v0214-production-observe-20260902a`)
+ran for 60 minutes with 120 readiness probes:
 
 - readiness failures: `0`; restarts: `0`; unexpected 5xx: `0`;
-- error rate: `0.0`; p95: `1.0 ms` versus a `4.852 ms` baseline;
+- error rate: `0.0`; p95: `4.0 ms` versus a `4.852 ms` baseline;
 - new P0/P1 alerts: `0`; production topology and dependency identities: verified.
 
-The final allowlisted peer was `100.97.17.2`: control `/ready`,
-`/api/v1/operator/me`, and a read-only account-list request returned 200. Public
-`/ready` remained 200, while the public root and public control route returned
-404.
+The public `/health` and `/ready` endpoints returned 200 after maintenance was
+disabled, and the WireGuard control endpoint at `100.97.17.1:8027` returned 200.
 
 Do not copy protected environment files, database dumps, provider credentials,
 or signing keys into this repository. Deployment evidence and scratch output
