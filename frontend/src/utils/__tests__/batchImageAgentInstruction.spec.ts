@@ -25,7 +25,7 @@ describe('batch-image Codex instruction localization', () => {
 
     expect(instruction).toContain('description: 当用户希望用 Gemini/Vertex 批量生成图片')
     expect(instruction).toContain(`默认端点：\n${endpoint}`)
-    expect(instruction).toContain(`${endpoint}/api/v1/operator/batch-images/{id}/download?api_key_id=<api_key_id>`)
+    expect(instruction).toContain(`${endpoint}/api/v1/operator/batch-images/<id>/download?api_key_id=<api_key_id>`)
     expect(instruction).not.toContain(BATCH_IMAGE_AGENT_ENDPOINT_TOKEN)
   })
 

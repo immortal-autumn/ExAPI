@@ -168,33 +168,33 @@ API request rules:
 - Access the control endpoint above through WireGuard and send X-ExAPI-Control-Request: 1 and Sec-Fetch-Site: same-origin. State-changing POST and DELETE requests must also send Origin: __EXAPI_CONTROL_ENDPOINT__ (with exactly the same origin as the request URL). Pass only the opaque api_key_id; never send Authorization or the raw gateway API key.
 - Models: GET __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/models?api_key_id=<api_key_id>
 - Submit: POST __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images?api_key_id=<api_key_id>
-- Status: GET __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/{id}?api_key_id=<api_key_id>
-- Items: GET __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/{id}/items?api_key_id=<api_key_id>
-- Download: GET __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/{id}/download?api_key_id=<api_key_id>
-- Cancel: POST __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/{id}/cancel?api_key_id=<api_key_id>
+- Status: GET __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/<id>?api_key_id=<api_key_id>
+- Items: GET __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/<id>/items?api_key_id=<api_key_id>
+- Download: GET __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/<id>/download?api_key_id=<api_key_id>
+- Cancel: POST __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/<id>/cancel?api_key_id=<api_key_id>
 
 Request body:
-{
+__EXAPI_OPEN_BRACE_TOKEN__
   "model": "<a model available to the selected key>",
   "task_name": "<infer from chat; use the current time when empty>",
   "image_size": "1K",
   "response_mime_type": "image/png",
   "items": [
-    {
+    __EXAPI_OPEN_BRACE_TOKEN__
       "custom_id": "img_001",
       "prompt": "<the first complete prompt>",
       "output_count": 1,
       "reference_images": [
-        {
+        __EXAPI_OPEN_BRACE_TOKEN__
           "id": "face",
           "type": "subject",
           "mime_type": "image/png",
           "data": "<base64 without the data:image/png;base64, prefix>"
-        }
+        __EXAPI_CLOSE_BRACE_TOKEN__
       ]
-    }
+    __EXAPI_CLOSE_BRACE_TOKEN__
   ]
-}
+__EXAPI_CLOSE_BRACE_TOKEN__
 
 Requirements:
 - Never write an API key to the repository, logs, commit history, or final response.

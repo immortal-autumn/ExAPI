@@ -168,33 +168,33 @@ API 调用规范：
 - 所有请求必须通过 WireGuard 连接访问上面的控制面端点，并发送 X-ExAPI-Control-Request: 1 和 Sec-Fetch-Site: same-origin。POST、DELETE 等状态变更请求还必须发送 Origin: __EXAPI_CONTROL_ENDPOINT__（必须与请求 URL 的 origin 完全一致）。只传递不透明的 api_key_id，绝不能发送 Authorization 或原始网关 API Key。
 - 模型：GET __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/models?api_key_id=<api_key_id>
 - 提交：POST __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images?api_key_id=<api_key_id>
-- 查询：GET __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/{id}?api_key_id=<api_key_id>
-- 明细：GET __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/{id}/items?api_key_id=<api_key_id>
-- 下载：GET __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/{id}/download?api_key_id=<api_key_id>
-- 取消：POST __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/{id}/cancel?api_key_id=<api_key_id>
+- 查询：GET __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/<id>?api_key_id=<api_key_id>
+- 明细：GET __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/<id>/items?api_key_id=<api_key_id>
+- 下载：GET __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/<id>/download?api_key_id=<api_key_id>
+- 取消：POST __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/<id>/cancel?api_key_id=<api_key_id>
 
 提交请求体：
-{
+__EXAPI_OPEN_BRACE_TOKEN__
   "model": "<按所选 Key 可用模型填写>",
   "task_name": "<从聊天推断；为空则用当前时间>",
   "image_size": "1K",
   "response_mime_type": "image/png",
   "items": [
-    {
+    __EXAPI_OPEN_BRACE_TOKEN__
       "custom_id": "img_001",
       "prompt": "<第一条完整 prompt>",
       "output_count": 1,
       "reference_images": [
-        {
+        __EXAPI_OPEN_BRACE_TOKEN__
           "id": "face",
           "type": "subject",
           "mime_type": "image/png",
           "data": "<base64，不含 data:image/png;base64, 前缀>"
-        }
+        __EXAPI_CLOSE_BRACE_TOKEN__
       ]
-    }
+    __EXAPI_CLOSE_BRACE_TOKEN__
   ]
-}
+__EXAPI_CLOSE_BRACE_TOKEN__
 
 必须遵守：
 - 不要把 API Key 写入仓库、日志、提交记录或最终回复。
