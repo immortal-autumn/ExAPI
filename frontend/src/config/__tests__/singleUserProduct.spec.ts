@@ -12,6 +12,7 @@ describe('single-user product surface', () => {
       '/admin/dashboard',
       '/admin/ops',
       '/admin/accounts',
+      '/admin/batch-images',
       '/admin/groups',
       '/admin/api-keys',
       '/admin/channels/pricing',
