@@ -262,7 +262,9 @@ ran for 60 minutes with 120 readiness probes:
 - new P0/P1 alerts: `0`; production topology and dependency identities: verified.
 
 The public `/health` and `/ready` endpoints returned 200 after maintenance was
-disabled, and the WireGuard control endpoint at `100.97.17.1:8027` returned 200.
+disabled, and the WireGuard-bound control endpoint returned 200 from an
+allowlisted operator peer. Private listener addresses are intentionally omitted
+from this public status record.
 
 Do not copy protected environment files, database dumps, provider credentials,
 or signing keys into this repository. Deployment evidence and scratch output

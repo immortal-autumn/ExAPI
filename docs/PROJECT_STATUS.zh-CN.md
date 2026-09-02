@@ -197,10 +197,10 @@ readiness probe：
 - error rate `0.0`，p95 `4.0 ms`，基线 `4.852 ms`；
 - 新增 P0/P1 告警 `0`，生产拓扑和依赖身份验证通过。
 
-维护关闭后，公网 `/health` 和 `/ready` 均返回 200，WireGuard control endpoint
-`100.97.17.1:8027` 返回 200。当前机器是 allowlisted WireGuard peer `100.97.17.2`；
-从该 peer 访问 control `/ready`、`/api/v1/operator/me` 和只读账号列表均返回 200，公网
-根路径及公网 control route 返回 404。
+维护关闭后，公网 `/health` 和 `/ready` 均返回 200；从 allowlisted WireGuard
+operator peer 访问 control endpoint、control `/ready`、`/api/v1/operator/me` 和只读账号
+列表均返回 200。公开状态记录有意省略私有监听地址；公网根路径及公网 control route 返回
+404。
 
 ## v0.2.14 账号探测行为
 
