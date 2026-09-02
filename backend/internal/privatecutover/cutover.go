@@ -170,9 +170,15 @@ type MigrationReport struct {
 	ManagedBackupsPreserved   int                  `json:"managed_backup_records_preserved"`
 	PurgedSettings            []string             `json:"purged_settings"`
 	PurgedProtected           []string             `json:"purged_protected_settings"`
-	Confirmation              string               `json:"confirmation"`
-	ReportSHA256              string               `json:"report_sha256"`
-	ReportHMACSHA256          string               `json:"report_hmac_sha256"`
+	// UserScopedDataPolicyVersion and UserScopedData prove, in the signed
+	// report, how every reviewed user reference was retained, anonymized, or
+	// removed before the customer users were deleted. Empty values remain
+	// compatible with reports produced by the original v2 cutover.
+	UserScopedDataPolicyVersion int                      `json:"user_scoped_data_policy_version,omitempty"`
+	UserScopedData              []UserScopedDataEvidence `json:"user_scoped_data,omitempty"`
+	Confirmation                string                   `json:"confirmation"`
+	ReportSHA256                string                   `json:"report_sha256"`
+	ReportHMACSHA256            string                   `json:"report_hmac_sha256"`
 }
 
 // cutoverEvidence is written in the same transaction as the destructive
@@ -396,6 +402,10 @@ func runWithOptionsLocked(ctx context.Context, commandConn *sql.Conn, confirmati
 	if err := assertNoBatchImageRows(ctx, tx); err != nil {
 		return MigrationReport{}, err
 	}
+	userScopedData, err := migrateUserScopedData(ctx, tx, operatorID)
+	if err != nil {
+		return MigrationReport{}, fmt.Errorf("normalize user-scoped data before deleting users: %w", err)
+	}
 	purgedSettings, err := purgeSettingRows(ctx, tx, "settings")
 	if err != nil {
 		return MigrationReport{}, fmt.Errorf("purge SaaS settings: %w", err)
@@ -433,17 +443,19 @@ func runWithOptionsLocked(ctx context.Context, commandConn *sql.Conn, confirmati
 		return MigrationReport{}, fmt.Errorf("enforce singleton operator: %w", err)
 	}
 	baseReport := MigrationReport{
-		SchemaVersion:             privateSchemaVersion,
-		OperatorID:                operatorID,
-		CutoverAt:                 cutoverAt,
-		DeletedUsers:              deletedUsers,
-		DroppedTables:             append([]string(nil), SaaSTables...),
-		ManagedBackupsPreserved:   managedBackupRecordsPreserved,
-		PurgedSettings:            purgedSettings,
-		PurgedProtected:           purgedProtected,
-		Confirmation:              confirmation,
-		LocalBackupManifestSHA256: manifestDigest,
-		BatchCleanupEvidence:      options.BatchCleanupEvidence,
+		SchemaVersion:               privateSchemaVersion,
+		OperatorID:                  operatorID,
+		CutoverAt:                   cutoverAt,
+		DeletedUsers:                deletedUsers,
+		DroppedTables:               append([]string(nil), SaaSTables...),
+		ManagedBackupsPreserved:     managedBackupRecordsPreserved,
+		PurgedSettings:              purgedSettings,
+		PurgedProtected:             purgedProtected,
+		UserScopedDataPolicyVersion: UserScopedDataPolicySchemaVersion,
+		UserScopedData:              userScopedData,
+		Confirmation:                confirmation,
+		LocalBackupManifestSHA256:   manifestDigest,
+		BatchCleanupEvidence:        options.BatchCleanupEvidence,
 	}
 	evidence := cutoverEvidence{
 		Report:                         baseReport,
@@ -765,6 +777,15 @@ func validateCommittedEvidence(evidence cutoverEvidence, operatorID int64, confi
 	}
 	if report.ReportSHA256 != "" || report.ReportHMACSHA256 != "" {
 		return errors.New("committed private cutover evidence unexpectedly contains report signatures")
+	}
+	if report.UserScopedDataPolicyVersion != 0 && report.UserScopedDataPolicyVersion != UserScopedDataPolicySchemaVersion {
+		return fmt.Errorf("unsupported user-scoped data policy version %d", report.UserScopedDataPolicyVersion)
+	}
+	if len(report.UserScopedData) > 0 && report.UserScopedDataPolicyVersion != UserScopedDataPolicySchemaVersion {
+		return errors.New("user-scoped data evidence is missing its policy version")
+	}
+	if err := validateUserScopedDataEvidence(report.UserScopedData); err != nil {
+		return fmt.Errorf("committed private cutover user-scoped data evidence is invalid: %w", err)
 	}
 	if len(evidence.ReportKeySHA256) != sha256.Size*2 {
 		return errors.New("committed private cutover report-key fingerprint is invalid")
