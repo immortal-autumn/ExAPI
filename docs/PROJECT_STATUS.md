@@ -132,6 +132,16 @@ clear nullable settings. This work is not part of the production release above
 and has not been deployed. Those review-only changes remain excluded from the
 v0.2.10 production image.
 
+The latest review-only commits add a bilingual administrator-only product
+surface contract (`bdd4329e3`), make all supported deployment examples default
+to `RUN_MODE=simple` while preserving the backend's legacy `standard` fallback,
+and derive OAuth/setup-token account display names from an explicit name,
+validated email, or provider fallback (`8b25ba36c`). Focused account/private-route
+tests, frontend typecheck/build, deployment bind/security/rollout contracts, and
+the release contract passed. These commits are on
+`revision/exapi-v0.2.1` only and have **not** been deployed to OPC or included in
+the v0.2.10 image.
+
 ## Production deployment
 
 Production is deployed as Docker Compose project `sub2api` from `/opt/sub2api`
