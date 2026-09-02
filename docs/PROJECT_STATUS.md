@@ -48,6 +48,16 @@ release workflow, a digest-matched restored-data and synthetic-provider canary
 is observed, and fresh off-host readiness/alert evidence is verified immediately
 before rollout.
 
+The latest untagged candidate commit `e59bbec53` adds a fail-closed private-cutover
+user-reference matrix. Before deleting customer users, retained API-key,
+usage/billing, and operational ownership references are reassigned or nulled;
+customer-only rows are deleted, historical snapshots are retained, and signed
+row-count/identity checksums are recorded. Missing optional tables/columns are
+recorded as skipped, while a non-nullable historical reference aborts the
+transaction. Focused tests, race detection, vet, and the full backend unit suite
+pass locally. The commit is pushed to the review branch and awaits CI/security
+verification; it is not deployed.
+
 ## Administrator hardening review branch
 
 The non-production review branch `revision/exapi-v0.2.1` has continued
