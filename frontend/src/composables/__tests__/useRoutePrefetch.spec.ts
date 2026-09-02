@@ -31,10 +31,10 @@ const createMockRouter = (): Router => {
     { path: '/admin/channels/monitor', components: { default: mockImportFn } },
     { path: '/admin/usage', components: { default: mockImportFn } },
     { path: '/admin/api-keys', components: { default: mockImportFn } },
+    { path: '/admin/batch-images', components: { default: mockImportFn } },
     { path: '/admin/settings', components: { default: mockImportFn } },
     { path: '/admin/ops', components: { default: mockImportFn } },
     { path: '/admin/audit-logs', components: { default: mockImportFn } },
-    { path: '/batch-image', components: { default: mockImportFn } }
   ]
 
   return {
@@ -97,6 +97,14 @@ describe('useRoutePrefetch', () => {
     it('私有 API Key 页应该返回正确的预加载配置', () => {
       const { _getPrefetchConfig } = useRoutePrefetch(mockRouter)
       const route = createMockRoute('/admin/api-keys')
+      const config = _getPrefetchConfig(route)
+
+      expect(config).toHaveLength(2)
+    })
+
+    it('批量生图页应该返回正确的预加载配置', () => {
+      const { _getPrefetchConfig } = useRoutePrefetch(mockRouter)
+      const route = createMockRoute('/admin/batch-images')
       const config = _getPrefetchConfig(route)
 
       expect(config).toHaveLength(2)

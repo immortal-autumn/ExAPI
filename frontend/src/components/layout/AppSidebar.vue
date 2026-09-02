@@ -649,7 +649,7 @@ function finalizeNav(items: NavItem[]): NavItem[] {
 const adminNavItems = computed((): NavItem[] => {
   const baseItems: NavItem[] = [
     { path: '/admin/dashboard', label: t('nav.dashboard'), icon: DashboardIcon },
-    { path: '/batch-image', label: t('nav.batchImage'), icon: BatchImageIcon, featureFlag: flagBatchImageAccess },
+    { path: '/admin/batch-images', label: t('nav.batchImage'), icon: BatchImageIcon, featureFlag: flagBatchImageAccess },
     { path: '/admin/ops', label: t('nav.ops'), icon: ChartIcon, featureFlag: flagOpsMonitoring },
 	{ path: '/admin/groups', label: t('nav.groups'), icon: FolderIcon },
     {

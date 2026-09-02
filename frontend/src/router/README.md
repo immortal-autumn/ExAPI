@@ -29,7 +29,7 @@ control mechanism.
 | --- | --- | --- |
 | `/admin/dashboard` | `admin/DashboardView.vue` | Cockpit overview |
 | `/admin/api-keys` | `admin/AdminAPIKeysView.vue` | Operator API-key management |
-| `/batch-image` | `user/BatchImageGuideView.vue` | Operator batch-image jobs |
+| `/admin/batch-images` | `user/BatchImageGuideView.vue` | Operator batch-image jobs |
 | `/admin/accounts` | `admin/AccountsView.vue` | Provider accounts and OAuth imports |
 | `/admin/groups` | `admin/GroupsView.vue` | Routing groups and pricing |
 | `/admin/proxies` | `admin/ProxiesView.vue` | Proxy lifecycle and diagnostics |
@@ -45,13 +45,15 @@ control mechanism.
 ### Retired customer routes
 
 Former customer entry points such as `/register`, `/dashboard`, `/profile`,
-`/payment/*`, `/subscriptions/*`, `/redeem/*`, and `/affiliate/*` are retained
-only as an explicit retirement page for bookmarked browser URLs. They do not
-load customer components or customer API clients. The backend returns
-`410 Gone` with code `CUSTOMER_SURFACE_RETIRED` for retired customer API roots.
+`/payment/*`, `/subscriptions/*`, `/redeem/*`, `/affiliate/*`, and the legacy
+`/batch-image` page are retained only as explicit retirement pages for
+bookmarked browser URLs. They do not load customer components or customer API
+clients. The backend returns `410 Gone` with code `CUSTOMER_SURFACE_RETIRED`
+for retired customer API roots.
 
 旧客户入口（如 `/register`、`/dashboard`、`/profile`、`/payment/*`、
-`/subscriptions/*`、`/redeem/*` 和 `/affiliate/*`）仅为书签兼容保留退役页面。
+`/subscriptions/*`、`/redeem/*`、`/affiliate/*` 以及旧版 `/batch-image` 页面）
+仅为书签兼容保留退役页面。
 它们不会加载普通用户组件或客户 API 客户端。后端对已退役的客户 API 根路径
 返回带有 `CUSTOMER_SURFACE_RETIRED` 代码的 `410 Gone`。
 

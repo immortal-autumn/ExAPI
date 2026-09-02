@@ -25,8 +25,8 @@ const PREFETCH_ADJACENCY: Record<string, string[]> = {
 	'/admin/groups': ['/admin/channels/pricing', '/admin/accounts'],
 	'/admin/channels/pricing': ['/admin/channels/monitor', '/admin/groups'],
 	'/admin/usage': ['/admin/dashboard', '/admin/api-keys'],
-	'/admin/api-keys': ['/batch-image', '/admin/usage'],
-	'/batch-image': ['/admin/api-keys', '/admin/usage'],
+	'/admin/api-keys': ['/admin/batch-images', '/admin/usage'],
+	'/admin/batch-images': ['/admin/api-keys', '/admin/usage'],
 	'/admin/settings': ['/admin/ops', '/admin/audit-logs'],
 }
 

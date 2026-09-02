@@ -2,6 +2,7 @@ export const SINGLE_USER_ADMIN_ROUTES = [
   '/admin/dashboard',
   '/admin/ops',
   '/admin/accounts',
+  '/admin/batch-images',
   '/admin/groups',
   '/admin/api-keys',
   '/admin/channels/pricing',
@@ -15,7 +16,6 @@ export const SINGLE_USER_ADMIN_ROUTES = [
 ] as const
 
 export const SINGLE_USER_PUBLIC_ROUTES = [
-  '/batch-image',
 ] as const
 
 export const SINGLE_USER_COMPATIBILITY_REDIRECTS = [
@@ -32,6 +32,7 @@ export const SINGLE_USER_RETIRED_ROUTES = [
   '/email-verify',
   '/forgot-password',
   '/reset-password',
+  '/batch-image',
   '/dashboard',
   '/usage',
   '/monitor',

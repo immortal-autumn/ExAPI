@@ -51,8 +51,9 @@ describe('AppSidebar single-user gateway navigation', () => {
     expect(componentSource).not.toContain('personalNavItems')
     expect(componentSource).not.toContain("path: '/profile'")
     expect(componentSource).not.toContain("path: '/usage'")
+    expect(componentSource).toContain("path: '/admin/batch-images'")
     expect(componentSource).toContain("path: '/admin/api-keys'")
-    expect(componentSource).toContain("path: '/batch-image'")
+    expect(componentSource).not.toContain("path: '/batch-image'")
   })
 
   it('uses the centralized private-control-plane host helper', () => {

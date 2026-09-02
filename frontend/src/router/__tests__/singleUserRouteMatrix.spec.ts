@@ -59,6 +59,7 @@ describe('single-user private route matrix', () => {
     const paths = new Set(router.getRoutes().map((record) => record.path))
 
     for (const path of [
+      '/batch-image',
       '/register',
       '/email-verify',
       '/forgot-password',
@@ -70,6 +71,10 @@ describe('single-user private route matrix', () => {
     ]) {
       expect(paths.has(path), path).toBe(true)
     }
+
+    const retiredBatchImage = router.getRoutes().find((record) => record.path === '/batch-image')
+    expect(retiredBatchImage?.name).toMatch(/^RetiredCustomerFeature/)
+    expect(retiredBatchImage?.meta.titleKey).toBe('retiredFeature.title')
 
     for (const path of [
       '/auth/callback',
@@ -92,6 +97,16 @@ describe('single-user private route matrix', () => {
     expect(route?.path).toBe('/admin/api-keys')
     expect(route?.meta.requiresAuth).toBe(true)
     expect(route?.meta.requiresAdmin).toBe(true)
+  })
+
+  it('registers batch-image guidance as an admin route', async () => {
+    const { default: router } = await import('@/router')
+    const route = router.getRoutes().find((record) => record.name === 'AdminBatchImages')
+
+    expect(route?.path).toBe('/admin/batch-images')
+    expect(route?.meta.requiresAuth).toBe(true)
+    expect(route?.meta.requiresAdmin).toBe(true)
+    expect(route?.meta.titleKey).toBe('batchImage.title')
   })
 
   it('keeps /keys only as a compatibility redirect', async () => {

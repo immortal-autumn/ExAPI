@@ -28,8 +28,8 @@ export const privateRoutes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, requiresAdmin: true, titleKey: 'keys.title' },
   },
   {
-    path: '/batch-image',
-    name: 'OperatorBatchImage',
+    path: '/admin/batch-images',
+    name: 'AdminBatchImages',
     component: () => import('@/views/user/BatchImageGuideView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, titleKey: 'batchImage.title' },
   },
