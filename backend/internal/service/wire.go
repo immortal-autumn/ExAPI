@@ -552,7 +552,7 @@ func ProvideScheduledTestService(
 
 // ProvideScheduledTestRunnerService creates and starts ScheduledTestRunnerService.
 func ProvideScheduledTestRunnerService(
-	planRepo ScheduledTestPlanRepository,
+	planRepo ScheduledTestPlanRunnerRepository,
 	scheduledSvc *ScheduledTestService,
 	accountTestSvc *AccountTestService,
 	rateLimitSvc *RateLimitService,

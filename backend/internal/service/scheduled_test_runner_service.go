@@ -10,13 +10,26 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-const scheduledTestDefaultMaxWorkers = 10
+const (
+	scheduledTestDefaultMaxWorkers = 10
+	// RunTestBackground has a five-minute context deadline. Keep the lease
+	// longer than that deadline so a timed-out worker cannot overlap its retry.
+	scheduledTestClaimLease = 10 * time.Minute
+)
+
+type scheduledTestResultWriter interface {
+	SaveResult(ctx context.Context, planID int64, maxResults int, result *ScheduledTestResult) error
+}
+
+type scheduledAccountTestRunner interface {
+	RunTestBackground(ctx context.Context, accountID int64, modelID string) (*ScheduledTestResult, error)
+}
 
 // ScheduledTestRunnerService periodically scans due test plans and executes them.
 type ScheduledTestRunnerService struct {
-	planRepo       ScheduledTestPlanRepository
-	scheduledSvc   *ScheduledTestService
-	accountTestSvc *AccountTestService
+	planRepo       ScheduledTestPlanRunnerRepository
+	scheduledSvc   scheduledTestResultWriter
+	accountTestSvc scheduledAccountTestRunner
 	rateLimitSvc   *RateLimitService
 	cfg            *config.Config
 
@@ -27,9 +40,9 @@ type ScheduledTestRunnerService struct {
 
 // NewScheduledTestRunnerService creates a new runner.
 func NewScheduledTestRunnerService(
-	planRepo ScheduledTestPlanRepository,
-	scheduledSvc *ScheduledTestService,
-	accountTestSvc *AccountTestService,
+	planRepo ScheduledTestPlanRunnerRepository,
+	scheduledSvc scheduledTestResultWriter,
+	accountTestSvc scheduledAccountTestRunner,
 	rateLimitSvc *RateLimitService,
 	cfg *config.Config,
 ) *ScheduledTestRunnerService {
@@ -91,10 +104,14 @@ func (s *ScheduledTestRunnerService) runScheduled() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	now := time.Now()
-	plans, err := s.planRepo.ListDue(ctx, now)
+	s.runScheduledAt(ctx, time.Now().UTC())
+}
+
+func (s *ScheduledTestRunnerService) runScheduledAt(ctx context.Context, now time.Time) {
+	leaseUntil := now.Add(scheduledTestClaimLease)
+	plans, err := s.planRepo.ClaimDue(ctx, now, leaseUntil, scheduledTestDefaultMaxWorkers)
 	if err != nil {
-		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] ListDue error: %v", err)
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] ClaimDue error: %v", err)
 		return
 	}
 	if len(plans) == 0 {
@@ -112,17 +129,24 @@ func (s *ScheduledTestRunnerService) runScheduled() {
 		go func(p *ScheduledTestPlan) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			s.runOnePlan(ctx, p)
+			claimedUntil := leaseUntil
+			if p.NextRunAt != nil {
+				claimedUntil = p.NextRunAt.UTC()
+			}
+			s.runOnePlan(ctx, p, claimedUntil)
 		}(plan)
 	}
 
 	wg.Wait()
 }
 
-func (s *ScheduledTestRunnerService) runOnePlan(ctx context.Context, plan *ScheduledTestPlan) {
+func (s *ScheduledTestRunnerService) runOnePlan(ctx context.Context, plan *ScheduledTestPlan, leaseUntil time.Time) {
 	result, err := s.accountTestSvc.RunTestBackground(ctx, plan.AccountID, plan.ModelID)
 	if err != nil {
-		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d RunTestBackground error: %v", plan.ID, err)
+		// Leave the lease in place. It will expire and make the plan eligible
+		// again, while preventing every replica from retrying the same failure
+		// on every cron tick.
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d RunTestBackground error (lease retained until %s): %v", plan.ID, leaseUntil.Format(time.RFC3339), err)
 		return
 	}
 
@@ -141,8 +165,15 @@ func (s *ScheduledTestRunnerService) runOnePlan(ctx context.Context, plan *Sched
 		return
 	}
 
-	if err := s.planRepo.UpdateAfterRun(ctx, plan.ID, time.Now(), nextRun); err != nil {
-		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d UpdateAfterRun error: %v", plan.ID, err)
+	completed, err := s.planRepo.CompleteClaimedRun(ctx, plan.ID, leaseUntil, time.Now().UTC(), nextRun)
+	if err != nil {
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d CompleteClaimedRun error: %v", plan.ID, err)
+		return
+	}
+	if !completed {
+		// The plan was edited or its lease expired while the test was running;
+		// never overwrite the newer schedule with stale worker state.
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d claim no longer owned; skipping completion", plan.ID)
 	}
 }
 

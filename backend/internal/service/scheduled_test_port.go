@@ -44,6 +44,15 @@ type ScheduledTestPlanRepository interface {
 	UpdateAfterRun(ctx context.Context, id int64, lastRunAt time.Time, nextRunAt time.Time) error
 }
 
+// ScheduledTestPlanRunnerRepository extends the CRUD repository with atomic
+// lease operations used by the background runner. Keeping this separate
+// preserves compatibility for callers that only provide the CRUD interface.
+type ScheduledTestPlanRunnerRepository interface {
+	ScheduledTestPlanRepository
+	ClaimDue(ctx context.Context, now, leaseUntil time.Time, limit int) ([]*ScheduledTestPlan, error)
+	CompleteClaimedRun(ctx context.Context, id int64, leaseUntil, lastRunAt, nextRunAt time.Time) (bool, error)
+}
+
 // ScheduledTestResultRepository defines the data access interface for test results.
 type ScheduledTestResultRepository interface {
 	Create(ctx context.Context, result *ScheduledTestResult) (*ScheduledTestResult, error)

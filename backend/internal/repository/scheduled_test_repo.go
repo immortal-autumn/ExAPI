@@ -14,7 +14,7 @@ type scheduledTestPlanRepository struct {
 	db *sql.DB
 }
 
-func NewScheduledTestPlanRepository(db *sql.DB) service.ScheduledTestPlanRepository {
+func NewScheduledTestPlanRepository(db *sql.DB) service.ScheduledTestPlanRunnerRepository {
 	return &scheduledTestPlanRepository{db: db}
 }
 
@@ -62,6 +62,39 @@ func (r *scheduledTestPlanRepository) ListDue(ctx context.Context, now time.Time
 	return scanPlans(rows)
 }
 
+// ClaimDue atomically leases up to limit plans that are due at now. Updating
+// next_run_at in the same statement as selecting the rows makes this safe
+// across replicas: once one worker commits the lease, another worker no
+// longer sees the plan as due. The lease is intentionally stored in the
+// existing next_run_at column so no schema migration is required.
+func (r *scheduledTestPlanRepository) ClaimDue(ctx context.Context, now, leaseUntil time.Time, limit int) ([]*service.ScheduledTestPlan, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		WITH due AS (
+			SELECT id
+			FROM scheduled_test_plans
+			WHERE enabled = true AND next_run_at <= $1
+			ORDER BY next_run_at ASC, id ASC
+			LIMIT $3
+			FOR UPDATE SKIP LOCKED
+		)
+		UPDATE scheduled_test_plans AS plans
+		SET next_run_at = $2, updated_at = NOW()
+		FROM due
+		WHERE plans.id = due.id
+		RETURNING plans.id, plans.account_id, plans.model_id, plans.cron_expression,
+		          plans.enabled, plans.max_results, plans.auto_recover,
+		          plans.last_run_at, plans.next_run_at, plans.created_at, plans.updated_at
+	`, now, leaseUntil, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	return scanPlans(rows)
+}
+
 func (r *scheduledTestPlanRepository) Update(ctx context.Context, plan *service.ScheduledTestPlan) (*service.ScheduledTestPlan, error) {
 	row := r.db.QueryRowContext(ctx, `
 		UPDATE scheduled_test_plans
@@ -82,6 +115,22 @@ func (r *scheduledTestPlanRepository) UpdateAfterRun(ctx context.Context, id int
 		UPDATE scheduled_test_plans SET last_run_at = $2, next_run_at = $3, updated_at = NOW() WHERE id = $1
 	`, id, lastRunAt, nextRunAt)
 	return err
+}
+
+func (r *scheduledTestPlanRepository) CompleteClaimedRun(ctx context.Context, id int64, leaseUntil, lastRunAt, nextRunAt time.Time) (bool, error) {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE scheduled_test_plans
+		SET last_run_at = $2, next_run_at = $3, updated_at = NOW()
+		WHERE id = $1 AND next_run_at = $4
+	`, id, lastRunAt, nextRunAt, leaseUntil)
+	if err != nil {
+		return false, err
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return updated == 1, nil
 }
 
 // --- Result Repository ---
