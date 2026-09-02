@@ -42,7 +42,7 @@ for active_name, keys_name in domains:
 if len(set(material)) != len(material):
     raise SystemExit("generated cryptographic domains reuse key material")
 
-required = ("JWT_SECRET", "TOTP_ENCRYPTION_KEY", "POSTGRES_PASSWORD")
+required = ("JWT_SECRET", "TOTP_ENCRYPTION_KEY", "POSTGRES_PASSWORD", "REDIS_PASSWORD")
 if any(not values.get(name) for name in required):
     raise SystemExit("state-coupled credential is empty")
 secure_outbound = {
@@ -78,11 +78,26 @@ PY
 }
 
 cd "$WORK_DIR"
+export EXAPI_IMAGE='ghcr.io/example/exapi@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+export POSTGRES_IMAGE='postgres@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+export REDIS_IMAGE='redis@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
 GITHUB_RAW_URL="$LOCAL_DEPLOY_URL" bash "$ROOT_DIR/deploy/docker-deploy.sh" >first-run.log
+test -f docker-compose.local.yml || fail 'deployment script did not preserve the documented compose filename'
+grep -Fqx "EXAPI_IMAGE=$EXAPI_IMAGE" .env || fail 'ExAPI image digest was not written to .env'
+grep -Fqx "POSTGRES_IMAGE=$POSTGRES_IMAGE" .env || fail 'PostgreSQL image digest was not written to .env'
+grep -Fqx "REDIS_IMAGE=$REDIS_IMAGE" .env || fail 'Redis image digest was not written to .env'
 first_snapshot=$(snapshot)
 
 printf 'y\n' | GITHUB_RAW_URL="$LOCAL_DEPLOY_URL" bash "$ROOT_DIR/deploy/docker-deploy.sh" >second-run.log
 second_snapshot=$(snapshot)
 
 [ "$first_snapshot" = "$second_snapshot" ] || fail 'redeploy rotated a state-coupled credential or keyring'
+
+invalid_dir=$(mktemp -d "$WORK_DIR/invalid.XXXXXX")
+if (cd "$invalid_dir" && env -u EXAPI_IMAGE -u POSTGRES_IMAGE -u REDIS_IMAGE \
+    GITHUB_RAW_URL="$LOCAL_DEPLOY_URL" bash "$ROOT_DIR/deploy/docker-deploy.sh" >invalid.log 2>&1); then
+    fail 'deployment script accepted mutable/placeholder image references'
+fi
+grep -Fq 'immutable image reference' "$invalid_dir/invalid.log" || fail 'image validation failure did not explain the required digest format'
+
 printf 'Docker deployment generates and preserves independent keyrings.\n'

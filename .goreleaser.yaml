@@ -165,10 +165,14 @@ release:
     docker pull ghcr.io/{{ .Env.GITHUB_REPO_OWNER_LOWER }}/sub2api2personal:{{ .Version }}
     ```
 
-    **One-line install (Linux):**
+    **One-line install (Linux, pinned to this release tag):**
     ```bash
-    curl -sSL https://raw.githubusercontent.com/{{ .Env.GITHUB_REPO_OWNER }}/{{ .Env.GITHUB_REPO_NAME }}/main/deploy/install.sh | sudo bash
+    curl -fsSL https://raw.githubusercontent.com/{{ .Env.GITHUB_REPO_OWNER }}/{{ .Env.GITHUB_REPO_NAME }}/{{ .Tag }}/deploy/install.sh -o install.sh
+    sudo bash install.sh
     ```
+
+    Resolve and use the signed manifest digest for production Docker deployments;
+    the version tag above is a release discovery alias only.
 
     **Manual download:**
     Download the appropriate archive for your platform from the assets below.

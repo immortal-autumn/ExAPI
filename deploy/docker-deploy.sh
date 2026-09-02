@@ -4,11 +4,11 @@
 # =============================================================================
 # This script prepares deployment files for ExAPI:
 #   - Downloads docker-compose.local.yml and .env.example
-#   - Generates secure secrets (JWT, TOTP, three independent keyrings, PostgreSQL)
+#   - Generates secure secrets (JWT, TOTP, Redis/PostgreSQL, three independent keyrings)
 #   - Creates necessary data directories
 #
 # After running this script, you can start services with:
-#   docker-compose up -d
+#   docker compose -f docker-compose.local.yml up -d
 # =============================================================================
 
 set -e
@@ -47,6 +47,31 @@ generate_secret() {
 
 generate_base64_key() {
     openssl rand -base64 32 | tr -d '\r\n'
+}
+
+# Production Compose files intentionally reject mutable image tags. Require the
+# operator to provide all three reviewed digest references up front instead of
+# silently writing REPLACE_WITH_* placeholders that fail only at first startup.
+validate_immutable_image_reference() {
+    local name="$1" value="$2"
+    if [[ ! "$value" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
+        print_error "$name must be an immutable image reference ending in @sha256:<64 lowercase hex digits>"
+        return 1
+    fi
+}
+
+validate_runtime_images() {
+    validate_immutable_image_reference EXAPI_IMAGE "$EXAPI_IMAGE" || return 1
+    validate_immutable_image_reference POSTGRES_IMAGE "$POSTGRES_IMAGE" || return 1
+    validate_immutable_image_reference REDIS_IMAGE "$REDIS_IMAGE" || return 1
+    case "$POSTGRES_IMAGE" in
+        postgres@sha256:*) ;;
+        *) print_error "POSTGRES_IMAGE must use the postgres@sha256:<digest> image"; return 1 ;;
+    esac
+    case "$REDIS_IMAGE" in
+        redis@sha256:*) ;;
+        *) print_error "REDIS_IMAGE must use the redis@sha256:<digest> image"; return 1 ;;
+    esac
 }
 
 # Read an existing .env value without evaluating shell syntax.
@@ -145,8 +170,12 @@ main() {
         exit 1
     fi
 
-    # Check if deployment already exists
-    if [ -f "docker-compose.yml" ] && [ -f ".env" ]; then
+    local compose_file="docker-compose.local.yml"
+
+    # Check if deployment already exists. The legacy docker-compose.yml name is
+    # also detected so rerunning after an older script cannot overwrite state
+    # without an explicit confirmation.
+    if { [ -f "$compose_file" ] || [ -f "docker-compose.yml" ]; } && [ -f ".env" ]; then
         print_warning "Deployment files already exist in current directory."
         read -p "Overwrite existing files? (y/N): " -r
         echo
@@ -156,17 +185,18 @@ main() {
         fi
     fi
 
-    # Download docker-compose.local.yml and save as docker-compose.yml
-    print_info "Downloading docker-compose.yml..."
+    # Download docker-compose.local.yml without renaming it. Documentation and
+    # operator commands use this local-directory variant consistently.
+    print_info "Downloading ${compose_file}..."
     if command_exists curl; then
-        curl -sSL "${GITHUB_RAW_URL}/docker-compose.local.yml" -o docker-compose.yml
+        curl -sSL "${GITHUB_RAW_URL}/docker-compose.local.yml" -o "$compose_file"
     elif command_exists wget; then
-        wget -q "${GITHUB_RAW_URL}/docker-compose.local.yml" -O docker-compose.yml
+        wget -q "${GITHUB_RAW_URL}/docker-compose.local.yml" -O "$compose_file"
     else
         print_error "Neither curl nor wget is installed. Please install one of them."
         exit 1
     fi
-    print_success "Downloaded docker-compose.yml"
+    print_success "Downloaded ${compose_file}"
 
     # Download .env.example
     print_info "Downloading .env.example..."
@@ -176,6 +206,18 @@ main() {
         wget -q "${GITHUB_RAW_URL}/.env.example" -O .env.example
     fi
     print_success "Downloaded .env.example"
+
+    # Resolve and validate immutable image references before writing .env. On
+    # redeploy, values are read from the existing file; on a fresh install the
+    # operator must export them explicitly (for example, from the signed
+    # release record).
+    EXAPI_IMAGE="${EXAPI_IMAGE:-$(read_env_value EXAPI_IMAGE 2>/dev/null || true)}"
+    POSTGRES_IMAGE="${POSTGRES_IMAGE:-$(read_env_value POSTGRES_IMAGE 2>/dev/null || true)}"
+    REDIS_IMAGE="${REDIS_IMAGE:-$(read_env_value REDIS_IMAGE 2>/dev/null || true)}"
+    if ! validate_runtime_images; then
+        print_error "Set EXAPI_IMAGE, POSTGRES_IMAGE, and REDIS_IMAGE to reviewed immutable digests before rerunning."
+        exit 1
+    fi
 
     # Generate .env file with auto-generated secrets
     print_info "Generating secure secrets..."
@@ -188,9 +230,14 @@ main() {
         JWT_SECRET=$(read_env_value JWT_SECRET)
         TOTP_ENCRYPTION_KEY=$(read_env_value TOTP_ENCRYPTION_KEY)
         POSTGRES_PASSWORD=$(read_env_value POSTGRES_PASSWORD)
+        REDIS_PASSWORD=$(read_env_value REDIS_PASSWORD || true)
         [ -n "$JWT_SECRET" ] || { print_error "existing JWT_SECRET is empty"; exit 1; }
         [ -n "$TOTP_ENCRYPTION_KEY" ] || { print_error "existing TOTP_ENCRYPTION_KEY is empty"; exit 1; }
         [ -n "$POSTGRES_PASSWORD" ] || { print_error "existing POSTGRES_PASSWORD is empty"; exit 1; }
+        if [ -z "$REDIS_PASSWORD" ]; then
+            REDIS_PASSWORD=$(generate_secret)
+            print_info "Generated missing Redis password for existing deployment"
+        fi
         DATA_ENCRYPTION_ACTIVE_KEY_ID=$(read_env_value SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID || true)
         DATA_ENCRYPTION_KEYS_JSON=$(read_env_value SUB2API_DATA_ENCRYPTION_KEYS_JSON || true)
         GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID=$(read_env_value SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID || true)
@@ -223,6 +270,7 @@ main() {
         JWT_SECRET=$(generate_secret)
         TOTP_ENCRYPTION_KEY=$(generate_secret)
         POSTGRES_PASSWORD=$(generate_secret)
+        REDIS_PASSWORD=$(generate_secret)
         DATA_ENCRYPTION_ACTIVE_KEY_ID=data-v1
         DATA_ENCRYPTION_KEY=$(generate_base64_key)
         DATA_ENCRYPTION_KEYS_JSON="{\"data-v1\":\"${DATA_ENCRYPTION_KEY}\"}"
@@ -250,6 +298,13 @@ main() {
             JWT_SECRET=*) printf 'JWT_SECRET=%s\n' "$JWT_SECRET" ;;
             TOTP_ENCRYPTION_KEY=*) printf 'TOTP_ENCRYPTION_KEY=%s\n' "$TOTP_ENCRYPTION_KEY" ;;
             POSTGRES_PASSWORD=*) printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD" ;;
+            REDIS_PASSWORD=*) printf 'REDIS_PASSWORD=%s\n' "$REDIS_PASSWORD" ;;
+            EXAPI_IMAGE=*) printf 'EXAPI_IMAGE=%s\n' "$EXAPI_IMAGE" ;;
+            POSTGRES_IMAGE=*) printf 'POSTGRES_IMAGE=%s\n' "$POSTGRES_IMAGE" ;;
+            REDIS_IMAGE=*) printf 'REDIS_IMAGE=%s\n' "$REDIS_IMAGE" ;;
+            APPLE_CONTAINER_SUB2API_IMAGE=*) printf 'APPLE_CONTAINER_SUB2API_IMAGE=%s\n' "$EXAPI_IMAGE" ;;
+            APPLE_CONTAINER_POSTGRES_IMAGE=*) printf 'APPLE_CONTAINER_POSTGRES_IMAGE=%s\n' "$POSTGRES_IMAGE" ;;
+            APPLE_CONTAINER_REDIS_IMAGE=*) printf 'APPLE_CONTAINER_REDIS_IMAGE=%s\n' "$REDIS_IMAGE" ;;
             SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID=*) printf 'SUB2API_DATA_ENCRYPTION_ACTIVE_KEY_ID=%s\n' "$DATA_ENCRYPTION_ACTIVE_KEY_ID" ;;
             SUB2API_DATA_ENCRYPTION_KEYS_JSON=*) printf 'SUB2API_DATA_ENCRYPTION_KEYS_JSON=%s\n' "$DATA_ENCRYPTION_KEYS_JSON" ;;
             SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID=*) printf 'SUB2API_GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID=%s\n' "$GATEWAY_KEY_DIGEST_ACTIVE_KEY_ID" ;;
@@ -284,7 +339,7 @@ main() {
     print_warning "Please keep them secure and do not share publicly!"
     echo ""
     echo "Directory structure:"
-    echo "  docker-compose.yml        - Docker Compose configuration"
+    echo "  ${compose_file} - Docker Compose configuration"
     echo "  .env                      - Environment variables (generated secrets)"
     echo "  .env.example              - Example template (for reference)"
     echo "  data/                     - Application data (will be created on first run)"
@@ -294,10 +349,10 @@ main() {
     echo "Next steps:"
     echo "  1. (Optional) Edit .env to customize configuration"
     echo "  2. Start services:"
-    echo "     docker-compose up -d"
+    echo "     docker compose -f ${compose_file} up -d"
     echo ""
     echo "  3. View logs:"
-    echo "     docker-compose logs -f sub2api"
+    echo "     docker compose -f ${compose_file} logs -f sub2api"
     echo ""
     echo "  4. Access Web UI:"
     echo "     http://localhost:8080"

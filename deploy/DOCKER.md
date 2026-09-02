@@ -126,7 +126,9 @@ boundary, and control plane from an allowlisted operator peer. Roll back with
 the previous versioned environment and Compose file if any gate fails.
 This rolling heuristic intentionally means the new application container's
 Compose provenance label names the versioned release file while retained
-PostgreSQL and Redis containers may still name `docker-compose.local.yml`.
+PostgreSQL and Redis containers may still name the prior versioned Compose and
+environment files that created them (for example `docker-compose.v0.2.7.yml`
+and `.env.v0.2.7`).
 The cutover target report records and hashes each container's own provenance;
 do not rewrite those labels or recreate the stateful services merely to make
 their filenames match.

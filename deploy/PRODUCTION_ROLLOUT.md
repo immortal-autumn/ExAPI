@@ -79,8 +79,10 @@ project. `COMPOSE_FILE` is exactly one reviewed candidate file for this
 private-production cutover; restored-canary overlay lists use their separate
 workflow and are not accepted here. The normal `/opt/sub2api` rolling heuristic is supported: the retained
 application may name the versioned release Compose/environment in its labels
-while PostgreSQL and Redis retain `docker-compose.local.yml` and `.env`. Each
-container's own labelled files are resolved and hashed independently. A
+while PostgreSQL and Redis retain the prior versioned Compose/environment that
+created them (for example `docker-compose.v0.2.7.yml` and `.env.v0.2.7`). Do not
+assume they use the current candidate filenames. Each container's own labelled
+files are resolved and hashed independently. A
 retained container created by an older Compose version may lack the optional
 environment-file provenance label; that absence is recorded explicitly while
 the mandatory candidate environment is still resolved and hashed.

@@ -72,6 +72,10 @@ Use the automated preparation script for the easiest setup:
 # Use the exact reviewed tag from docs/PROJECT_STATUS.md.
 EXAPI_RELEASE_TAG=vX.Y.Z
 GITHUB_RAW_URL="https://raw.githubusercontent.com/immortal-autumn/ExAPI/${EXAPI_RELEASE_TAG}/deploy"
+# Resolve these three values from the signed release/registry review.
+export EXAPI_IMAGE=ghcr.io/immortal-autumn/sub2api2personal@sha256:<release-digest>
+export POSTGRES_IMAGE=postgres@sha256:<reviewed-digest>
+export REDIS_IMAGE=redis@sha256:<reviewed-digest>
 curl -fsSL "${GITHUB_RAW_URL}/docker-deploy.sh" -o docker-deploy.sh
 chmod +x docker-deploy.sh
 GITHUB_RAW_URL="$GITHUB_RAW_URL" ./docker-deploy.sh
@@ -83,15 +87,17 @@ digest from the signed release before starting services.
 
 **What the script does:**
 - Downloads `docker-compose.local.yml` and `.env.example`
-- Automatically generates secure secrets (JWT, TOTP, external data encryption, PostgreSQL)
+- Requires the ExAPI, PostgreSQL, and Redis images to be supplied as immutable
+  `@sha256:` digests; mutable tags and `REPLACE_WITH_*` placeholders are rejected
+- Automatically generates secure secrets (JWT, TOTP, Redis/PostgreSQL, external data encryption)
 - Creates `.env` file with generated secrets
 - Creates necessary data directories (data/, postgres_data/, redis_data/)
 - Saves generated credentials to a mode-0600 `.env` without printing them
 
 **After running the script:**
 ```bash
-# Start services
-docker compose -f docker-compose.local.yml up -d
+# Start services (the script has already validated the three image digests)
+docker compose --env-file .env -f docker-compose.local.yml up -d
 
 # View logs
 docker compose -f docker-compose.local.yml logs -f sub2api

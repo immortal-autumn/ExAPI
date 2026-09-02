@@ -42,8 +42,8 @@ RUNTIME_ENV_FILE="/etc/sub2api.env"
 SERVER_HOST="127.0.0.1"
 SERVER_PORT="8080"
 
-# Language (default: zh = Chinese)
-LANG_CHOICE="zh"
+# Language (default: en = English)
+LANG_CHOICE="en"
 
 # ============================================================
 # Language strings / 语言字符串
@@ -339,9 +339,9 @@ is_interactive() {
 
 # Select language
 select_language() {
-    # If not interactive (piped), use default language
+    # If not interactive (piped), use the documented English default.
     if ! is_interactive; then
-        LANG_CHOICE="zh"
+        LANG_CHOICE="en"
         return
     fi
 
@@ -350,18 +350,18 @@ select_language() {
     echo "  $(msg 'select_lang')"
     echo "==============================================${NC}"
     echo ""
-    echo "  1) $(msg 'lang_zh') (默认/default)"
-    echo "  2) $(msg 'lang_en')"
+    echo "  1) $(msg 'lang_en') (default/默认)"
+    echo "  2) $(msg 'lang_zh')"
     echo ""
 
     read -p "$(msg 'enter_choice'): " lang_input < /dev/tty
 
     case "$lang_input" in
-        2|en|EN|english|English)
-            LANG_CHOICE="en"
+        2|zh|ZH|chinese|Chinese|中文)
+            LANG_CHOICE="zh"
             ;;
         *)
-            LANG_CHOICE="zh"
+            LANG_CHOICE="en"
             ;;
     esac
 
