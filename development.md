@@ -6,9 +6,11 @@ baseline lives in [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md).
 
 ## Current Goal
 
-Build on the deployed v0.2.6 baseline while preserving runtime compatibility,
+Build on the deployed v0.2.7 baseline while preserving runtime compatibility,
 deployment compatibility, API compatibility, and private-control-plane
-security.
+security. The review branch `revision/exapi-v0.2.1` is still non-production;
+OPC remains on the attested v0.2.7 image until the recovery and rollout gates
+below are complete.
 
 The settings extraction described by the older Phase 1.2–1.7 plan has landed:
 the reusable section shell, all major tab components, security/gateway/payment
@@ -16,9 +18,9 @@ panels, and focused tests now exist. `SettingsView.vue` is substantially smaller
 but remains a coordinator with additional extraction opportunities. Do not
 repeat completed phases.
 
-The immediate focus is provider diagnostics and operator clarity: keep manual
-probe state independent from scheduling, make live usage queries truthfully
-reach providers, select currently advertised models for diagnostics, and make
+Provider diagnostics, operator-only navigation, API-key lifecycle guards, and
+the initial import hardening have landed on this branch. The immediate focus is
+finishing the fail-closed migration evidence and release gates, while keeping
 provider-vs-deployment failures easy to distinguish.
 
 ## Compatibility Boundaries
@@ -33,6 +35,15 @@ Do not rename or remove these during the refactor unless a separate migration pl
 - Private-control-plane behavior: public domains expose AI gateway endpoints only; admin/control UI stays localhost/WireGuard-only
 
 ## Next Development Phases
+
+### Phase 2 status — completed on the review branch
+
+The provider model-aware diagnostics, bounded/redacted probe state, API-key
+idempotency contract, proxy update/import guards, and administrator frontend
+boundary described in the Phase 2 criteria below are implemented and recorded
+in [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md). Treat the Phase 2
+sections as acceptance criteria and historical context; do not restart them
+without a new regression finding.
 
 ### Phase 2.1 — Provider model-aware diagnostics
 
@@ -75,6 +86,49 @@ Do not rename or remove these during the refactor unless a separate migration pl
   frontend gates before tagging.
 - Preserve historical OpenSpec evidence rather than rewriting it to match the
   current release.
+
+### Phase 3 — Retired-surface and migration evidence hardening (completed checkpoint)
+
+- Keep historical customer API prefixes on the explicit bilingual `410 Gone`
+  contract without intercepting operator or gateway routes.
+- Keep offline migration-report verification bounded and fail-closed on symlink,
+  identity, size, mtime, inode, or content changes.
+- Return structured proxy-import synchronization errors and matching failure
+  counts for both reused and newly-created proxies.
+- Keep each Phase 3 change independently revertible, documented in English and
+  Chinese, and green on the full GitHub CI/security workflow before proceeding.
+
+### Phase 4 — Recovery and private-cutover rehearsal (current; blocked on external inputs)
+
+- Create an encrypted, versioned recovery set and restore it independently in a
+  networkless disposable target.
+- Verify the protected keyring, migration-report key, legacy-local-backup policy,
+  zero batch-image rows/provider jobs, and immutable archive evidence.
+- Run `deploy/ops/run-private-cutover.sh --dry-run` against the exact retained
+  OPC Compose project and record its target digest without changing production.
+- Do not perform the destructive private-only transaction until every external
+  archive, snapshot, monitoring, and provider-cleanup adapter listed in
+  `deploy/PRODUCTION_ROLLOUT.md` is available and independently verified.
+
+### Phase 5 — Immutable release and isolated canary
+
+- Tag only a commit that has passed the complete backend/frontend/deployment
+  gates; build the multi-architecture OCI image by digest with SBOM and
+  provenance attestations.
+- Run the restored-data and synthetic-provider canary using the same image,
+  database schema, control bind, and egress policy intended for production.
+- Verify public/control listener separation, readiness, account/key routing, and
+  rollback inputs before any production stop.
+
+### Phase 6 — Controlled production promotion and observation
+
+- Bind the real cutover to the reviewed dry-run target hash, exact image digest,
+  Compose/environment files, WireGuard identities, and one-time confirmation
+  token; keep PostgreSQL and Redis untouched.
+- Independently archive and verify the signed report, verifier evidence, and key
+  with immutable retention before starting the reviewed application container.
+- Observe the stated readiness, restart, error-rate, p95, alert, topology, and
+  provider smoke thresholds for the full window; retain rollback evidence.
 
 ## Mandatory Gate Between Every Phase
 
@@ -208,14 +262,11 @@ A phase is done only when:
 
 ## Current Recommended Next Step
 
-Proceed with **Phase 2.1**:
-
-1. Reproduce the case where forced Antigravity quota metadata succeeds but
-   inference for an advertised model returns 429.
-2. Capture only sanitized evidence and determine whether the provider exposes a
-   reliable unsupported-model vs quota-exhausted discriminator.
-3. Write failing focused tests before changing classification or model
-   selection.
-4. Run the mandatory phase gate and independent review.
-5. Update `docs/ACCOUNT_PROBES.md` and `docs/PROJECT_STATUS.md` with any changed
-   contract before committing.
+1. Keep `72aa62eea` as the reviewed Phase 3 checkpoint after its successful
+   GitHub CI and security scan; do not deploy the review branch directly.
+2. Resolve the external prerequisites in Phase 4 and execute the documented
+   dry-run against `/opt/sub2api` before creating a release tag.
+3. If a canary or operator review finds a new defect, add a failing focused test
+   and a separate revertible commit, then repeat the mandatory phase gate.
+4. Update `docs/PROJECT_STATUS.md` and its Chinese mirror for every release,
+   promotion, rollback, or changed operational invariant.
