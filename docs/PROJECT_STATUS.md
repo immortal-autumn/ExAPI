@@ -130,9 +130,35 @@ evidence SHA-256 is
 network proof SHA-256 is
 `dead48986f23334e91bdbc591fd28c6838da999854e8fa2cf16a5235a52cdb24`, and the
 readiness trace SHA-256 is
-`98ddd3ab4f5119fce3473d101d6618946c217265a6d1326cea3fed250c90cbb4`. Production
-remains pinned to the same v0.2.15 digest while the signed production rollout
-record is finalized.
+`98ddd3ab4f5119fce3473d101d6618946c217265a6d1326cea3fed250c90cbb4`.
+
+The final v0.2.15 rollout manifest is retained at
+[`tmp/rollouts/exapi-v0215-cutover-20260902a/rollout-manifest.json`](../tmp/rollouts/exapi-v0215-cutover-20260902a/rollout-manifest.json)
+with SHA-256
+`4a3b2cb531f56643222ea1067656e738827a9b3882beee7b8ef7c0fe09e5a26e`. The
+manifest was accepted by `tools/check_rollout_manifest.py`, keyed-cosign signed,
+verified, and published with COMPLIANCE retention through 2027-09-03 at
+`s3://exapi-rollout-records/exapi-v0215-cutover-20260902a`. The retained object
+versions are `manifest.json`
+`d38af49a-aa21-48d6-ad50-d8ec3fd08d7d`, `manifest.json.sha256`
+`a1b4d45f-c75e-4815-83ab-16acbbf44afe`, `manifest.sigstore.json`
+`134739de-a5cc-48e1-a5ab-1a81621d28ef`, and `oci-provenance-verification.json`
+`1a1f3e29-3cdf-4683-ab10-374c8a447600`.
+
+The manifest binds the v0.2.15 image manifest (linux/amd64
+`df820aeed3803cd528509c3753a8d926e66a2c103b6dc1068d1c506f0dbb1362`,
+linux/arm64 `393de69cd6d8346b11e40d88677605f3c449fcdb324c27aaa220265868caed46`)
+and SPDX SBOM SHA-256
+`a7e7e46f923ecfcfcd2b838fc851385280c580face53866ae173d3a5a36677e8` to the
+release provenance. It records recovery set `exapi-v0215-recovery-20260902c`
+(logical backup version `8f78e26e-f7a8-450c-b502-9814addf1369`, snapshot
+`e786ac46-d37d-46cd-a725-9ef6a3a2eabb`), the synthetic canary
+`exapi-v0215-syn-20260902a`, and the final restored-data reproof above. The
+private migration archive is independently verified, encrypted, immutable, and
+retained at `s3://exapi-cutover-evidence/exapi-v0215-cutover-20260902a`; its
+database and key objects retain separate version IDs. The off-host monitor
+delivered the 503 alert at `2026-09-02T20:19:09Z` and the 200 recovery at
+`2026-09-02T20:22:15Z`.
 
 ## Administrator hardening review branch
 
@@ -263,9 +289,11 @@ to manifest digest
 reports `0.2.15`, and has revision `a63f68a11b08cdee6ead8e4cce41332cb4e83ac3`.
 At the last review, all three services were healthy with zero restarts and
 `/ready` returned `{"status":"ready"}`. PostgreSQL and Redis were not
-recreated. The 60-minute production observation was still running; no final
-promotion claim is made until its evidence and signed rollout manifest are
-complete.
+recreated. The completed 60-minute production observation recorded 120/120
+readiness checks, zero readiness failures, restarts, unexpected 5xx, and new
+P0/P1 alerts; error rate was `0.0` and p95 was `4.0 ms` against a `4.852 ms`
+baseline. The signed rollout manifest and its provenance evidence are retained
+in the versioned off-host record described above.
 
 ## v0.2.14 production deployment (historical)
 

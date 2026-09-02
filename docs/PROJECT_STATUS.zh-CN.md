@@ -100,7 +100,30 @@ restored-data observation，60/60 readiness 全部成功，失败、重启、意
 `6d91254ed770bf5ca5e10e844c845a2e154621e9680bb68b6eb7fb8bc7e29116`，network proof SHA-256
 为 `dead48986f23334e91bdbc591fd28c6838da999854e8fa2cf16a5235a52cdb24`，readiness trace
 SHA-256 为 `98ddd3ab4f5119fce3473d101d6618946c217265a6d1326cea3fed250c90cbb4`。生产仍固定在同一
-v0.2.15 digest，signed production rollout record 尚待完成。
+v0.2.15 digest。
+
+最终 v0.2.15 rollout manifest 保存在
+[`tmp/rollouts/exapi-v0215-cutover-20260902a/rollout-manifest.json`](../tmp/rollouts/exapi-v0215-cutover-20260902a/rollout-manifest.json)，
+SHA-256 为
+`4a3b2cb531f56643222ea1067656e738827a9b3882beee7b8ef7c0fe09e5a26e`。该清单已通过
+`tools/check_rollout_manifest.py`，使用受保护的 cosign 密钥签名并验证，随后以 COMPLIANCE
+模式发布到 `s3://exapi-rollout-records/exapi-v0215-cutover-20260902a`，保留至 2027-09-03。
+对象版本为：manifest `d38af49a-aa21-48d6-ad50-d8ec3fd08d7d`、checksum
+`a1b4d45f-c75e-4815-83ab-16acbbf44afe`、签名包
+`134739de-a5cc-48e1-a5ab-1a81621d28ef`、provenance 证明
+`1a1f3e29-3cdf-4683-ab10-374c8a447600`。
+
+该清单绑定 v0.2.15 image manifest（linux/amd64
+`df820aeed3803cd528509c3753a8d926e66a2c103b6dc1068d1c506f0dbb1362`、linux/arm64
+`393de69cd6d8346b11e40d88677605f3c449fcdb324c27aaa220265868caed46`）及 SPDX SBOM
+SHA-256 `a7e7e46f923ecfcfcd2b838fc851385280c580face53866ae173d3a5a36677e8`，并记录恢复集
+`exapi-v0215-recovery-20260902c`（logical backup version
+`8f78e26e-f7a8-450c-b502-9814addf1369`、snapshot
+`e786ac46-d37d-46cd-a725-9ef6a3a2eabb`）、synthetic canary
+`exapi-v0215-syn-20260902a` 和上文最终 restored-data reproof。私有化迁移归档已独立验证、
+加密且不可变，并保存在 `s3://exapi-cutover-evidence/exapi-v0215-cutover-20260902a`；
+数据库和 key 对象使用独立版本 ID。异地监控于 `2026-09-02T20:19:09Z` 送达 503 告警，
+并于 `2026-09-02T20:22:15Z` 送达 200 recovery。
 
 ## 管理员专用化审查分支
 
@@ -188,9 +211,10 @@ null/空值则会清除对应可空设置。这部分在 v0.2.14 之前属于审
 manifest digest
 `sha256:f25727e7dce06ce62ab921027346c27e86a92dabdd0e6e7dc7791333526889b0`，报告版本 `0.2.15`，
 revision 为 `a63f68a11b08cdee6ead8e4cce41332cb4e83ac3`。最近审阅时三个服务均 healthy、
-重启次数为 0，`/ready` 返回 `{"status":"ready"}`；PostgreSQL 和 Redis 未重建。60 分钟
-production observation 当时仍在运行；在 evidence 和 signed rollout manifest 完成前，不宣称
-最终 promotion 已完成。
+重启次数为 0，`/ready` 返回 `{"status":"ready"}`；PostgreSQL 和 Redis 未重建。已完成的
+60 分钟 production observation 共 120/120 次 readiness 检查，失败、重启、意外 5xx 和新增
+P0/P1 告警均为 0；error rate 为 `0.0`，p95 为 `4.0 ms`（基线 `4.852 ms`）。签名 rollout
+manifest 及 provenance 证明已按上文保存在版本化异地记录中。
 
 ## v0.2.14 OPC 生产部署（历史记录）
 
