@@ -33,11 +33,12 @@ canary/readiness 证据。只有带注释标签通过完整 release workflow、�
 匹配的 restored-data 和 synthetic-provider canary 完成观察，并在部署前立即验证
 新鲜的异地 readiness/告警证据后，才允许 promotion。
 
-最新未打标签候选提交 `e59bbec53` 增加了 fail-closed 的私有化切换用户引用矩阵：
+最新未打标签候选提交 `f42ea9bbb` 增加了 fail-closed 的私有化切换用户引用矩阵：
 删除客户用户前，会迁移或置空保留的 API key、usage/billing 及运维归属引用，删除
 客户专属行，保留历史快照，并在签名报告中记录行数与 identity checksum。缺失的可选
-表/列会记录为跳过；不可置空的历史引用会中止事务。重点测试、race、vet 以及完整后端
-单元测试均在本地通过。该提交已推送到审查分支，正在等待 CI/安全验证，尚未部署。
+表/列会记录为跳过；不可置空的历史引用会中止事务；旧版遗留的
+`user_external_identities` 也有明确策略。重点测试、race、vet 以及完整后端单元测试均在
+本地通过。该提交已推送到审查分支，正在等待 CI/安全验证，尚未部署。
 
 ## 管理员专用化审查分支
 
