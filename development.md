@@ -95,6 +95,9 @@ without a new regression finding.
   identity, size, mtime, inode, or content changes.
 - Return structured proxy-import synchronization errors and matching failure
   counts for both reused and newly-created proxies.
+- Keep operator batch-image functionality under `/admin/batch-images`; retain
+  the legacy `/batch-image` bookmark as an explicit retirement page and keep
+  route navigation/prefetch contracts covered by focused tests.
 - Keep each Phase 3 change independently revertible, documented in English and
   Chinese, and green on the full GitHub CI/security workflow before proceeding.
 
