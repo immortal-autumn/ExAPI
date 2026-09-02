@@ -27,6 +27,10 @@ contracts, compatibility references, and historical design evidence.
   deployment, validation, and known-external-condition record.
 - [`PROJECT_STATUS.zh-CN.md`](PROJECT_STATUS.zh-CN.md) — Simplified Chinese
   mirror of the current status record; English remains the default.
+- [`ADMIN_ONLY_BASELINE.md`](ADMIN_ONLY_BASELINE.md) — Phase 0 administrator-only
+  route, provider, language, and OPC baseline.
+- [`ADMIN_ONLY_BASELINE.zh-CN.md`](ADMIN_ONLY_BASELINE.zh-CN.md) — Chinese mirror
+  of the Phase 0 baseline.
 - [`ACCOUNT_PROBES.md`](ACCOUNT_PROBES.md) — manual probe and forced usage
   refresh semantics.
 - [`PRIVATE_PRODUCT_SURFACE.md`](PRIVATE_PRODUCT_SURFACE.md) — the supported
