@@ -125,7 +125,19 @@ PY
 rm -f "$config_json"
 
 "${compose[@]}" pull postgres redis mock-provider >/dev/null
-"${compose[@]}" up -d postgres redis mock-provider >/dev/null
+# Compose creates a fresh named volume as root:root.  The hardened services
+# intentionally run as their image UIDs and never recursively chown live data,
+# so initialize the two empty volumes once, before their first non-root start.
+# This also makes a brand-new synthetic project exercise the same ownership
+# preflight required by the production deployment documentation.
+"${compose[@]}" create postgres redis mock-provider >/dev/null
+docker run --rm --network none --user 0:0 --entrypoint /bin/sh \
+  -v "${PROJECT}_postgres_data:/mnt" \
+  "$POSTGRES_IMAGE" -ec 'chown 70:70 /mnt; chmod 700 /mnt'
+docker run --rm --network none --user 0:0 --entrypoint /bin/sh \
+  -v "${PROJECT}_redis_data:/mnt" \
+  "$REDIS_IMAGE" -ec 'chown 999:1000 /mnt; chmod 750 /mnt'
+"${compose[@]}" start postgres redis mock-provider >/dev/null
 for _ in $(seq 1 90); do
   pg_health=$(docker inspect "$POSTGRES" --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null || true)
   redis_health=$(docker inspect "$REDIS" --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null || true)
