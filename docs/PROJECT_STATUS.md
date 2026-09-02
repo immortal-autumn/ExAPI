@@ -11,15 +11,15 @@ Last reviewed: **2026-09-02 (Europe/London)**
 
 | Item | Current value |
 |---|---|
-| Product version | `0.2.9` (released; not yet deployed to OPC) |
+| Product version | `0.2.10` (released; not yet deployed to OPC) |
 | GitHub repository | `immortal-autumn/ExAPI` |
-| Git tag | `v0.2.9` |
+| Git tag | `v0.2.10` |
 | Main branch | `main` (currently `f79ef301b`; release branch remains separate pending rollout) |
 | Release branch | `revision/exapi-v0.2.1` |
-| Reviewed commit | `251b5122840a0d08b960cef78670be7cd311fc60` |
-| OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:bf498436bb9e0ff52c8769f11105ef598c9621a5eb96d9eb1afd9da82d73bf1` |
-| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.9> |
-| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33580079870> |
+| Reviewed commit | `f8cee085c3e7d815d5144659d3a92720f9aa8e95` |
+| OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:c56c876f70c49d3f05dffc7fc80417807b043da1d1261d1e3fc29b7a0daaeaa8` |
+| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.10> |
+| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33584593736> |
 | Upstream baseline | Sub2API `v0.1.171`, constrained by `upstream.lock.json` |
 
 The GitHub repository was renamed from `Sub2API2Personal` to `ExAPI` on
@@ -28,13 +28,14 @@ The GitHub repository was renamed from `Sub2API2Personal` to `ExAPI` on
 must keep that compatibility decision explicit or publish a separately
 verified package migration.
 
-The v0.2.9 release workflow passed the Go module-tidy check, backend unit and
+The v0.2.10 release workflow passed the Go module-tidy check, backend unit and
 integration suites, race detector, frontend tests/type checks/build audit,
 multi-architecture image build, OCI label verification, SPDX SBOM generation,
 and provenance/SBOM attestations. The attested manifest digest is the same
-digest recorded above, and `gh attestation verify` passed. The prior v0.2.8
-tag remains immutable but was never published because its commit still
-contained `backend/cmd/server/VERSION=0.2.7`; it must not be retagged.
+digest recorded above, and `gh attestation verify` passed. The v0.2.9 release
+remains available as the preceding reviewed candidate. The prior v0.2.8 tag
+remains immutable but was never published because its commit still contained
+`backend/cmd/server/VERSION=0.2.7`; it must not be retagged.
 
 ## Administrator hardening review branch
 
@@ -118,6 +119,12 @@ security scans:
   completion, preventing duplicate execution across replicas and stale
   workers. Focused tests, repository/service tests, `go vet`, and race tests
   passed. Production has not been changed.
+- `4e68f560e` and `f8cee085c`: the batch-image Codex instruction is now
+  localized for English and Chinese interfaces. Literal JSON braces are
+  tokenized before Vue i18n compilation and restored only when copied, with
+  regression coverage for both languages and missing-template fail-closed
+  behavior. GitHub CI, frontend quality gates, and security scanning passed;
+  production has not been changed.
 
 The review branch also contains work hardening proxy partial updates: omitted
 lifecycle and credential fields are preserved, while explicit null/empty values
@@ -131,7 +138,7 @@ Production remains on the v0.2.7 digest
 `sha256:628dbccd43e5348989ae83c6c7c494bcbe85227824a1acfedee10f77dd7f1795`
 as Docker Compose project `sub2api` from `/opt/sub2api`. The application
 container reports version `0.2.7`, the v0.2.7 reviewed commit, healthy status,
-and zero restarts at the latest read-only check. The v0.2.9 release above is a
+and zero restarts at the latest read-only check. The v0.2.10 release above is a
 separately reviewed candidate and has not been deployed.
 
 The deployment keeps versioned promotion inputs:
