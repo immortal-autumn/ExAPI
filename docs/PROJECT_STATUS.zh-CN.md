@@ -124,6 +124,10 @@ readiness、provider smoke、内部网络/出站限制、恢复完整性和 disp
 签名包 `eaecb12c-7674-4f8c-b436-ad826455a0fa`、provenance 证明
 `7a3b55dc-c324-432b-aed6-bc16d24341a6`。
 
+发布后的本地门禁仍全部通过：前端 Vitest `266` 个文件、`1432` 个测试通过，`vue-tsc`
+类型检查和两个 bundle 预算检查通过，snapshot evidence 单元测试 `5` 个通过，生产
+rollout contract 通过。
+
 ## 生产观察
 
 `exapi-v0210-production-observe-20260902b` 运行 60 分钟、30 秒间隔，共 120 次

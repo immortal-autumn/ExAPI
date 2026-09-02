@@ -173,6 +173,11 @@ with COMPLIANCE retention through 2027-09-03. Object versions are:
 `eaecb12c-7674-4f8c-b436-ad826455a0fa`, and provenance evidence
 `7a3b55dc-c324-432b-aed6-bc16d24341a6`.
 
+Post-publication local gates remain green: frontend Vitest `266` files/
+`1432` tests passed, `vue-tsc` typecheck passed, both bundle budgets passed,
+the snapshot-evidence unit suite passed (`5` tests), and the production-rollout
+contract passed.
+
 The production observation ran for 60 minutes with 120 readiness probes:
 
 - readiness failures: `0`; restarts: `0`; unexpected 5xx: `0`;
