@@ -10,7 +10,7 @@ const {
   listKeys,
   createKey,
   deleteKey,
-  getPublicSettings,
+  fetchPublicSettings,
   getDashboardApiKeysUsage,
   getAvailableGroups,
   getUserGroupRates,
@@ -23,7 +23,7 @@ const {
   listKeys: vi.fn(),
   createKey: vi.fn(),
   deleteKey: vi.fn(),
-  getPublicSettings: vi.fn(),
+  fetchPublicSettings: vi.fn(),
   getDashboardApiKeysUsage: vi.fn(),
   getAvailableGroups: vi.fn(),
   getUserGroupRates: vi.fn(),
@@ -88,12 +88,6 @@ vi.mock('@/api/admin/apiKeys', () => ({
   },
 }))
 
-vi.mock('@/api/client', () => ({
-  apiClient: {
-    get: getPublicSettings,
-  },
-}))
-
 vi.mock('@/components/layout/AppLayout.vue', () => ({
   default: { template: '<div><slot /></div>' },
 }))
@@ -102,6 +96,7 @@ vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
     showError,
     showSuccess,
+    fetchPublicSettings,
   }),
 }))
 
@@ -295,7 +290,7 @@ describe('user KeysView column settings', () => {
     listKeys.mockReset()
     createKey.mockReset()
     deleteKey.mockReset()
-    getPublicSettings.mockReset()
+    fetchPublicSettings.mockReset()
     getDashboardApiKeysUsage.mockReset()
     getAvailableGroups.mockReset()
     getUserGroupRates.mockReset()
@@ -312,7 +307,7 @@ describe('user KeysView column settings', () => {
     })
     createKey.mockResolvedValue({ ...createApiKey(), key: 'sk-created-secret' })
     deleteKey.mockResolvedValue({ message: 'deleted' })
-    getPublicSettings.mockResolvedValue({ data: {} })
+    fetchPublicSettings.mockResolvedValue({})
     getDashboardApiKeysUsage.mockResolvedValue({ stats: {} })
     getAvailableGroups.mockResolvedValue([])
     getUserGroupRates.mockResolvedValue({})
@@ -325,7 +320,7 @@ describe('user KeysView column settings', () => {
   it('does not offer use or import actions for keys loaded from storage', async () => {
     const wrapper = await mountView()
 
-    expect(getPublicSettings).toHaveBeenCalledWith('/settings/public')
+    expect(fetchPublicSettings).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).not.toContain('keys.useKey')
     expect(wrapper.text()).not.toContain('keys.importToCcSwitch')
   })
