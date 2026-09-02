@@ -302,6 +302,29 @@ validated identity-derived name. The update changed only the display name
 account-list read confirmed all three configured accounts remain active and
 schedulable.
 
+### 2026-09-02 deployment recovery note
+
+During the post-check deployment, a full Compose `up -d --no-build --pull
+never` unexpectedly reconciled dependency configuration and recreated the
+PostgreSQL and Redis containers. The persistent volumes and database were not
+removed or initialized. Redis initially failed because its existing data files
+were owned by `root` while the hardened container runs as UID/GID `999:1000`.
+The operator stopped Redis, corrected ownership on `/opt/sub2api/redis_data`,
+and restarted it; Redis loaded the existing AOF successfully (`DBSIZE=72`).
+PostgreSQL and Redis then returned healthy, with zero restarts, and the
+application container was reconciled separately with:
+
+```text
+docker compose --env-file .env.v0.2.15 \
+  -f docker-compose.v0.2.15.yml \
+  up -d --no-deps sub2api
+```
+
+The retained data was rechecked after recovery (users `1`, accounts `3`, API
+keys `3`, groups `7`). Future production application updates must use the
+`--no-deps sub2api` form; changing PostgreSQL or Redis requires an explicit
+maintenance window, recovery set, and independent migration plan.
+
 ## v0.2.14 production deployment (historical)
 
 The pre-cutover recovery set `exapi-v0214-recovery-20260902a` is retained in

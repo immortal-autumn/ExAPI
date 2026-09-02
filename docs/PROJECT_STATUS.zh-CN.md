@@ -220,6 +220,25 @@ manifest 及 provenance 证明已按上文保存在版本化异地记录中。
 改为基于已验证身份的名称。该操作只修改显示名称（凭据、分组、调度状态和账号状态均保留）。
 随后复读账号列表确认当前三个已配置账号仍全部为 active 且可调度。
 
+### 2026-09-02 部署恢复记录
+
+部署后检查期间，完整的 Compose `up -d --no-build --pull never` 因配置哈希差异意外
+重建了 PostgreSQL 和 Redis 容器。持久化卷和数据库没有删除或重新初始化。Redis 最初因为
+已有数据文件属于 `root`，而加固后的容器使用 UID/GID `999:1000`，所以启动失败。运维人员
+停止 Redis、修正 `/opt/sub2api/redis_data` 的所有权后重新启动；Redis 成功加载原有 AOF
+（`DBSIZE=72`）。PostgreSQL 和 Redis 随后恢复 healthy，重启次数为 0；应用容器则使用
+以下命令单独协调：
+
+```text
+docker compose --env-file .env.v0.2.15 \
+  -f docker-compose.v0.2.15.yml \
+  up -d --no-deps sub2api
+```
+
+恢复后再次核对数据（users `1`、accounts `3`、API keys `3`、groups `7`）。今后的生产应用
+更新必须使用 `--no-deps sub2api` 形式；如需变更 PostgreSQL 或 Redis，必须有明确维护窗口、
+恢复集和独立迁移方案。
+
 ## v0.2.14 OPC 生产部署（历史记录）
 
 切换前恢复集 `exapi-v0214-recovery-20260902a` 保存在加密、版本化的异地对象中，保留至
