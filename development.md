@@ -6,10 +6,10 @@ baseline lives in [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md).
 
 ## Current Goal
 
-Build on the deployed v0.2.14 baseline while preserving runtime compatibility,
+Build on the deployed v0.2.15 baseline while preserving runtime compatibility,
 deployment compatibility, API compatibility, and private-control-plane
 security. The release/review branch `revision/exapi-v0.2.1` is the reviewed
-source for the current deployment; OPC is running the attested v0.2.14 image.
+source for the current deployment; OPC is running the attested v0.2.15 image.
 Future changes remain non-production until the recovery and rollout gates below
 are complete.
 
@@ -132,9 +132,9 @@ contract.
   build, bundle budgets, Compose security, rollout contracts, and release
   contract passed. GitHub CI run `33607824144` and Security Scan run
   `33607824171` also completed successfully. These changes are included in the
-  v0.2.14 image deployed to OPC.
+  v0.2.15 image deployed to OPC.
 
-### Phase 4 — Recovery and private-cutover rehearsal (completed for v0.2.14; 2026-09-02)
+### Phase 4 — Recovery and private-cutover rehearsal (completed for v0.2.15; 2026-09-02)
 
 - Create an encrypted, versioned recovery set and restore it independently in a
   networkless disposable target.
@@ -144,10 +144,10 @@ contract.
   OPC Compose project and record its target digest without changing production.
 - Keep the destructive private-only transaction gated on every external
   archive, snapshot, monitoring, and provider-cleanup adapter listed in
-  `deploy/PRODUCTION_ROLLOUT.md`; the v0.2.14 transaction was completed only
+  `deploy/PRODUCTION_ROLLOUT.md`; the v0.2.15 transaction was completed only
   after those proofs were refreshed and is retained for audit.
 
-### Phase 5 — Immutable release and isolated canary (completed for v0.2.14)
+### Phase 5 — Immutable release and isolated canary (completed for v0.2.15)
 
 - Tag only a commit that has passed the complete backend/frontend/deployment
   gates; build the multi-architecture OCI image by digest with SBOM and
@@ -157,7 +157,7 @@ contract.
 - Verify public/control listener separation, readiness, account/key routing, and
   rollback inputs before any production stop.
 
-### Phase 6 — Controlled production promotion and observation (completed for v0.2.14)
+### Phase 6 — Controlled production promotion and observation (completed for v0.2.15)
 
 - Bind the real cutover to the reviewed dry-run target hash, exact image digest,
   Compose/environment files, WireGuard identities, and one-time confirmation
@@ -167,7 +167,7 @@ contract.
 - Observe the stated readiness, restart, error-rate, p95, alert, topology, and
   provider smoke thresholds for the full window; retain rollback evidence.
 
-The v0.2.14 cycle completed Phases 4–6 and published a signed rollout manifest.
+The v0.2.15 cycle completed Phases 4–6 and published a signed rollout manifest.
 Repeat the same gates for the next release; never treat this completion as a
 waiver for a future image or database change. The v0.2.10 records remain
 historical rollback evidence.
