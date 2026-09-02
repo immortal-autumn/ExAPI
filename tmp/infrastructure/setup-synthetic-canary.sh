@@ -307,7 +307,8 @@ docker exec "$APP" wget -q -T 3 -O /dev/null http://mock-provider:19091/health |
 
 counts=$(docker exec "$POSTGRES" sh -ec 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -AtF "|" -c "SELECT (SELECT private_schema_version FROM exapi_private_state WHERE id=true),(SELECT COUNT(*) FROM users),(SELECT COUNT(*) FROM groups WHERE deleted_at IS NULL),(SELECT COUNT(*) FROM accounts WHERE deleted_at IS NULL),(SELECT COUNT(*) FROM api_keys WHERE deleted_at IS NULL),(SELECT COUNT(*) FROM batch_image_jobs)"')
 [[ "$counts" == '2|1|2|1|1|0' ]] || die "unexpected synthetic database counts: $counts"
-bindings=$(docker exec "$POSTGRES" sh -ec 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -AtF "|" -v account_id="$1" -v group_id="$2" -c "SELECT (SELECT COUNT(*) FROM account_groups WHERE account_id=:'\''account_id'\'' AND group_id=:'\''group_id'\''),(SELECT COUNT(*) FROM api_keys WHERE group_id=:'\''group_id'\'' AND deleted_at IS NULL)"' sh "$account_id" "$group_id")
+[[ "$account_id" =~ ^[0-9]+$ && "$group_id" =~ ^[0-9]+$ ]] || die 'synthetic IDs are not numeric'
+bindings=$(docker exec "$POSTGRES" sh -ec 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -AtF "|" -v account_id="$1" -v group_id="$2" -c "SELECT (SELECT COUNT(*) FROM account_groups WHERE account_id=:account_id AND group_id=:group_id),(SELECT COUNT(*) FROM api_keys WHERE group_id=:group_id AND deleted_at IS NULL)"' sh "$account_id" "$group_id")
 [[ "$bindings" == '1|1' ]] || die "synthetic account/key group bindings are incomplete: $bindings"
 
 mkdir -p "$(dirname "$PROOF_FILE")"
