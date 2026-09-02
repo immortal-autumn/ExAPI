@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+. /protected/lib/lib-exapi-storage.sh
+exapi_load_s3_credentials
+
+[[ "${EXAPI_WRITER_QUIESCED:-}" == true ]] || { printf 'writer is not quiesced\n' >&2; exit 1; }
+[[ "${EXAPI_CHECKPOINT_COMPLETED:-}" == true ]] || { printf 'database checkpoint is not complete\n' >&2; exit 1; }
+[[ "${EXAPI_ROLLOUT_ID:-}" =~ ^[A-Za-z0-9._-]+$ ]] || { printf 'unsafe rollout ID\n' >&2; exit 1; }
+[[ "${EXAPI_SNAPSHOT_RETENTION_UNTIL:-}" =~ Z$ ]] || { printf 'snapshot retention is required\n' >&2; exit 1; }
+
+SRC=${EXAPI_RELEASE_ROOT:-/home/opc/src/exapi-release-f8cee085c3e7d815d5144659d3a92720f9aa8e95}
+tmp_dir="$SRC/tmp/snapshot-create/$EXAPI_ROLLOUT_ID"
+mkdir -p "$tmp_dir"
+chmod 700 "$tmp_dir"
+encrypted="$tmp_dir/postgres-base.tar.gz.age"
+trap 'unlink "$encrypted" >/dev/null 2>&1 || true' EXIT
+
+docker exec sub2api-postgres sh -ec '
+  export PGPASSWORD="$POSTGRES_PASSWORD"
+  exec pg_basebackup -h 127.0.0.1 -p 5432 -U "$POSTGRES_USER" \
+    --pgdata=- --format=tar --gzip --wal-method=fetch --checkpoint=fast
+' | age -R /protected/recipients/snapshot.txt -o "$encrypted"
+
+sha=$(sha256sum "$encrypted" | awk '{print $1}')
+size=$(stat -c %s "$encrypted")
+uri="s3://exapi-snapshots/$EXAPI_ROLLOUT_ID/postgres-base.tar.gz.age"
+exapi_aws s3 cp "$encrypted" "$uri" --metadata "sha256=$sha" --only-show-errors
+read -r bucket key < <(exapi_parse_s3 "$uri")
+head=$(exapi_aws s3api head-object --bucket "$bucket" --key "$key" --output json)
+version=$(jq -er .VersionId <<<"$head")
+exapi_retain_object "$bucket" "$key" "$version" "$EXAPI_SNAPSHOT_RETENTION_UNTIL" >/dev/null
+created=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+jq -n \
+  --arg rollout_id "$EXAPI_ROLLOUT_ID" \
+  --arg checkpoint_at "$EXAPI_CHECKPOINT_AT" \
+  --arg source_container_id "$EXAPI_SNAPSHOT_SOURCE_CONTAINER_ID" \
+  --arg source_image_id "$EXAPI_SNAPSHOT_SOURCE_IMAGE_ID" \
+  --arg source_mounts_sha256 "$EXAPI_SNAPSHOT_SOURCE_MOUNTS_SHA256" \
+  --arg provider minio-pg-basebackup \
+  --arg snapshot_id "$version" \
+  --arg target "$uri" \
+  --arg created_at "$created" \
+  --arg retention_until "$EXAPI_SNAPSHOT_RETENTION_UNTIL" \
+  --arg sha256 "$sha" \
+  --argjson size_bytes "$size" \
+  '{schema_version:1,rollout_id:$rollout_id,checkpoint_at:$checkpoint_at,
+    source:{container_id:$source_container_id,image_id:$source_image_id,mounts_sha256:$source_mounts_sha256},
+    provider:$provider,snapshot_id:$snapshot_id,target:$target,created_at:$created_at,
+    retention_until:$retention_until,sha256:$sha256,size_bytes:$size_bytes,encrypted:true}'
