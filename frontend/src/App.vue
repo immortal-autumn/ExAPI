@@ -14,15 +14,15 @@ const route = useRoute()
 const appStore = useAppStore()
 const authStore = useAuthStore()
 const adminSettingsStore = useAdminSettingsStore()
-const { locale } = useI18n()
+const { locale, t } = useI18n()
 const operatorAccessMessage = computed(() => {
   switch (authStore.accessState) {
     case 'denied':
-      return 'This control-plane request was denied. Connect from an allowed WireGuard operator peer.'
+      return t('common.privateControl.denied')
     case 'unavailable':
-      return 'The ExAPI control plane is unavailable. Verify the control listener and WireGuard connection.'
+      return t('common.privateControl.unavailable')
     case 'loading':
-      return 'Connecting to the ExAPI control plane…'
+      return t('common.privateControl.loading')
     default:
       return ''
   }
@@ -81,8 +81,8 @@ onMounted(async () => {
     role="status"
     aria-live="polite"
   >
-    <h1>ExAPI private control plane</h1>
+    <h1>{{ t('common.privateControl.title') }}</h1>
     <p>{{ operatorAccessMessage }}</p>
-    <button type="button" @click="authStore.checkAuth()">Retry connection</button>
+    <button type="button" @click="authStore.checkAuth()">{{ t('common.privateControl.retry') }}</button>
   </section>
 </template>

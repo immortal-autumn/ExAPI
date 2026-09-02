@@ -10,6 +10,11 @@ export default defineConfig({
       'vue-i18n': 'vue-i18n/dist/vue-i18n.runtime.esm-bundler.js'
     }
   },
+  // Keep Vitest aligned with the production Vite build: vue-i18n's runtime
+  // bundle uses the CSP-safe JIT AST compiler for interpolated messages.
+  define: {
+    __INTLIFY_JIT_COMPILATION__: true
+  },
   test: {
     globals: true,
     environment: 'jsdom',

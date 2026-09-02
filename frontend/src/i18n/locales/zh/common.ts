@@ -111,6 +111,13 @@ export default {
         minutes: '{m}m',
         withSuffix: '{time} 后解除'
       }
+    },
+    privateControl: {
+      denied: '控制平面请求被拒绝，请从允许的 WireGuard 操作员节点连接。',
+      unavailable: 'ExAPI 控制平面不可用，请检查控制监听器和 WireGuard 连接。',
+      loading: '正在连接 ExAPI 控制平面…',
+      title: 'ExAPI 私有控制平面',
+      retry: '重试连接',
     }
   },
 

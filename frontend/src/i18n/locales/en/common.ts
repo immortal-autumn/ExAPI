@@ -111,6 +111,13 @@ export default {
         minutes: '{m}m',
         withSuffix: '{time} to lift'
       }
+    },
+    privateControl: {
+      denied: 'This control-plane request was denied. Connect from an allowed WireGuard operator peer.',
+      unavailable: 'The ExAPI control plane is unavailable. Verify the control listener and WireGuard connection.',
+      loading: 'Connecting to the ExAPI control plane…',
+      title: 'ExAPI private control plane',
+      retry: 'Retry connection',
     }
   },
 

@@ -1,8 +1,11 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
+import { createI18n } from 'vue-i18n'
 
 import SingleUserCockpitPanel from '../components/SingleUserCockpitPanel.vue'
+import en from '@/i18n/locales/en'
+import zh from '@/i18n/locales/zh'
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -21,22 +24,50 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mocks.push }),
 }))
 
-describe('SingleUserCockpitPanel Chinese product copy', () => {
+const summary = {
+  generated_at: '2026-08-05T12:00:00Z',
+  accounts: { total: 2, active: 1, inactive: 0, error: 1, dispatch_eligible: 1, quota_warning_total: 1 },
+  platforms: [{ platform: 'openai', total: 2, active: 1, error: 1, dispatch_eligible: 1 }],
+  quota_warnings: [{ account_id: 42, name: 'main', platform: 'openai', scope: 'daily', used: 9, limit: 10, percent: 90, severity: 'critical' }],
+}
+
+function mountPanel(locale: 'en' | 'zh-CN') {
+  const i18n = createI18n({
+    legacy: false,
+    locale,
+    messages: { en, 'zh-CN': zh },
+  })
+  return mount(SingleUserCockpitPanel, {
+    global: {
+      plugins: [createPinia(), i18n],
+      stubs: { Icon: true },
+    },
+  })
+}
+
+afterEach(() => {
+  mocks.getSummary.mockReset()
+  mocks.push.mockReset()
+})
+
+describe('SingleUserCockpitPanel bilingual product copy', () => {
+  it('renders primary operator copy in English by default', async () => {
+    mocks.getSummary.mockResolvedValue(summary)
+    const wrapper = mountPanel('en')
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('Single-user cockpit')
+    expect(text).toContain('Quota watch')
+    expect(text).toContain('Upstream account dispatch')
+    expect(text).toContain('Local integration')
+    expect(text).not.toMatch(/[\u4e00-\u9fff]/)
+    expect(wrapper.get('button[aria-label="View account main, quota usage 90%"]')).toBeTruthy()
+  })
+
   it('renders primary operator copy in Chinese without English prose', async () => {
-    mocks.getSummary.mockResolvedValue({
-      generated_at: '2026-08-05T12:00:00Z',
-      accounts: { total: 2, active: 1, inactive: 0, error: 1, dispatch_eligible: 1, quota_warning_total: 1 },
-      platforms: [{ platform: 'openai', total: 2, active: 1, error: 1, dispatch_eligible: 1 }],
-      quota_warnings: [{ account_id: 42, name: 'main', platform: 'openai', scope: 'daily', used: 9, limit: 10, percent: 90, severity: 'critical' }],
-    })
-    const wrapper = mount(SingleUserCockpitPanel, {
-      global: {
-        plugins: [createPinia()],
-        stubs: {
-          Icon: true,
-        },
-      },
-    })
+    mocks.getSummary.mockResolvedValue(summary)
+    const wrapper = mountPanel('zh-CN')
     await flushPromises()
 
     const text = wrapper.text()
