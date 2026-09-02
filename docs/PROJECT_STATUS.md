@@ -101,6 +101,9 @@ security scans:
 - `6d8e39679`: proxy-only and combined imports now use the same explicit
   synchronization-failure wording, making structured partial-failure results
   consistent for operators. Production has not been changed.
+- `72aa62eea`: added regression coverage for reused and newly-created proxy
+  synchronization failures and committed the Phase 3 evidence records. The
+  complete GitHub CI and security scan passed; production has not been changed.
 
 The review branch also contains work hardening proxy partial updates: omitted
 lifecycle and credential fields are preserved, while explicit null/empty values
