@@ -13,6 +13,9 @@ func TestUserScopedDataPolicyIsSafeAndVersioned(t *testing.T) {
 	require.NoError(t, validateUserScopedDataPolicy())
 	require.Equal(t, UserScopedDataPolicySchemaVersion, 1)
 	require.GreaterOrEqual(t, len(UserScopedDataPolicy), 20)
+	require.Contains(t, UserScopedDataPolicy, UserScopedDataPolicyEntry{
+		Table: "user_external_identities", Column: "user_id", Disposition: UserDataDeleteCustomerRows,
+	})
 }
 
 func TestMigrateUserScopedDataSkipsMissingTableAndColumn(t *testing.T) {

@@ -108,6 +108,10 @@ var UserScopedDataPolicy = []UserScopedDataPolicyEntry{
 	{Table: "usage_cleanup_tasks", Column: "canceled_by", Disposition: UserDataNullHistoricalRef},
 	{Table: "announcements", Column: "updated_by", Disposition: UserDataNullHistoricalRef},
 	{Table: "ops_system_log_cleanup_audits", Column: "operator_id", Disposition: UserDataMigrateToOperator},
+	// Legacy auth migrations may leave this table behind even though it is no
+	// longer created by the current migration set. It has no foreign key, so
+	// explicitly remove customer rows before deleting users.
+	{Table: "user_external_identities", Column: "user_id", Disposition: UserDataDeleteCustomerRows},
 }
 
 type userDataIdentityKind uint8
@@ -173,6 +177,7 @@ var userScopedDataPolicy = []userScopedDataPolicyEntry{
 	{public: UserScopedDataPolicy[44], identity: userDataIdentityID},
 	{public: UserScopedDataPolicy[45], identity: userDataIdentityID},
 	{public: UserScopedDataPolicy[46], identity: userDataIdentityID},
+	{public: UserScopedDataPolicy[47], identity: userDataIdentityID},
 }
 
 var safeSQLIdentifier = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
