@@ -37,27 +37,37 @@ remains available as the preceding reviewed candidate. The prior v0.2.8 tag
 remains immutable but was never published because its commit still contained
 `backend/cmd/server/VERSION=0.2.7`; it must not be retagged.
 
-## v0.2.11 release-candidate preparation
+## v0.2.11 release validation outcome
 
-The review branch is being prepared as the next candidate from the post-v0.2.10
-administrator hardening work. `backend/cmd/server/VERSION` now declares
-`0.2.11`, but no `v0.2.11` tag, OCI image, SBOM, provenance, or signature exists
-yet. The v0.2.10 image and its canary/readiness evidence must not be reused for
-this commit. Promotion remains blocked until the annotated tag passes the full
-release workflow, a digest-matched restored-data and synthetic-provider canary
-is observed, and fresh off-host readiness/alert evidence is verified immediately
-before rollout.
+The annotated `v0.2.11` release was published from commit `b2a5889b4` and its
+release/security/CI workflows passed. Its immutable OCI manifest is
+`sha256:1a27d4282b714ecf5b50234a5a55f5ea89c3e353b897fa8b5877cdaf71eda673` and
+the image labels match version `0.2.11` and that commit. It was pulled to OPC
+for validation but was not promoted to production.
 
-The latest untagged candidate commit `f42ea9bbb` adds a fail-closed private-cutover
-user-reference matrix. Before deleting customer users, retained API-key,
+A fresh synthetic-provider canary against the exact digest failed before
+cutover: the positional private identity map omitted the newly inserted
+`prompt_audit_events` entry, causing `user_group_rate_multipliers` to be
+snapshotted with a nonexistent `id` column. The canary was isolated and cleaned
+up automatically; production remained on v0.2.10. This release is therefore
+superseded for deployment, even though its artifact gates passed.
+
+## v0.2.12 release-candidate preparation
+
+`backend/cmd/server/VERSION` now declares `0.2.12`. The candidate corrects the
+identity-map alignment and adds table-shape regression coverage for prompt-audit,
+user/group, and hourly/daily dashboard identities. It must receive a new
+annotated tag and digest; the v0.2.11 artifact and canary evidence cannot be
+reused. Promotion remains blocked until the new digest passes the full release
+workflow, fresh restored-data and synthetic-provider canaries, and immediate
+off-host readiness/alert verification.
+
+The fail-closed private-cutover matrix remains covered: retained API-key,
 usage/billing, and operational ownership references are reassigned or nulled;
 customer-only rows are deleted, historical snapshots are retained, and signed
 row-count/identity checksums are recorded. Missing optional tables/columns are
 recorded as skipped, while a non-nullable historical reference aborts the
 transaction. Legacy `user_external_identities` rows are covered explicitly.
-Focused tests, race detection, vet, and the full backend unit suite pass locally.
-The commit is pushed to the review branch and awaits CI/security verification;
-it is not deployed.
 
 ## Administrator hardening review branch
 

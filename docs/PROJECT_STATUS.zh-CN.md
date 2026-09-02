@@ -24,21 +24,30 @@
 `gh attestation verify` 验证。生产环境只使用上述 immutable digest，不使用
 `latest` 等可变标签。GHCR 包名仍保留 `sub2api2personal` 以兼容现有部署。
 
-## v0.2.11 发布候选准备
+## v0.2.11 发布验证结果
 
-审查分支正在基于 v0.2.10 之后的管理员加固工作准备下一候选版本。
-`backend/cmd/server/VERSION` 已声明 `0.2.11`，但目前尚未创建 `v0.2.11` 标签，
-也没有对应的 OCI 镜像、SBOM、provenance 或签名。不得复用 v0.2.10 的镜像及其
-canary/readiness 证据。只有带注释标签通过完整 release workflow、与该 digest
-匹配的 restored-data 和 synthetic-provider canary 完成观察，并在部署前立即验证
-新鲜的异地 readiness/告警证据后，才允许 promotion。
+带注释的 `v0.2.11` 标签已从提交 `b2a5889b4` 发布，release/security/CI 工作流均通过。
+其 immutable OCI manifest digest 为
+`sha256:1a27d4282b714ecf5b50234a5a55f5ea89c3e353b897fa8b5877cdaf71eda673`，镜像标签与版本
+`0.2.11` 及该提交一致。镜像已拉取到 OPC 验证，但没有 promotion 到生产。
 
-最新未打标签候选提交 `f42ea9bbb` 增加了 fail-closed 的私有化切换用户引用矩阵：
-删除客户用户前，会迁移或置空保留的 API key、usage/billing 及运维归属引用，删除
-客户专属行，保留历史快照，并在签名报告中记录行数与 identity checksum。缺失的可选
-表/列会记录为跳过；不可置空的历史引用会中止事务；旧版遗留的
-`user_external_identities` 也有明确策略。重点测试、race、vet 以及完整后端单元测试均在
-本地通过。该提交已推送到审查分支，正在等待 CI/安全验证，尚未部署。
+对该精确 digest 运行的新 synthetic-provider canary 在切换前失败：位置式 identity 映射
+漏计新增的 `prompt_audit_events`，导致 `user_group_rate_multipliers` 被按不存在的
+`id` 列快照。canary 使用隔离资源并自动清理；生产仍保持 v0.2.10。因此尽管 artifact
+门禁通过，v0.2.11 仍不可用于部署。
+
+## v0.2.12 发布候选准备
+
+`backend/cmd/server/VERSION` 现声明 `0.2.12`。候选修正 identity 映射对齐，并增加
+prompt-audit、user/group 及 hourly/daily dashboard identity 的表结构回归覆盖。必须创建
+新的带注释标签和 digest；不得复用 v0.2.11 artifact 或 canary 证据。只有新 digest 通过
+完整 release workflow、新鲜 restored-data 与 synthetic-provider canary，并在部署前立即
+完成异地 readiness/告警验证后，才允许 promotion。
+
+fail-closed 私有化切换矩阵仍保持覆盖：保留的 API key、usage/billing 与运维归属引用会迁移
+或置空；客户专属行会删除，历史快照保留，并在签名报告记录行数及 identity checksum。
+缺失可选表/列记录为跳过，不可置空的历史引用会中止事务；旧版 `user_external_identities`
+也有明确策略。
 
 ## 管理员专用化审查分支
 

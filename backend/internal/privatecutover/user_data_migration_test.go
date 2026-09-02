@@ -18,6 +18,55 @@ func TestUserScopedDataPolicyIsSafeAndVersioned(t *testing.T) {
 	})
 }
 
+func TestUserScopedDataPolicyIdentityMappingsMatchTableShapes(t *testing.T) {
+	want := map[string]userDataIdentityKind{
+		"prompt_audit_events.user_id":          userDataIdentityID,
+		"user_allowed_groups.user_id":          userDataIdentityUserGroup,
+		"user_group_rate_multipliers.user_id":  userDataIdentityUserGroup,
+		"usage_dashboard_hourly_users.user_id": userDataIdentityHourlyUser,
+		"usage_dashboard_daily_users.user_id":  userDataIdentityDailyUser,
+	}
+	for _, entry := range userScopedDataPolicy {
+		key := entry.public.Table + "." + entry.public.Column
+		if expected, ok := want[key]; ok {
+			require.Equal(t, expected, entry.identity, "identity mapping for %s", key)
+		}
+	}
+
+	for key, expected := range want {
+		var matched *userScopedDataPolicyEntry
+		for index := range userScopedDataPolicy {
+			entry := &userScopedDataPolicy[index]
+			if entry.public.Table+"."+entry.public.Column == key {
+				matched = entry
+				break
+			}
+		}
+		require.NotNil(t, matched, "policy entry %s", key)
+		require.Equal(t, expected, matched.identity, "identity mapping for %s", key)
+		identitySQL, err := userScopedIdentitySQL(*matched)
+		require.NoError(t, err)
+		switch key {
+		case "prompt_audit_events.user_id":
+			require.Equal(t, `"id"`, identitySQL)
+		case "user_allowed_groups.user_id", "user_group_rate_multipliers.user_id":
+			require.Equal(t, `"user_id"::text || ':' || "group_id"::text`, identitySQL)
+		case "usage_dashboard_hourly_users.user_id":
+			require.Equal(t, `"bucket_start"::text || ':' || "user_id"::text`, identitySQL)
+		case "usage_dashboard_daily_users.user_id":
+			require.Equal(t, `"bucket_date"::text || ':' || "user_id"::text`, identitySQL)
+		}
+	}
+
+	for _, entry := range userScopedDataPolicy {
+		if entry.public.Table == "ops_ingress_reject_aggregates" && entry.public.Column == "user_id" {
+			require.True(t, entry.keepGlobal)
+			return
+		}
+	}
+	t.Fatal("missing policy entry ops_ingress_reject_aggregates.user_id")
+}
+
 func TestMigrateUserScopedDataSkipsMissingTableAndColumn(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
