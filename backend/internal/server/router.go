@@ -113,7 +113,12 @@ func SetupPublicRouter(
 	r.Use(middleware2.CORS(cfg.CORS))
 	r.Use(middleware2.SecurityHeaders(cfg.Security.CSP, nil))
 	r.Use(middleware2.ServerTiming(false))
+	// Keep the public listener fail-closed if a control-plane route is ever
+	// accidentally registered here. Retired customer paths run first so their
+	// documented 410 response remains stable while unknown control paths are
+	// hidden with 404.
 	r.Use(middleware2.RetiredCustomerSurface())
+	r.Use(middleware2.PublicControlPlaneGuard())
 
 	routes.RegisterCommonRoutes(r, func(ctx context.Context) error {
 		return probeReadiness(ctx, db, redisClient)

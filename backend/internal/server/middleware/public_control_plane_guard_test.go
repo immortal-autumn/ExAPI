@@ -131,6 +131,26 @@ func TestPublicControlPlaneGuardAllowsExplicitPrivateControlHost(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, w.Code)
 }
 
+func TestPublicControlPlaneGuardUsesCanonicalDeploymentVariables(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("SUB2API_PRIVATE_CONTROL_HOSTS", "")
+	t.Setenv("SUB2API_PRIVATE_CONTROL_CIDRS", "")
+	t.Setenv("EXAPI_CONTROL_HOSTS", "100.97.17.1")
+	t.Setenv("EXAPI_OPERATOR_PEER_IPS", "100.97.17.25")
+
+	r := gin.New()
+	r.Use(PublicControlPlaneGuard())
+	r.GET("/admin/dashboard", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	req := httptest.NewRequest(http.MethodGet, "http://100.97.17.1:8027/admin/dashboard", nil)
+	req.Host = "100.97.17.1:8027"
+	req.RemoteAddr = "100.97.17.25:43120"
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNoContent, w.Code)
+}
+
 func TestPublicControlPlaneGuardRejectsSpoofedPrivateHostFromRemotePeer(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("SUB2API_SINGLE_USER_PRIVATE_CONTROL_PLANE", "true")

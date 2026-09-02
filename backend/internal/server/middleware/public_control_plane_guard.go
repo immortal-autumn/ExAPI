@@ -12,10 +12,11 @@ import (
 )
 
 // PublicControlPlaneGuard hides all non-gateway/control-plane paths from every
-// host except the explicit SUB2API_PRIVATE_CONTROL_HOSTS allowlist when
-// single-user private-control mode is enabled. This is defense in depth for
-// nginx allowlists: public clients can still use AI gateway endpoints, while
-// the SPA/admin/auth/user APIs remain available only on named private hosts.
+// host except the explicit EXAPI_CONTROL_HOSTS allowlist. This is defense in
+// depth for nginx allowlists: public clients can still use AI gateway
+// endpoints, while the SPA/admin/auth/user APIs remain available only on named
+// private hosts. The legacy SUB2API_PRIVATE_CONTROL_HOSTS name is accepted
+// only as a compatibility fallback by the helper below.
 func PublicControlPlaneGuard() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !config.SingleUserPrivateControlPlaneEnabled() {
@@ -78,7 +79,7 @@ func isConfiguredPrivateControlHost(rawHost string) bool {
 	if host == "" {
 		return false
 	}
-	for _, candidate := range strings.Split(os.Getenv("SUB2API_PRIVATE_CONTROL_HOSTS"), ",") {
+	for _, candidate := range configuredPrivateControlHosts() {
 		if normalizeHost(candidate) == host {
 			return true
 		}
@@ -98,13 +99,36 @@ func isConfiguredPrivateControlPeer(remoteAddr string) bool {
 	if peer.IsLoopback() {
 		return true
 	}
-	for _, raw := range strings.Split(os.Getenv("SUB2API_PRIVATE_CONTROL_CIDRS"), ",") {
+	for _, raw := range configuredPrivateControlPeers() {
+		raw = strings.TrimSpace(raw)
+		if exactPeer := net.ParseIP(strings.Trim(strings.TrimSpace(raw), "[]")); exactPeer != nil && exactPeer.Equal(peer) {
+			return true
+		}
 		_, network, err := net.ParseCIDR(strings.TrimSpace(raw))
 		if err == nil && network.Contains(peer) {
 			return true
 		}
 	}
 	return false
+}
+
+// The EXAPI_* names are the canonical deployment variables. The SUB2API_*
+// aliases are accepted only for compatibility with older local wrappers and
+// tests; production templates and config validation use EXAPI_* exclusively.
+func configuredPrivateControlHosts() []string {
+	raw := os.Getenv("EXAPI_CONTROL_HOSTS")
+	if strings.TrimSpace(raw) == "" {
+		raw = os.Getenv("SUB2API_PRIVATE_CONTROL_HOSTS")
+	}
+	return strings.Split(raw, ",")
+}
+
+func configuredPrivateControlPeers() []string {
+	raw := os.Getenv("EXAPI_OPERATOR_PEER_IPS")
+	if strings.TrimSpace(raw) == "" {
+		raw = os.Getenv("SUB2API_PRIVATE_CONTROL_CIDRS")
+	}
+	return strings.Split(raw, ",")
 }
 
 func normalizeHost(rawHost string) string {
