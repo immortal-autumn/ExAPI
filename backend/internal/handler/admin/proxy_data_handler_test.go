@@ -328,3 +328,34 @@ func TestProxyImportDataReportsStatusSynchronizationFailure(t *testing.T) {
 	require.Len(t, resp.Data.Errors, 1)
 	require.Contains(t, resp.Data.Errors[0].Message, "synchronize existing proxy status")
 }
+
+func TestProxyImportDataReportsCreatedProxyStatusSynchronizationFailure(t *testing.T) {
+	router, adminSvc := setupProxyDataRouter()
+	adminSvc.updateProxyErr = errors.New("proxy update unavailable")
+
+	payload := map[string]any{
+		"data": map[string]any{
+			"type": dataType, "version": dataVersion,
+			"proxies": []map[string]any{{
+				"proxy_key": "http|127.0.0.1|8080|user|pass", "name": "proxy-new",
+				"protocol": "http", "host": "127.0.0.1", "port": 8080,
+				"username": "user", "password": "pass", "status": "inactive",
+			}},
+			"accounts": []map[string]any{},
+		},
+	}
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/proxies/data", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp proxyImportResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, 1, resp.Data.ProxyCreated)
+	require.Equal(t, 1, resp.Data.ProxyFailed)
+	require.Len(t, resp.Data.Errors, 1)
+	require.Contains(t, resp.Data.Errors[0].Message, "synchronize imported proxy status")
+}

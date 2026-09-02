@@ -98,6 +98,9 @@ security scans:
 - `ea8c669c7`: proxy-only imports now count post-create and post-reuse status
   synchronization failures in `proxy_failed`, matching their structured error
   entries. Production has not been changed.
+- `6d8e39679`: proxy-only and combined imports now use the same explicit
+  synchronization-failure wording, making structured partial-failure results
+  consistent for operators. Production has not been changed.
 
 The review branch also contains work hardening proxy partial updates: omitted
 lifecycle and credential fields are preserved, while explicit null/empty values
