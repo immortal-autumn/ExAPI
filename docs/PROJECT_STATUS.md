@@ -150,7 +150,8 @@ regression coverage for the security tab and retained-tab contract; the full
 frontend suite (267 files, 1,435 tests), typecheck, lint, production build,
 bundle budgets, and deployment contracts passed. This commit is on
 `revision/exapi-v0.2.1` only and has **not** been deployed to OPC or included in
-the v0.2.10 image.
+the v0.2.10 image. GitHub CI run `33607824144` and Security Scan run
+`33607824171` completed successfully for the resulting documentation state.
 
 ## Production deployment
 

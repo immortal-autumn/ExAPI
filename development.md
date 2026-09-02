@@ -128,8 +128,10 @@ contract.
   the affected security, OAuth, pagination, and 404 copy for English and
   Simplified Chinese. Added retained-tab and security-tab regression coverage.
 - The full frontend suite (267 files, 1,435 tests), typecheck, lint, production
-  build, bundle budgets, Compose security, rollout contracts, and release
-  contract passed. The review-only commit `da3e56788` was not deployed to OPC.
+build, bundle budgets, Compose security, rollout contracts, and release
+contract passed. GitHub CI run `33607824144` and Security Scan run
+`33607824171` also completed successfully. The review-only commit `da3e56788`
+was not deployed to OPC.
 
 ### Phase 4 — Recovery and private-cutover rehearsal (completed for v0.2.10; 2026-09-02)
 
