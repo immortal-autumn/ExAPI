@@ -10,19 +10,20 @@
 
 | 项目 | 当前值 |
 |---|---|
-| 产品版本 | `0.2.14`（2026-09-02 已部署到 OPC） |
+| 产品版本 | `0.2.15`（2026-09-02 已部署到 OPC） |
 | GitHub 仓库 | `immortal-autumn/ExAPI` |
-| Git tag | `v0.2.14` |
+| Git tag | `v0.2.15` |
 | 主分支 | `main`（当前为 `f79ef301b`；发布分支保持独立） |
 | 发布分支 | `revision/exapi-v0.2.1` |
-| 审阅提交 | `4b0352fa87720425bf4fb5c23aa91e2c0e212c9e` |
-| OCI 镜像 | `ghcr.io/immortal-autumn/sub2api2personal@sha256:e8a6d161a1acb5d454a13526ef2914533d077fd5aefae7a412bc45f58513857d` |
-| GitHub Release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.14> |
+| 审阅提交 | `a63f68a11b08cdee6ead8e4cce41332cb4e83ac3` |
+| OCI 镜像 | `ghcr.io/immortal-autumn/sub2api2personal@sha256:f25727e7dce06ce62ab921027346c27e86a92dabdd0e6e7dc7791333526889b0` |
+| GitHub Release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.15> |
 | Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33625979848> |
 
-镜像经过多架构构建、OCI 标签、SPDX SBOM、SLSA/SBOM attestations 和
-`gh attestation verify` 验证。生产环境只使用上述 immutable digest，不使用
-`latest` 等可变标签。GHCR 包名仍保留 `sub2api2personal` 以兼容现有部署。
+v0.2.15 artifact 固定使用上表的 immutable digest，OCI 标签与版本 `0.2.15` 及审阅提交
+`a63f68a11b08cdee6ead8e4cce41332cb4e83ac3` 一致。v0.2.14 仍作为前一个已审阅版本保留；
+生产环境只使用 immutable digest，不使用 `latest` 等可变标签。GHCR 包名仍保留
+`sub2api2personal` 以兼容现有部署。
 
 ## v0.2.11 发布验证结果
 
@@ -70,11 +71,13 @@ digest 为
 为 `f071f64fcc656ed6d6f4ef4b17f435da294265cbb239b9772716b76b61010250`。发布流程、artifact
 attestation、恢复、readiness、告警和私有化切换门禁均已通过，并已完成 OPC promotion。
 
-## v0.2.15 管理员专用审查候选版本
+## v0.2.15 管理员专用发布版本
 
-审查分支现已将管理员专用加固工作和 `docs/ADMIN_ONLY_BASELINE.md` Phase 0 基线整理为 v0.2.15 候选版本。
-该候选尚未用于生产，也没有 release tag 或 OCI 镜像。必须先通过完整 CI/安全工作流、全新的恢复数据和
-synthetic-provider canary 以及签名 rollout 门禁，才能切换 OPC。所有检查完成前生产继续运行 v0.2.14。
+v0.2.15 已从提交 `a63f68a11b08cdee6ead8e4cce41332cb4e83ac3` 打 tag，并使用 immutable
+多架构镜像
+`ghcr.io/immortal-autumn/sub2api2personal@sha256:f25727e7dce06ce62ab921027346c27e86a92dabdd0e6e7dc7791333526889b0`。
+OPC 生产应用容器报告版本 `0.2.15`、该 revision 和该 digest。synthetic-provider canary
+已在 promotion 前通过；restored-data 通过情况见下文复核记录。
 
 ## v0.2.15 restored observation 复核
 
@@ -89,9 +92,12 @@ root-owned `0600` 非符号链接文件描述符读取并计算 SHA-256，并把
 OPC v4 adapter 已原子更新到该 source，部署 SHA-256 为
 `d300f6e66288adca9ffd7d1cd1a977484c2f28461f67f41fb71b21542e4aabe8`。
 
-在允许 v0.2.15 promotion 前，必须使用全新的 rollout 目录重新运行至少 30 分钟的
-restored-data observation，并通过其余 signed rollout gates。在复核完成前，生产保持
-v0.2.14。
+随后使用 rollout `exapi-v0215-restored-reproof-20260902a` 完成全新的 30 分钟
+restored-data observation，60/60 readiness 全部成功，失败、重启、意外 5xx 均为 0，error rate
+为 `0.0`，p95 满足基线门禁。network proof 记录了 `egress_denied=true`、
+`integrity_verified=true`、`decryption_verified=true` 以及受保护 logical-restore evidence
+的 SHA-256。最终证据按 OPC checkout-local `tmp/rollouts/` 策略保留；生产仍固定在同一
+v0.2.15 digest，signed production rollout record 尚待完成。
 
 ## 管理员专用化审查分支
 
@@ -99,7 +105,7 @@ v0.2.14。
 以下可独立回滚的提交均已通过各自的本地重点/完整检查，以及 GitHub CI 和安全扫描：
 
 以下条目中的“生产环境未修改”等状态短语，均指各审查提交记录时的状态。所有列出的
-提交都是 v0.2.14 的祖先，因此均已包含在当前部署镜像中，除非条目明确说明例外。
+提交都是 v0.2.15 的祖先，因此均已包含在当前部署镜像中，除非条目明确说明例外。
 
 - `30f5dc180`：日常代理凭据最小暴露；
 - `3453be8cf`：代理破坏性操作的界面防护；
@@ -156,7 +162,7 @@ v0.2.14。
 
 审查分支还包含代理部分更新契约加固：省略的生命周期和凭据字段会保留现值，显式
 null/空值则会清除对应可空设置。这部分在 v0.2.14 之前属于审查内容，未包含在 v0.2.10
-生产镜像中；其提交是 v0.2.14 的祖先，已包含在当前部署镜像中。
+生产镜像中；其提交是 v0.2.15 的祖先，已包含在当前部署镜像中。
 
 此前的仅审查提交新增了中英文管理员专用产品范围契约（`bdd4329e3`），让所有受
 支持的部署示例默认使用 `RUN_MODE=simple`，同时保留后端传统 `standard` 回退，并
@@ -169,20 +175,21 @@ null/空值则会清除对应可空设置。这部分在 v0.2.14 之前属于审
 不会触发全局设置保存；并将安全、OAuth、分页和 404 文案统一本地化为英文及简体中文。
 该提交新增安全页和保留设置页签的回归覆盖；完整前端套件（267 个文件、1,435 个测试）、
 类型检查、lint、生产构建、bundle 预算和部署契约均通过。该提交仅存在于
-`revision/exapi-v0.2.1`，未包含在 v0.2.10 镜像中，但已包含在当前 v0.2.14 部署中。
+`revision/exapi-v0.2.1`，未包含在 v0.2.10 镜像中，但已包含在当前 v0.2.15 部署中。
 对应的 GitHub CI run `33607824144` 与 Security Scan run `33607824171` 均已成功完成。
 
-## OPC 生产部署
+## v0.2.15 OPC 生产部署
 
-生产部署位于 `/opt/sub2api`，Compose project 为 `sub2api`，使用：
+生产当前位于 `/opt/sub2api`，Compose project 为 `sub2api`，使用
+`/opt/sub2api/.env.v0.2.15` 和 `/opt/sub2api/docker-compose.v0.2.15.yml`。应用容器固定为
+manifest digest
+`sha256:f25727e7dce06ce62ab921027346c27e86a92dabdd0e6e7dc7791333526889b0`，报告版本 `0.2.15`，
+revision 为 `a63f68a11b08cdee6ead8e4cce41332cb4e83ac3`。最近审阅时三个服务均 healthy、
+重启次数为 0，`/ready` 返回 `{"status":"ready"}`；PostgreSQL 和 Redis 未重建。60 分钟
+production observation 当时仍在运行；在 evidence 和 signed rollout manifest 完成前，不宣称
+最终 promotion 已完成。
 
-- `/opt/sub2api/.env.v0.2.14`
-- `/opt/sub2api/docker-compose.v0.2.14.yml`
-
-应用容器固定为 immutable digest
-`sha256:e8a6d161a1acb5d454a13526ef2914533d077fd5aefae7a412bc45f58513857d`，版本
-`0.2.14`，revision 为 `4b0352fa87720425bf4fb5c23aa91e2c0e212c9e`。应用、PostgreSQL
-和 Redis 均为 healthy；PostgreSQL/Redis 未被重建，三者重启次数均为 0。
+## v0.2.14 OPC 生产部署（历史记录）
 
 切换前恢复集 `exapi-v0214-recovery-20260902a` 保存在加密、版本化的异地对象中，保留至
 2027-09-03。logical restore 使用一次性目标

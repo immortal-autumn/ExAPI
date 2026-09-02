@@ -11,14 +11,14 @@ Last reviewed: **2026-09-02 (Europe/London)**
 
 | Item | Current value |
 |---|---|
-| Product version | `0.2.14` (released and deployed to OPC on 2026-09-02) |
+| Product version | `0.2.15` (released and deployed to OPC on 2026-09-02) |
 | GitHub repository | `immortal-autumn/ExAPI` |
-| Git tag | `v0.2.14` |
+| Git tag | `v0.2.15` |
 | Main branch | `main` (currently `f79ef301b`; release branch remains separate) |
 | Release branch | `revision/exapi-v0.2.1` |
-| Reviewed commit | `4b0352fa87720425bf4fb5c23aa91e2c0e212c9e` |
-| OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:e8a6d161a1acb5d454a13526ef2914533d077fd5aefae7a412bc45f58513857d` |
-| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.14> |
+| Reviewed commit | `a63f68a11b08cdee6ead8e4cce41332cb4e83ac3` |
+| OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:f25727e7dce06ce62ab921027346c27e86a92dabdd0e6e7dc7791333526889b0` |
+| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.15> |
 | Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33625979848> |
 | Upstream baseline | Sub2API `v0.1.171`, constrained by `upstream.lock.json` |
 
@@ -28,12 +28,10 @@ The GitHub repository was renamed from `Sub2API2Personal` to `ExAPI` on
 must keep that compatibility decision explicit or publish a separately
 verified package migration.
 
-The v0.2.14 release workflow passed the Go module-tidy check, backend unit and
-integration suites, race detector, frontend tests/type checks/build audit,
-multi-architecture image build, OCI label verification, SPDX SBOM generation,
-and provenance/SBOM attestations. The attested manifest digest is the same
-digest recorded above, and `gh attestation verify` passed. The v0.2.10 release
-remains available as the preceding reviewed candidate. The prior v0.2.8 tag
+The v0.2.15 release artifact is pinned to the immutable digest recorded above;
+its OCI labels match version `0.2.15` and reviewed commit
+`a63f68a11b08cdee6ead8e4cce41332cb4e83ac3`. The v0.2.14 release remains
+available as the preceding reviewed candidate. The prior v0.2.8 tag
 remains immutable but was never published because its commit still contained
 `backend/cmd/server/VERSION=0.2.7`; it must not be retagged.
 
@@ -94,14 +92,14 @@ arm64 digest `sha256:59fa4a44007bd57a7516b35ccefb1077107e8fdecd98b8546893c080ab8
 and SPDX SBOM SHA-256 `f071f64fcc656ed6d6f4ef4b17f435da294265cbb239b9772716b76b61010250`.
 The release workflow and artifact attestation passed.
 
-## v0.2.15 administrator-only review candidate
+## v0.2.15 administrator-only release
 
-The review branch now prepares v0.2.15 from the administrator-only hardening
-work and the Phase 0 baseline in `docs/ADMIN_ONLY_BASELINE.md`. This candidate
-is not production and has no release tag or OCI image yet. It must pass the
-full CI/security workflow, fresh restored-data and synthetic-provider canaries,
-and the signed rollout gates before any OPC cutover. Production remains on
-v0.2.14 until those checks complete.
+The v0.2.15 release is tagged at `a63f68a11b08cdee6ead8e4cce41332cb4e83ac3`
+and uses the immutable multi-architecture image
+`ghcr.io/immortal-autumn/sub2api2personal@sha256:f25727e7dce06ce62ab921027346c27e86a92dabdd0e6e7dc7791333526889b0`.
+The OPC production container reports version `0.2.15` and that exact revision
+and digest. The synthetic-provider canary passed before promotion; restored
+data required the reproof recorded below.
 
 ## v0.2.15 restored-observation reproof
 
@@ -120,9 +118,15 @@ restore rollout ID in the network proof. Logical-restore output is created with
 was atomically updated to this source and its deployed SHA-256 is
 `d300f6e66288adca9ffd7d1cd1a977484c2f28461f67f41fb71b21542e4aabe8`.
 
-A new 30-minute restored-data observation using a fresh rollout directory is
-required before any v0.2.15 promotion. Production remains on v0.2.14 until
-that reproof and the remaining signed rollout gates pass.
+A fresh 30-minute restored-data observation then passed using rollout
+`exapi-v0215-restored-reproof-20260902a`. It completed 60/60 readiness checks
+with zero failures, zero restarts, zero unexpected 5xx, error rate `0.0`, and
+30-minute p95 within the baseline gate. Its network proof records
+`egress_denied=true`, `integrity_verified=true`, `decryption_verified=true`,
+and the SHA-256 of the protected logical-restore evidence. The final evidence
+is retained under the checkout-local `tmp/rollouts/` policy on OPC; production
+remains pinned to the same v0.2.15 digest while the signed production rollout
+record is finalized.
 
 ## Administrator hardening review branch
 
@@ -132,7 +136,7 @@ revertible commits have passed their local focused/full checks and GitHub CI and
 security scans:
 
 The production-status phrases in the entries below describe the state when each
-review commit was recorded. Every listed commit is an ancestor of v0.2.14 and is
+review commit was recorded. Every listed commit is an ancestor of v0.2.15 and is
 therefore included in the deployed image unless explicitly marked otherwise.
 
 - `30f5dc180`: routine proxy credential minimization;
@@ -221,7 +225,7 @@ The review branch also contains work hardening proxy partial updates: omitted
 lifecycle and credential fields are preserved, while explicit null/empty values
 clear nullable settings. This work was review-only before v0.2.14 and was not
 present in the v0.2.10 production image; it is an ancestor of and included in
-the deployed v0.2.14 image.
+the deployed v0.2.15 image.
 
 The latest review-only commits added a bilingual administrator-only product
 surface contract (`bdd4329e3`), made all supported deployment examples default
@@ -230,7 +234,7 @@ and derived OAuth/setup-token account display names from an explicit name,
 validated email, or provider fallback (`8b25ba36c`). Focused account/private-route
 tests, frontend typecheck/build, deployment bind/security/rollout contracts, and
 the release contract passed. They were not present in the v0.2.10 image, but are
-ancestors of and included in the deployed v0.2.14 image.
+ancestors of and included in the deployed v0.2.15 image.
 
 The review commit `da3e56788` exposes the retained private security
 boundary in the administrator settings view, prevents a read-only security tab
@@ -240,18 +244,24 @@ regression coverage for the security tab and retained-tab contract; the full
 frontend suite (267 files, 1,435 tests), typecheck, lint, production build,
 bundle budgets, and deployment contracts passed. This commit is on
 `revision/exapi-v0.2.1` and was not present in the v0.2.10 image; it is included
-in the deployed v0.2.14 image. GitHub CI run `33607824144` and Security Scan run
+in the deployed v0.2.15 image. GitHub CI run `33607824144` and Security Scan run
 `33607824171` completed successfully for the resulting documentation state.
 
-## Production deployment
+## v0.2.15 OPC production deployment
 
-Production is deployed as Docker Compose project `sub2api` from `/opt/sub2api`
-using `/opt/sub2api/.env.v0.2.14` and
-`/opt/sub2api/docker-compose.v0.2.14.yml`. The application is pinned to the
-v0.2.14 manifest digest above, revision `4b0352fa87720425bf4fb5c23aa91e2c0e212c9e`,
-and reports version `0.2.14`. PostgreSQL and Redis were not recreated; their
-container IDs, start times, data mounts, and restart counts remain unchanged.
-All three services are healthy with zero restarts.
+Production is currently deployed as Compose project `sub2api` from
+`/opt/sub2api` using `/opt/sub2api/.env.v0.2.15` and
+`/opt/sub2api/docker-compose.v0.2.15.yml`. The application container is pinned
+to manifest digest
+`sha256:f25727e7dce06ce62ab921027346c27e86a92dabdd0e6e7dc7791333526889b0`,
+reports `0.2.15`, and has revision `a63f68a11b08cdee6ead8e4cce41332cb4e83ac3`.
+At the last review, all three services were healthy with zero restarts and
+`/ready` returned `{"status":"ready"}`. PostgreSQL and Redis were not
+recreated. The 60-minute production observation was still running; no final
+promotion claim is made until its evidence and signed rollout manifest are
+complete.
+
+## v0.2.14 production deployment (historical)
 
 The pre-cutover recovery set `exapi-v0214-recovery-20260902a` is retained in
 encrypted, versioned off-host objects through 2027-09-03. The logical restore
