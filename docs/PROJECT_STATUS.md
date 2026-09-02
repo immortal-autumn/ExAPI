@@ -11,15 +11,15 @@ Last reviewed: **2026-09-02 (Europe/London)**
 
 | Item | Current value |
 |---|---|
-| Product version | `0.2.7` |
+| Product version | `0.2.9` (released; not yet deployed to OPC) |
 | GitHub repository | `immortal-autumn/ExAPI` |
-| Git tag | `v0.2.7` |
-| Main branch | `main` (fast-forwarded to the reviewed commit) |
+| Git tag | `v0.2.9` |
+| Main branch | `main` (currently `f79ef301b`; release branch remains separate pending rollout) |
 | Release branch | `revision/exapi-v0.2.1` |
-| Reviewed commit | `a1c8bb6a7a4e49d67fbdb81aadc67de4ef12e7c1` |
-| OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:628dbccd43e5348989ae83c6c7c494bcbe85227824a1acfedee10f77dd7f1795` |
-| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.7> |
-| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33308484734> |
+| Reviewed commit | `251b5122840a0d08b960cef78670be7cd311fc60` |
+| OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:bf498436bb9e0ff52c8769f11105ef598c9621a5eb96d9eb1afd9da82d73bf1` |
+| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.9> |
+| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33580079870> |
 | Upstream baseline | Sub2API `v0.1.171`, constrained by `upstream.lock.json` |
 
 The GitHub repository was renamed from `Sub2API2Personal` to `ExAPI` on
@@ -28,11 +28,13 @@ The GitHub repository was renamed from `Sub2API2Personal` to `ExAPI` on
 must keep that compatibility decision explicit or publish a separately
 verified package migration.
 
-The release workflow passed the Go module-tidy check, backend unit and
+The v0.2.9 release workflow passed the Go module-tidy check, backend unit and
 integration suites, race detector, frontend tests/type checks/build audit,
 multi-architecture image build, OCI label verification, SPDX SBOM generation,
 and provenance/SBOM attestations. The attested manifest digest is the same
-digest recorded above; the release also passed `gh attestation verify`.
+digest recorded above, and `gh attestation verify` passed. The prior v0.2.8
+tag remains immutable but was never published because its commit still
+contained `backend/cmd/server/VERSION=0.2.7`; it must not be retagged.
 
 ## Administrator hardening review branch
 
@@ -125,9 +127,12 @@ until a separately validated release is promoted under the rollout procedure.
 
 ## Production deployment
 
-Production runs the digest above as Docker Compose project `sub2api` from
-`/opt/sub2api`. The application container reports version `0.2.7`, the reviewed
-commit, healthy status, and zero restarts at the 2026-09-01 read-only check.
+Production remains on the v0.2.7 digest
+`sha256:628dbccd43e5348989ae83c6c7c494bcbe85227824a1acfedee10f77dd7f1795`
+as Docker Compose project `sub2api` from `/opt/sub2api`. The application
+container reports version `0.2.7`, the v0.2.7 reviewed commit, healthy status,
+and zero restarts at the latest read-only check. The v0.2.9 release above is a
+separately reviewed candidate and has not been deployed.
 
 The deployment keeps versioned promotion inputs:
 
@@ -152,11 +157,11 @@ disposable targets. Evidence is under the checkout-local `tmp/rollouts/`
 directory on OPC.
 
 The 2026-09-02 read-only prerequisite audit confirmed that the protected
-archive, snapshot, cleanup, identity, and monitoring adapter paths exist, and
-that alert-delivery evidence validates. The off-host readiness proof and the
-synthetic-provider proof are outside their freshness windows, so Phase 4
-remains blocked. No cleanup, snapshot, archive upload, migration, restart, or
-production file change was performed; see the detailed record in
+archive, snapshot, cleanup, identity, and monitoring adapter paths exist. The
+off-host readiness, alert-transition, and synthetic-provider proofs are outside
+their freshness windows (and the synthetic proof is bound to an older rollout),
+so Phase 4 remains blocked. No cleanup, snapshot, archive upload, migration,
+restart, or production file change was performed; see the detailed record in
 [`tmp/usability-review/current/phase-4-external-prerequisite-audit-2026-09-02.md`](../tmp/usability-review/current/phase-4-external-prerequisite-audit-2026-09-02.md).
 
 The production observation ran for 60 minutes with 120 readiness probes:
