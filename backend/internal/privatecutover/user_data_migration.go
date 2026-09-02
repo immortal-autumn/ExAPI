@@ -121,6 +121,7 @@ const (
 	userDataIdentityUserGroup
 	userDataIdentityHourlyUser
 	userDataIdentityDailyUser
+	userDataIdentityUserColumn
 )
 
 type userScopedDataPolicyEntry struct {
@@ -167,11 +168,11 @@ var userScopedDataPolicy = []userScopedDataPolicyEntry{
 	{public: UserScopedDataPolicy[34], identity: userDataIdentityID},
 	{public: UserScopedDataPolicy[35], identity: userDataIdentityID},
 	{public: UserScopedDataPolicy[36], identity: userDataIdentityID},
-	{public: UserScopedDataPolicy[37], identity: userDataIdentityID},
-	{public: UserScopedDataPolicy[38], identity: userDataIdentityID},
+	{public: UserScopedDataPolicy[37], identity: userDataIdentityUserColumn},
+	{public: UserScopedDataPolicy[38], identity: userDataIdentityUserColumn},
 	{public: UserScopedDataPolicy[39], identity: userDataIdentityID},
 	{public: UserScopedDataPolicy[40], identity: userDataIdentityID},
-	{public: UserScopedDataPolicy[41], identity: userDataIdentityID},
+	{public: UserScopedDataPolicy[41], identity: userDataIdentityUserColumn},
 	{public: UserScopedDataPolicy[42], identity: userDataIdentityID},
 	{public: UserScopedDataPolicy[43], identity: userDataIdentityID},
 	{public: UserScopedDataPolicy[44], identity: userDataIdentityID},
@@ -441,6 +442,8 @@ func userScopedIdentitySQL(entry userScopedDataPolicyEntry) (string, error) {
 		return `"bucket_start"::text || ':' || "user_id"::text`, nil
 	case userDataIdentityDailyUser:
 		return `"bucket_date"::text || ':' || "user_id"::text`, nil
+	case userDataIdentityUserColumn:
+		return `"user_id"`, nil
 	default:
 		return "", errors.New("unsupported user-scoped identity expression")
 	}

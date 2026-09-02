@@ -25,6 +25,9 @@ func TestUserScopedDataPolicyIdentityMappingsMatchTableShapes(t *testing.T) {
 		"user_group_rate_multipliers.user_id":  userDataIdentityUserGroup,
 		"usage_dashboard_hourly_users.user_id": userDataIdentityHourlyUser,
 		"usage_dashboard_daily_users.user_id":  userDataIdentityDailyUser,
+		"user_affiliates.user_id":              userDataIdentityUserColumn,
+		"user_affiliates.inviter_id":            userDataIdentityUserColumn,
+		"passkey_user_handles.user_id":          userDataIdentityUserColumn,
 	}
 	for _, entry := range userScopedDataPolicy {
 		key := entry.public.Table + "." + entry.public.Column
@@ -55,6 +58,8 @@ func TestUserScopedDataPolicyIdentityMappingsMatchTableShapes(t *testing.T) {
 			require.Equal(t, `"bucket_start"::text || ':' || "user_id"::text`, identitySQL)
 		case "usage_dashboard_daily_users.user_id":
 			require.Equal(t, `"bucket_date"::text || ':' || "user_id"::text`, identitySQL)
+		case "user_affiliates.user_id", "user_affiliates.inviter_id", "passkey_user_handles.user_id":
+			require.Equal(t, `"user_id"`, identitySQL)
 		}
 	}
 

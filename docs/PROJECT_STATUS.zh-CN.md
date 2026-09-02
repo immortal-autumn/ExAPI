@@ -36,13 +36,21 @@
 `id` 列快照。canary 使用隔离资源并自动清理；生产仍保持 v0.2.10。因此尽管 artifact
 门禁通过，v0.2.11 仍不可用于部署。
 
-## v0.2.12 发布候选准备
+## v0.2.12 发布验证结果
 
-`backend/cmd/server/VERSION` 现声明 `0.2.12`。候选修正 identity 映射对齐，并增加
-prompt-audit、user/group 及 hourly/daily dashboard identity 的表结构回归覆盖。必须创建
-新的带注释标签和 digest；不得复用 v0.2.11 artifact 或 canary 证据。只有新 digest 通过
-完整 release workflow、新鲜 restored-data 与 synthetic-provider canary，并在部署前立即
-完成异地 readiness/告警验证后，才允许 promotion。
+`v0.2.12` artifact 已构建并完成 attestation，manifest digest 为
+`sha256:e0e7e22dd11a38cdd8b97e4f11750dff1613e602a0342907e9b6aa2b95c9f2f3`。
+第一次全新的 synthetic-provider canary 已通过此前发现的 user/group 映射，但随后在真实
+表结构 `user_affiliates` 上失败：该表使用 `user_id` 作为主键，不存在 `id` 列。隔离
+canary 已自动清理，生产仍保持 v0.2.10。因此该 artifact 已被 supersede，不得 promotion。
+
+## v0.2.13 发布候选准备
+
+`backend/cmd/server/VERSION` 现声明 `0.2.13`。候选新增 user-primary-key 表的明确 identity
+类型，并在回归测试覆盖 `user_affiliates` 两个引用和 `passkey_user_handles`。必须创建新的
+带注释标签和 digest；不得复用 v0.2.11 或 v0.2.12 artifact/canary 证据。只有新 digest
+通过完整 release workflow、新鲜 restored-data 与 synthetic-provider canary，并在部署前
+立即完成异地 readiness/告警验证后，才允许 promotion。
 
 fail-closed 私有化切换矩阵仍保持覆盖：保留的 API key、usage/billing 与运维归属引用会迁移
 或置空；客户专属行会删除，历史快照保留，并在签名报告记录行数及 identity checksum。

@@ -52,15 +52,25 @@ snapshotted with a nonexistent `id` column. The canary was isolated and cleaned
 up automatically; production remained on v0.2.10. This release is therefore
 superseded for deployment, even though its artifact gates passed.
 
-## v0.2.12 release-candidate preparation
+## v0.2.12 release validation outcome
 
-`backend/cmd/server/VERSION` now declares `0.2.12`. The candidate corrects the
-identity-map alignment and adds table-shape regression coverage for prompt-audit,
-user/group, and hourly/daily dashboard identities. It must receive a new
-annotated tag and digest; the v0.2.11 artifact and canary evidence cannot be
-reused. Promotion remains blocked until the new digest passes the full release
-workflow, fresh restored-data and synthetic-provider canaries, and immediate
-off-host readiness/alert verification.
+The `v0.2.12` artifact was built and attested with manifest digest
+`sha256:e0e7e22dd11a38cdd8b97e4f11750dff1613e602a0342907e9b6aa2b95c9f2f3`.
+Its first fresh synthetic-provider canary passed the previously discovered
+user/group mapping, then failed on the next real schema shape: `user_affiliates`
+uses `user_id` as its primary key and has no `id` column. The isolated canary was
+cleaned up automatically and production remained on v0.2.10. The artifact is
+superseded and must not be promoted.
+
+## v0.2.13 release-candidate preparation
+
+`backend/cmd/server/VERSION` now declares `0.2.13`. The candidate adds an
+explicit identity kind for user-primary-key tables and covers both
+`user_affiliates` references and `passkey_user_handles` in regression tests. It
+must receive a new annotated tag and digest; v0.2.11 and v0.2.12 artifacts and
+canary evidence cannot be reused. Promotion remains blocked until the new digest
+passes the full release workflow, fresh restored-data and synthetic-provider
+canaries, and immediate off-host readiness/alert verification.
 
 The fail-closed private-cutover matrix remains covered: retained API-key,
 usage/billing, and operational ownership references are reassigned or nulled;
