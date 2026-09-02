@@ -189,9 +189,9 @@ therefore included in the deployed image unless explicitly marked otherwise.
 
 The review branch also contains work hardening proxy partial updates: omitted
 lifecycle and credential fields are preserved, while explicit null/empty values
-clear nullable settings. This work is not part of the production release above
-and has not been deployed. Those review-only changes remain excluded from the
-v0.2.10 production image.
+clear nullable settings. This work was review-only before v0.2.14 and was not
+present in the v0.2.10 production image; it is an ancestor of and included in
+the deployed v0.2.14 image.
 
 The latest review-only commits added a bilingual administrator-only product
 surface contract (`bdd4329e3`), made all supported deployment examples default
