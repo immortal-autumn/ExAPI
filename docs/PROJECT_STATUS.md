@@ -154,6 +154,8 @@ immediately before cutover and is the rollback snapshot/keyroot source.
 The completed private cutover archive is verified, encrypted, and immutable at
 `tmp/rollouts/exapi-v0210-cutover-20260902a/private-cutover-resume/private-migration-archive.json`
 on OPC.
+The snapshot-evidence adapter quiescence/checkpoint fix used by this rollout is
+tracked as commit `56691bdb5` on the release branch.
 
 The 2026-09-02 external prerequisite run refreshed the off-host readiness
 monitor and synthetic-provider proof. A critical `/ready` transition returned

@@ -103,6 +103,8 @@ logical version `a236405f-4138-4860-8d2c-42eee5f98a0b`、snapshot ID
 `2d39e24e-f329-46fd-9254-029d68bc10af`，保留至 2027-09-03。私有切换归档已验证、加密
 且不可变，位于 OPC 的
 `tmp/rollouts/exapi-v0210-cutover-20260902a/private-cutover-resume/private-migration-archive.json`。
+本次 rollout 使用的 snapshot evidence quiescence/checkpoint 适配器修复已在发布分支以
+提交 `56691bdb5` 记录。
 restored-data canary 明确绑定独立恢复集 `exapi-v0210-recovery-20260902c`（logical
 version `13f467e3-26df-4059-ba4b-ea4dd7a9d5c3`）；e 集是紧邻切换前新建的刷新集，
 并作为回滚 snapshot/keyroot 来源。
