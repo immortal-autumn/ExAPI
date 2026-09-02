@@ -79,6 +79,16 @@ row-count/identity checksums are recorded. Missing optional tables/columns are
 recorded as skipped, while a non-nullable historical reference aborts the
 transaction. Legacy `user_external_identities` rows are covered explicitly.
 
+## v0.2.14 release-candidate preparation
+
+The v0.2.13 release workflow was superseded before promotion: its CI failed
+only because two newly added Go test map entries were not `gofmt`-aligned. No
+image from that tag was deployed. The formatting fix is committed separately,
+`backend/cmd/server/VERSION` now declares `0.2.14`, and the candidate must use
+a new annotated tag, immutable digest, attestations, and fresh canary evidence.
+Production remains on v0.2.10 until every release, recovery, readiness, alert,
+and private-cutover gate passes.
+
 ## Administrator hardening review branch
 
 The non-production review branch `revision/exapi-v0.2.1` has continued

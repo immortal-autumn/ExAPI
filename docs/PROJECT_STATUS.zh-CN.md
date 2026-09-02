@@ -57,6 +57,14 @@ fail-closed 私有化切换矩阵仍保持覆盖：保留的 API key、usage/bil
 缺失可选表/列记录为跳过，不可置空的历史引用会中止事务；旧版 `user_external_identities`
 也有明确策略。
 
+## v0.2.14 发布候选准备
+
+v0.2.13 发布流程在 promotion 前被替换：其 CI 唯一失败原因为新增 Go 测试 map 条目未按
+`gofmt` 对齐；该标签的镜像没有部署。格式修复已作为独立提交保存，
+`backend/cmd/server/VERSION` 现声明 `0.2.14`。候选必须使用新的带注释标签、immutable
+digest、attestation 和全新的 canary 证据。所有发布、恢复、readiness、告警和私有化切换
+门禁通过前，生产仍保持 v0.2.10。
+
 ## 管理员专用化审查分支
 
 非生产审查分支 `revision/exapi-v0.2.1` 截至 2026-09-01 已继续完成管理员界面加固。

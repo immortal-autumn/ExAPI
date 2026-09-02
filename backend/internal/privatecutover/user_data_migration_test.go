@@ -26,8 +26,8 @@ func TestUserScopedDataPolicyIdentityMappingsMatchTableShapes(t *testing.T) {
 		"usage_dashboard_hourly_users.user_id": userDataIdentityHourlyUser,
 		"usage_dashboard_daily_users.user_id":  userDataIdentityDailyUser,
 		"user_affiliates.user_id":              userDataIdentityUserColumn,
-		"user_affiliates.inviter_id":            userDataIdentityUserColumn,
-		"passkey_user_handles.user_id":          userDataIdentityUserColumn,
+		"user_affiliates.inviter_id":           userDataIdentityUserColumn,
+		"passkey_user_handles.user_id":         userDataIdentityUserColumn,
 	}
 	for _, entry := range userScopedDataPolicy {
 		key := entry.public.Table + "." + entry.public.Column
