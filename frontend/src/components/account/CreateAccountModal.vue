@@ -50,7 +50,7 @@
         <input
           v-model="form.name"
           type="text"
-          :required="!isGrokSSOInputMethod && !isAntigravityOAuthFlow"
+          :required="!isOAuthFlow"
           class="input"
           :placeholder="t('admin.accounts.enterAccountName')"
           data-testid="account-form-name"
@@ -4147,6 +4147,32 @@ const form = reactive({
   expires_at: null as number | null
 })
 
+/**
+ * Resolve a stable display name for an OAuth import. OAuth providers return
+ * the account email only after validation, so the name field is intentionally
+ * optional during the first step. Keep an explicit administrator name, then
+ * prefer the validated email, and finally use a provider-specific fallback so
+ * the backend's non-empty name constraint is always satisfied.
+ */
+const resolveOAuthAccountName = (
+  platform: string,
+  preferredName: string,
+  email?: unknown,
+  index?: number,
+  total?: number
+) => {
+  const explicitName = preferredName.trim()
+  const validatedEmail = typeof email === 'string' ? email.trim() : ''
+  const providerName = platform.trim()
+    ? `${platform.trim().charAt(0).toUpperCase()}${platform.trim().slice(1)}`
+    : 'OAuth'
+  const baseName = explicitName || validatedEmail || `${providerName} OAuth Account`
+
+  return index !== undefined && total !== undefined && total > 1
+    ? `${baseName} #${index}`
+    : baseName
+}
+
 // Helper to check if current type needs OAuth flow
 const isOAuthFlow = computed(() => {
   // Antigravity upstream 类型不需要 OAuth 流程
@@ -4159,17 +4185,6 @@ const isOAuthFlow = computed(() => {
   }
   return accountCategory.value === 'oauth-based'
 })
-
-const isGrokSSOInputMethod = computed(
-  () =>
-    form.platform === 'grok' &&
-    accountCategory.value === 'oauth-based' &&
-    (oauthFlowRef.value?.inputMethod === 'sso_cookie' || grokOAuthEntry.value === 'sso_files')
-)
-
-const isAntigravityOAuthFlow = computed(
-  () => form.platform === 'antigravity' && accountCategory.value === 'oauth-based'
-)
 
 const isManualInputMethod = computed(() => {
   return oauthFlowRef.value?.inputMethod === 'manual'
@@ -5000,12 +5015,6 @@ const handleVertexServiceAccountDrop = async (event: DragEvent) => {
 const handleSubmit = async () => {
   // For OAuth-based type, handle OAuth flow (goes to step 2)
   if (isOAuthFlow.value) {
-    const grokBuildImport = form.platform === 'grok' && oauthFlowRef.value?.inputMethod === 'refresh_token'
-    const antigravityBuildImport = isAntigravityOAuthFlow.value
-    if (!isGrokSSOInputMethod.value && !grokBuildImport && !antigravityBuildImport && !form.name.trim()) {
-      appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
-      return
-    }
     const canContinue = await ensureAntigravityMixedChannelConfirmed(async () => {
       step.value = 2
     })
@@ -5140,6 +5149,10 @@ const handleSubmit = async () => {
   }
 
   // For apikey type, create directly
+  if (!form.name.trim()) {
+    appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
+    return
+  }
   if (!apiKeyValue.value.trim()) {
     appStore.showError(t('admin.accounts.pleaseEnterApiKey'))
     return
@@ -5335,11 +5348,10 @@ const createAccountAndFinish = async (
     }
   }
 
-  const credentialEmail = typeof credentials.email === 'string' ? credentials.email.trim() : ''
-  const resolvedName =
-    platform === 'antigravity' && type === 'oauth'
-      ? form.name.trim() || credentialEmail || 'Antigravity OAuth Account'
-      : form.name
+  const credentialEmail = typeof credentials.email === 'string' ? credentials.email : credentials.email_address
+  const resolvedName = (type === 'oauth' || type === 'setup-token')
+    ? resolveOAuthAccountName(platform, form.name, credentialEmail)
+    : form.name.trim()
 
   await doCreateAccount({
     name: resolvedName,
@@ -5403,7 +5415,8 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
         const credentials = grokOAuth.buildCredentials(tokenInfo)
         applyGrokOAuthUpstreamConfig(credentials)
         const extra = grokOAuth.buildExtraInfo(tokenInfo)
-        const accountName = form.name || tokenInfo.email || (refreshTokens.length > 1 ? `Grok OAuth Account #${i + 1}` : 'Grok OAuth Account')
+        const baseName = form.name.trim() || tokenInfo.email?.trim() || 'Grok OAuth Account'
+        const accountName = refreshTokens.length > 1 ? `${baseName} #${i + 1}` : baseName
 
         const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
         if (modelMapping) {
@@ -5590,7 +5603,7 @@ const handleOpenAIExchange = async (authCode: string) => {
 
     if (shouldCreateOpenAI) {
       await adminAPI.accounts.create({
-        name: form.name,
+        name: resolveOAuthAccountName('openai', form.name, tokenInfo.email),
         notes: form.notes,
         platform: 'openai',
         type: 'oauth',
@@ -5866,8 +5879,13 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
         }
 
         // Generate account name; fallback to email if name is empty (ent schema requires NotEmpty)
-        const baseName = form.name || tokenInfo.email || 'OpenAI OAuth Account'
-        const accountName = refreshTokens.length > 1 ? `${baseName} #${i + 1}` : baseName
+        const accountName = resolveOAuthAccountName(
+          'openai',
+          form.name,
+          tokenInfo.email,
+          i + 1,
+          refreshTokens.length
+        )
 
         if (shouldCreateOpenAI) {
           await adminAPI.accounts.create({
@@ -5966,8 +5984,13 @@ const handleAntigravityValidateRT = async (refreshTokenInput: string) => {
         applyAntigravityProjectID(credentials, antigravityProjectId.value, 'create')
         
         // Generate account name with index for batch
-        const baseName = form.name.trim() || tokenInfo.email || 'Antigravity OAuth Account'
-        const accountName = refreshTokens.length > 1 ? `${baseName} #${i + 1}` : baseName
+        const accountName = resolveOAuthAccountName(
+          'antigravity',
+          form.name,
+          tokenInfo.email,
+          i + 1,
+          refreshTokens.length
+        )
 
         // Note: Antigravity doesn't have buildExtraInfo, so we pass empty extra or rely on credentials
         const createPayload = withAntigravityConfirmFlag({
@@ -6342,7 +6365,13 @@ const handleCookieAuth = async (sessionKey: string) => {
           extra.custom_base_url = customBaseUrl.value.trim()
         }
 
-        const accountName = keys.length > 1 ? `${form.name} #${i + 1}` : form.name
+        const accountName = resolveOAuthAccountName(
+          form.platform,
+          form.name,
+          typeof tokenInfo.email_address === 'string' ? tokenInfo.email_address : tokenInfo.email,
+          i + 1,
+          keys.length
+        )
 
         const credentials: Record<string, unknown> = { ...tokenInfo }
         applyInterceptWarmup(credentials, interceptWarmupRequests.value, 'create')
