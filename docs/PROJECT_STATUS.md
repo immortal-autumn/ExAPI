@@ -295,6 +295,13 @@ P0/P1 alerts; error rate was `0.0` and p95 was `4.0 ms` against a `4.852 ms`
 baseline. The signed rollout manifest and its provenance evidence are retained
 in the versioned off-host record described above.
 
+After promotion, the operator-only account update endpoint corrected one legacy
+OAuth record whose display name was the placeholder `1`; it now uses the
+validated identity-derived name. The update changed only the display name
+(credentials, groups, scheduler state, and status were preserved). A follow-up
+account-list read confirmed all three configured accounts remain active and
+schedulable.
+
 ## v0.2.14 production deployment (historical)
 
 The pre-cutover recovery set `exapi-v0214-recovery-20260902a` is retained in
