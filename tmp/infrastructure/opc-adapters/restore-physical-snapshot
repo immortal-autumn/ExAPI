@@ -67,7 +67,7 @@ done
 docker exec "$container" pg_isready -U sub2api -d sub2api >/dev/null
 network=$(docker inspect "$container" --format '{{.HostConfig.NetworkMode}}')
 [[ "$network" == none ]] || { printf 'snapshot target has network access\n' >&2; exit 1; }
-docker exec "$container" psql -v ON_ERROR_STOP=1 -U sub2api -d sub2api -Atqc '
+actual_counts=$(docker exec "$container" psql -v ON_ERROR_STOP=1 -U sub2api -d sub2api -Atqc '
 DO $$ BEGIN
   IF to_regclass('"'"'public.users'"'"') IS NULL OR to_regclass('"'"'public.accounts'"'"') IS NULL OR
      to_regclass('"'"'public.api_keys'"'"') IS NULL OR to_regclass('"'"'public.schema_migrations'"'"') IS NULL THEN
@@ -77,7 +77,8 @@ END $$;
 SELECT (SELECT COUNT(*) FROM users),(SELECT COUNT(*) FROM accounts WHERE deleted_at IS NULL),
   (SELECT COUNT(*) FROM api_keys WHERE deleted_at IS NULL),(SELECT COUNT(*) FROM batch_image_jobs),
   (SELECT COUNT(*) FROM schema_migrations);
-' | tail -n 1 | grep -Fx "$expected_counts"
+')
+[[ "$actual_counts" == "$expected_counts" ]] || { printf 'restored database counts differ from logical evidence\n' >&2; exit 1; }
 restored=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 jq -n \
   --arg rollout_id "$EXAPI_ROLLOUT_ID" --arg provider "$EXAPI_SNAPSHOT_PROVIDER" \
