@@ -158,7 +158,12 @@ jq -e '.verified == true and .sql_rows_remaining == 0 and .provider_jobs_remaini
 
 secret_volume=$(docker volume create --label "exapi.rollout_id=$ROLLOUT_ID")
 cleanup_secret() { docker volume rm -f "$secret_volume" >/dev/null 2>&1 || true; }
-docker run --rm --network none --entrypoint /bin/sh \
+# The report key and batch-cleanup attestation are root-owned 0600 files on
+# the operator host.  Read them in a networkless root helper, then drop the
+# copied files to the application UID inside the ephemeral volume.  Without
+# the explicit root user this inherits the release image's UID 1000 and fails
+# before the canary can create its isolated account/key fixtures.
+docker run --rm --network none --user 0:0 --entrypoint /bin/sh \
   -v "$REPORT_KEY:/source/report.key:ro" \
   -v "$batch_evidence:/source/batch-cleanup-evidence.json:ro" \
   -v "$secret_volume:/target" \
