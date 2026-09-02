@@ -99,6 +99,12 @@ PostgreSQL snapshot；两者均在 networkless disposable target 中独立恢复
 解密和基线计数校验。所有证据仅保存在 OPC checkout 的 `tmp/rollouts/` 或受保护的
 off-host 对象存储中，仓库不保存密钥、凭据或数据库内容。
 
+2026-09-02 的只读前置条件审计确认受保护的归档、快照、清理、identity 和监控适配器
+路径均存在，告警投递证据检查通过。但外部 readiness 证据和 synthetic-provider 证据
+均已超过新鲜度窗口，因此 Phase 4 仍然阻塞。未执行清理、快照、归档上传、迁移、重启
+或生产文件修改；详见
+[`tmp/usability-review/current/phase-4-external-prerequisite-audit-2026-09-02.md`](../tmp/usability-review/current/phase-4-external-prerequisite-audit-2026-09-02.md)。
+
 ## 生产观察
 
 `exapi-v026-production-20260824-observation` 运行 60 分钟、30 秒间隔，共 120 次

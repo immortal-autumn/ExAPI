@@ -139,6 +139,14 @@ snapshot were retained off-host and independently restored into networkless
 disposable targets. Evidence is under the checkout-local `tmp/rollouts/`
 directory on OPC.
 
+The 2026-09-02 read-only prerequisite audit confirmed that the protected
+archive, snapshot, cleanup, identity, and monitoring adapter paths exist, and
+that alert-delivery evidence validates. The off-host readiness proof and the
+synthetic-provider proof are outside their freshness windows, so Phase 4
+remains blocked. No cleanup, snapshot, archive upload, migration, restart, or
+production file change was performed; see the detailed record in
+[`tmp/usability-review/current/phase-4-external-prerequisite-audit-2026-09-02.md`](../tmp/usability-review/current/phase-4-external-prerequisite-audit-2026-09-02.md).
+
 The production observation ran for 60 minutes with 120 readiness probes:
 
 - readiness failures: `0`; restarts: `0`; unexpected 5xx: `0`;
