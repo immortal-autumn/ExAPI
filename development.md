@@ -6,11 +6,11 @@ baseline lives in [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md).
 
 ## Current Goal
 
-Build on the deployed v0.2.7 baseline while preserving runtime compatibility,
+Build on the deployed v0.2.10 baseline while preserving runtime compatibility,
 deployment compatibility, API compatibility, and private-control-plane
 security. The review branch `revision/exapi-v0.2.1` is still non-production;
-OPC remains on the attested v0.2.7 image until the recovery and rollout gates
-below are complete.
+OPC is running the attested v0.2.10 image; review-branch changes remain
+non-production until the recovery and rollout gates below are complete.
 
 The settings extraction described by the older Phase 1.2–1.7 plan has landed:
 the reusable section shell, all major tab components, security/gateway/payment
@@ -21,7 +21,11 @@ repeat completed phases.
 Provider diagnostics, operator-only navigation, API-key lifecycle guards, and
 the initial import hardening have landed on this branch. The immediate focus is
 finishing the fail-closed migration evidence and release gates, while keeping
-provider-vs-deployment failures easy to distinguish.
+provider-vs-deployment failures easy to distinguish. The supported product
+surface is administrator-only; customer/SaaS modules remain source-compatible
+legacy code and are retired at runtime. English is the canonical
+documentation/UI language and Simplified Chinese is maintained as a translated
+companion.
 
 ## Compatibility Boundaries
 
@@ -108,6 +112,19 @@ Administrator API-key group writes are also guarded per key in the browser:
 the group control is disabled until its request settles, preventing
 out-of-order updates while preserving the operator-mode `group_id: 0` unbind
 contract.
+
+### Phase 3.1 — Private product documentation and account usability (completed)
+
+- Added the bilingual administrator-only product-surface contract and marked
+  upstream payment/recharge guides as archived references.
+- Changed all supported Compose and example configuration templates to default
+  to `RUN_MODE=simple`, while preserving the backend's legacy `standard`
+  fallback for compatibility and billing safety.
+- OAuth and setup-token account imports now derive a non-empty display name from
+  an explicit operator name, validated email, or provider fallback. API-key,
+  Bedrock, and Vertex account names remain explicitly required.
+- Focused account, private-route, typecheck, build, and release-contract gates
+  passed. These commits were not deployed to OPC.
 
 ### Phase 4 — Recovery and private-cutover rehearsal (completed for v0.2.10; 2026-09-02)
 
