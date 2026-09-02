@@ -108,6 +108,14 @@ security scans:
   `/admin/batch-images` control-plane route, while retaining `/batch-image` as
   a bilingual retirement page; navigation, prefetch, route-matrix tests,
   typecheck, and changed-file lint passed. Production has not been changed.
+- `7a9917c3f`: serialized per-key administrator API-key group changes with a
+  pending guard and disabled control; the deferred-request regression test,
+  typecheck, and changed-file lint passed. Production has not been changed.
+- `049ee862b`: scheduled account-test plans now use a bounded PostgreSQL
+  claim lease (`FOR UPDATE SKIP LOCKED`) before upstream work and lease-owned
+  completion, preventing duplicate execution across replicas and stale
+  workers. Focused tests, repository/service tests, `go vet`, and race tests
+  passed. Production has not been changed.
 
 The review branch also contains work hardening proxy partial updates: omitted
 lifecycle and credential fields are preserved, while explicit null/empty values

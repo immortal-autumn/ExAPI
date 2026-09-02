@@ -68,6 +68,9 @@ without a new regression finding.
   a provider retry storm.
 - Keep account identity, token material, and raw upstream payloads out of
   metrics labels.
+- Ensure periodic account-test workers claim due plans atomically with a
+  database lease before provider calls; retain retry-after-lease-expiry and
+  stale-worker protection tests so replica scaling cannot duplicate probes.
 
 ### Phase 2.3 — Finish coordinator reductions
 
@@ -100,6 +103,11 @@ without a new regression finding.
   route navigation/prefetch contracts covered by focused tests.
 - Keep each Phase 3 change independently revertible, documented in English and
   Chinese, and green on the full GitHub CI/security workflow before proceeding.
+
+Administrator API-key group writes are also guarded per key in the browser:
+the group control is disabled until its request settles, preventing
+out-of-order updates while preserving the operator-mode `group_id: 0` unbind
+contract.
 
 ### Phase 4 — Recovery and private-cutover rehearsal (current; blocked on external inputs)
 
