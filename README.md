@@ -13,12 +13,12 @@ English (default) | [简体中文](README.zh-CN.md)
 
 ## Current status
 
-The current OPC production release is **ExAPI v0.2.10**, commit
-`f8cee085c3e7d815d5144659d3a92720f9aa8e95`. Production uses only the immutable
-OCI digest `sha256:c56c876f70c49d3f05dffc7fc80417807b043da1d1261d1e3fc29b7a0daaeaa8`,
+The current OPC production release is **ExAPI v0.2.14**, commit
+`4b0352fa87720425bf4fb5c23aa91e2c0e212c9e`. Production uses only the immutable
+OCI digest `sha256:e8a6d161a1acb5d454a13526ef2914533d077fd5aefae7a412bc45f58513857d`,
 validated by the release workflow with SBOM and provenance attestations; mutable
-tags such as `latest` are not used for production. The revision branch contains
-newer review-only hardening that is not part of this deployed image.
+tags such as `latest` are not used for production. The release/review branch
+contains the hardening included in this deployed image.
 
 - Current release, image digest, deployment validation, and provider status:
   [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)

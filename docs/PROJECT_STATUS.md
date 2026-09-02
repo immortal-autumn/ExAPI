@@ -96,10 +96,14 @@ The release workflow and artifact attestation passed.
 
 ## Administrator hardening review branch
 
-The non-production review branch `revision/exapi-v0.2.1` has continued
+The release/review branch `revision/exapi-v0.2.1` has continued
 administrator-surface hardening through 2026-09-01. The following independently
 revertible commits have passed their local focused/full checks and GitHub CI and
 security scans:
+
+The production-status phrases in the entries below describe the state when each
+review commit was recorded. Every listed commit is an ancestor of v0.2.14 and is
+therefore included in the deployed image unless explicitly marked otherwise.
 
 - `30f5dc180`: routine proxy credential minimization;
 - `3453be8cf`: proxy destructive-action UI guards;
@@ -189,25 +193,24 @@ clear nullable settings. This work is not part of the production release above
 and has not been deployed. Those review-only changes remain excluded from the
 v0.2.10 production image.
 
-The latest review-only commits add a bilingual administrator-only product
-surface contract (`bdd4329e3`), make all supported deployment examples default
+The latest review-only commits added a bilingual administrator-only product
+surface contract (`bdd4329e3`), made all supported deployment examples default
 to `RUN_MODE=simple` while preserving the backend's legacy `standard` fallback,
-and derive OAuth/setup-token account display names from an explicit name,
+and derived OAuth/setup-token account display names from an explicit name,
 validated email, or provider fallback (`8b25ba36c`). Focused account/private-route
 tests, frontend typecheck/build, deployment bind/security/rollout contracts, and
-the release contract passed. These commits are on
-`revision/exapi-v0.2.1` only and have **not** been deployed to OPC or included in
-the v0.2.10 image.
+the release contract passed. They were not present in the v0.2.10 image, but are
+ancestors of and included in the deployed v0.2.14 image.
 
-The latest review-only commit `da3e56788` exposes the retained private security
+The review commit `da3e56788` exposes the retained private security
 boundary in the administrator settings view, prevents a read-only security tab
 from triggering a global settings save, and localizes the affected security,
 OAuth, pagination, and 404 copy in English and Simplified Chinese. It adds
 regression coverage for the security tab and retained-tab contract; the full
 frontend suite (267 files, 1,435 tests), typecheck, lint, production build,
 bundle budgets, and deployment contracts passed. This commit is on
-`revision/exapi-v0.2.1` only and has **not** been deployed to OPC or included in
-the v0.2.10 image. GitHub CI run `33607824144` and Security Scan run
+`revision/exapi-v0.2.1` and was not present in the v0.2.10 image; it is included
+in the deployed v0.2.14 image. GitHub CI run `33607824144` and Security Scan run
 `33607824171` completed successfully for the resulting documentation state.
 
 ## Production deployment
@@ -287,7 +290,7 @@ See [`deploy/EDGE_SECURITY.md`](../deploy/EDGE_SECURITY.md) for the generic
 boundary and [`deploy/PRODUCTION_ROLLOUT.md`](../deploy/PRODUCTION_ROLLOUT.md)
 for promotion requirements.
 
-## v0.2.10 account-probe behavior
+## v0.2.14 account-probe behavior
 
 Manual provider tests now write a sanitized snapshot to
 `account.extra.account_test_probe`. That snapshot is display/diagnostic state,
