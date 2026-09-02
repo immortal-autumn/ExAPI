@@ -76,6 +76,23 @@ attestation、恢复、readiness、告警和私有化切换门禁均已通过，
 该候选尚未用于生产，也没有 release tag 或 OCI 镜像。必须先通过完整 CI/安全工作流、全新的恢复数据和
 synthetic-provider canary 以及签名 rollout 门禁，才能切换 OPC。所有检查完成前生产继续运行 v0.2.14。
 
+## v0.2.15 restored observation 复核
+
+首次 v0.2.15 restored-data observation 虽完成了 30 分钟 readiness 窗口，但网络 proof
+adapter 仍期待过时的 `1|23|8|0|...` 数据库计数。已验证的 v0.2.15 logical restore 实际为
+`1|3|3|0|246|9`，因此 adapter 在 shell 重定向创建空的 `network-proof.json` 后失败；缺少最终
+evidence 是 observer 的 fail-closed 结果，并非成功 proof 生成了空 JSON。没有修改生产数据。
+
+当前 release source 会将全部六项计数与受保护的 logical-restore evidence 比较，通过同一个
+root-owned `0600` 非符号链接文件描述符读取并计算 SHA-256，并把 SHA-256 和 restore rollout ID
+写入 network proof。logical-restore 输出使用 `umask 077`；observer 也要求新的 evidence 绑定。
+OPC v4 adapter 已原子更新到该 source，部署 SHA-256 为
+`d300f6e66288adca9ffd7d1cd1a977484c2f28461f67f41fb71b21542e4aabe8`。
+
+在允许 v0.2.15 promotion 前，必须使用全新的 rollout 目录重新运行至少 30 分钟的
+restored-data observation，并通过其余 signed rollout gates。在复核完成前，生产保持
+v0.2.14。
+
 ## 管理员专用化审查分支
 
 发布/审查分支 `revision/exapi-v0.2.1` 截至 2026-09-01 已继续完成管理员界面加固。

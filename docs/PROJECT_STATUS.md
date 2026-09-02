@@ -103,6 +103,27 @@ full CI/security workflow, fresh restored-data and synthetic-provider canaries,
 and the signed rollout gates before any OPC cutover. Production remains on
 v0.2.14 until those checks complete.
 
+## v0.2.15 restored-observation reproof
+
+The first v0.2.15 restored-data observations completed their 30-minute
+readiness windows, but the network proof adapter still expected the obsolete
+`1|23|8|0|...` database cardinality. The verified v0.2.15 logical restore
+contains `1|3|3|0|246|9`, so the adapter failed after shell redirection created
+an empty `network-proof.json`; the missing final evidence was a fail-closed
+observer result, not an empty successful proof. No production data was changed.
+
+The release source now compares all six cardinalities against the protected
+logical-restore evidence, reads and hashes that evidence through one
+root-owned `0600` non-symlink file descriptor, and records its SHA-256 and
+restore rollout ID in the network proof. Logical-restore output is created with
+`umask 077`; the observer requires the new evidence binding. The OPC v4 adapter
+was atomically updated to this source and its deployed SHA-256 is
+`d300f6e66288adca9ffd7d1cd1a977484c2f28461f67f41fb71b21542e4aabe8`.
+
+A new 30-minute restored-data observation using a fresh rollout directory is
+required before any v0.2.15 promotion. Production remains on v0.2.14 until
+that reproof and the remaining signed rollout gates pass.
+
 ## Administrator hardening review branch
 
 The release/review branch `revision/exapi-v0.2.1` has continued

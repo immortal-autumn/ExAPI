@@ -239,6 +239,11 @@ kind=os.environ["OBSERVATION_CLASS"]
 if kind=="restored-data":
     for key in ("egress_denied","integrity_verified","decryption_verified"):
         if network.get(key) is not True: raise SystemExit(f"restored-data proof omitted {key}=true")
+    evidence_sha=network.get("restored_counts_evidence_sha256")
+    if not isinstance(evidence_sha,str) or len(evidence_sha)!=64 or any(char not in "0123456789abcdef" for char in evidence_sha):
+        raise SystemExit("restored-data proof is not bound to protected restore evidence")
+    if not isinstance(network.get("restored_counts_evidence_rollout_id"),str) or not network["restored_counts_evidence_rollout_id"]:
+        raise SystemExit("restored-data proof omitted restore evidence rollout identity")
 elif kind=="synthetic-provider":
     for key in ("egress_allowlist_verified","canary_only_credentials","provider_smoke_verified"):
         if network.get(key) is not True: raise SystemExit(f"synthetic-provider proof omitted {key}=true")

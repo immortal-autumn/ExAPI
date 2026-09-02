@@ -25,6 +25,18 @@ grep -Fq 'required_validator_verified' deploy/ops/verify-logical-restore.sh || \
   fail 'logical restore evidence omits mandatory-validator status'
 grep -Fq 'required_validator_sha256' deploy/ops/verify-logical-restore.sh || \
   fail 'logical restore evidence is not bound to the mandatory validator'
+grep -Fq 'O_NOFOLLOW' deploy/ops/adapters/prove-rollout-network || \
+  fail 'restored-data proof does not reject evidence symlink swaps'
+grep -Fq 'metadata.st_uid != 0' deploy/ops/adapters/prove-rollout-network || \
+  fail 'restored-data proof does not require root-owned evidence'
+grep -Fq 'stat.S_IMODE(metadata.st_mode) != 0o600' deploy/ops/adapters/prove-rollout-network || \
+  fail 'restored-data proof does not require mode 0600 evidence'
+grep -Fq 'restored_counts_evidence_sha256' deploy/ops/adapters/prove-rollout-network || \
+  fail 'restored-data network proof is not bound to its evidence digest'
+grep -Fq 'restored_counts_evidence_rollout_id' deploy/ops/adapters/prove-rollout-network || \
+  fail 'restored-data network proof is not bound to its evidence rollout'
+! grep -Fq '1\|23\|8\|0\|*' deploy/ops/adapters/prove-rollout-network || \
+  fail 'restored-data proof retains stale hard-coded database counts'
 grep -Fq "checksum !~ '^[0-9a-f]{64}$'" deploy/ops/restore-checks.required.sql || \
   fail 'mandatory restore validator does not validate migration checksums'
 grep -Fq "role = 'admin' AND status = 'active'" deploy/ops/restore-checks.required.sql || \

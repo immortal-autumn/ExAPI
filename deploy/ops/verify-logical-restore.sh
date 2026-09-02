@@ -3,6 +3,7 @@
 # PostgreSQL container and emit evidence only after repository-owned checks and
 # any additional operator assertions pass.
 set -euo pipefail
+umask 077
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$ROOT_DIR"
@@ -125,6 +126,7 @@ data = {
 with open(sys.argv[1], "w", encoding="utf-8") as handle:
     json.dump(data, handle, indent=2, sort_keys=True); handle.write("\n")
 PY
+chmod 600 "$evidence"
 printf 'Logical restore evidence: %s\n' "$evidence"
 if [[ "${KEEP_RESTORE_TARGET:-false}" == true ]]; then
   printf 'Disposable target retained as %s; it has Docker network mode none.\n' "$container"
