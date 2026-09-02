@@ -25,8 +25,8 @@ if alert.get("alert_sent") is not True or alert.get("delivery_kind")!=d["deliver
     raise SystemExit("alert transition is not bound to the delivery channel")
 if alert.get("target_url")!=target or alert.get("monitor_host")!=d["monitor_host"]:
     raise SystemExit("alert transition is not bound to the monitor target")
-if alert.get("curl_exit_code")!=0 or alert.get("http_status")!=200:
-    raise SystemExit("alert transition probe result is invalid")
+if alert.get("curl_exit_code")!=0 or alert.get("http_status")!=503:
+    raise SystemExit("unhealthy alert transition must be a successful HTTP 503 readiness response")
 if not isinstance(alert.get("body_sha256"),str) or len(alert["body_sha256"])!=64:
     raise SystemExit("alert transition body fingerprint is missing")
 try: alert_time=datetime.datetime.fromisoformat(alert["observed_at"].replace("Z","+00:00"))
