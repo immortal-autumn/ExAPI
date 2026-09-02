@@ -373,6 +373,10 @@ container so Compose can attach its external volume:
 
 ```bash
 export LOGICAL_RESTORE_EVIDENCE="$PWD/tmp/rollouts/pre-release/logical-restore/logical-restore-evidence.json"
+# The observer/network adapter reads this file as protected evidence. It must
+# be a root-owned, regular, non-symlink file with mode 0600; verify-logical-
+# restore.sh creates new evidence with umask 077 and applies this mode.
+export EXAPI_RESTORED_COUNTS_FILE="$LOGICAL_RESTORE_EVIDENCE"
 readarray -t RESTORE_SOURCE < <(python3 - "$LOGICAL_RESTORE_EVIDENCE" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -437,6 +441,13 @@ Both `/health` and `/ready` must be JSON rather than SPA HTML. Use
 `observe-rollout.sh` with metrics and network-proof adapters. Restored and
 synthetic canaries each run for at least 30 minutes; readiness is checked every
 30 seconds or faster.
+
+For restored-data observations, the network adapter compares users, active
+accounts, active API keys, batch image jobs, schema migrations, and groups with
+`EXAPI_RESTORED_COUNTS_FILE`. The proof includes that file's SHA-256 and restore
+rollout ID, and the observer requires both fields in the final evidence. A
+stale hard-coded account/key count or a writable/symlinked evidence file must
+fail closed.
 
 ```bash
 export OBSERVATION_CLASS=restored-data # then synthetic-provider

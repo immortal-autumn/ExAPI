@@ -96,7 +96,10 @@ OPC v4 adapter 已原子更新到该 source，部署 SHA-256 为
 restored-data observation，60/60 readiness 全部成功，失败、重启、意外 5xx 均为 0，error rate
 为 `0.0`，p95 满足基线门禁。network proof 记录了 `egress_denied=true`、
 `integrity_verified=true`、`decryption_verified=true` 以及受保护 logical-restore evidence
-的 SHA-256。最终证据按 OPC checkout-local `tmp/rollouts/` 策略保留；生产仍固定在同一
+的 SHA-256。最终证据按 OPC checkout-local `tmp/rollouts/` 策略保留；evidence SHA-256 为
+`6d91254ed770bf5ca5e10e844c845a2e154621e9680bb68b6eb7fb8bc7e29116`，network proof SHA-256
+为 `dead48986f23334e91bdbc591fd28c6838da999854e8fa2cf16a5235a52cdb24`，readiness trace
+SHA-256 为 `98ddd3ab4f5119fce3473d101d6618946c217265a6d1326cea3fed250c90cbb4`。生产仍固定在同一
 v0.2.15 digest，signed production rollout record 尚待完成。
 
 ## 管理员专用化审查分支

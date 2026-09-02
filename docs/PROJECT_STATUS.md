@@ -124,7 +124,13 @@ with zero failures, zero restarts, zero unexpected 5xx, error rate `0.0`, and
 30-minute p95 within the baseline gate. Its network proof records
 `egress_denied=true`, `integrity_verified=true`, `decryption_verified=true`,
 and the SHA-256 of the protected logical-restore evidence. The final evidence
-is retained under the checkout-local `tmp/rollouts/` policy on OPC; production
+is retained under the checkout-local `tmp/rollouts/` policy on OPC. Its
+evidence SHA-256 is
+`6d91254ed770bf5ca5e10e844c845a2e154621e9680bb68b6eb7fb8bc7e29116`, the
+network proof SHA-256 is
+`dead48986f23334e91bdbc591fd28c6838da999854e8fa2cf16a5235a52cdb24`, and the
+readiness trace SHA-256 is
+`98ddd3ab4f5119fce3473d101d6618946c217265a6d1326cea3fed250c90cbb4`. Production
 remains pinned to the same v0.2.15 digest while the signed production rollout
 record is finalized.
 
