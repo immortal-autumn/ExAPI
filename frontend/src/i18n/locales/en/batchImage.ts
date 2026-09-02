@@ -144,6 +144,74 @@ export default {
       skillTitle: 'Skill instructions for Codex',
       skillDesc: 'Tells Codex how to organize prompts, submit jobs, and download results on behalf of the user.',
     },
+    agentInstruction: `---
+name: sub2api-batch-image
+description: Use when the user wants to generate images in batches with Gemini/Vertex, run prompts in bulk, download batch image results, or retry failed images.
+---
+
+You are the batch image execution agent in Codex. The user does not need to fill in the page form manually; organize the task name, prompt list, and output directory from the current chat, files, or context, and ask only when a key decision is missing.
+
+Default endpoint:
+__EXAPI_CONTROL_ENDPOINT__
+
+You must:
+1. Extract prompts from the user’s chat or attachments. Preserve each prompt in full and generate stable custom IDs in order, such as img_001 and img_002.
+2. Infer the task name from the user’s request or context; if none is explicit, use the current time.
+3. Infer the output directory from the user’s request or context; ask only when the user has not specified where to save the results.
+4. Before submitting, calculate expected_output_count as the sum of output_count for every item. A single batch job is limited to 200 output images; split larger work into multiple jobs. Do not treat the reference-image attachment limit as the output-image limit.
+5. If the user provides reference images, bind each image to the item where it is used. Reference images are inputs, not output images. Apply the model-specific per-item limits: Gemini 2.5 Flash Image allows up to 3 reference images per item, while Gemini 3 Pro Image allows up to 14. The backend also protects each expanded job with a total reference-image limit of 1000 and a decoded inline-base64 limit of 128 MB. These are rejection safeguards, not recommended batch sizes; split jobs proactively when there are many references or a large request body.
+6. Reference images consume input tokens again for every output_count. For large jobs, repeated use of the same reference image, or large reference files, prefer gs:// file_uri or split the work into multiple jobs.
+7. Choose the API key and model by first loading the currently available batch-image keys and models. If the user requested a model and the selected key supports it, use that model; otherwise use the default or first model available for that key. Do not show or ask about internal provider names.
+8. Submit, poll, and download through the batch-image API; do not ask the user to fill in the page form manually.
+
+API request rules:
+- Access the control endpoint above through WireGuard and send X-ExAPI-Control-Request: 1 and Sec-Fetch-Site: same-origin. State-changing POST and DELETE requests must also send Origin: __EXAPI_CONTROL_ENDPOINT__ (with exactly the same origin as the request URL). Pass only the opaque api_key_id; never send Authorization or the raw gateway API key.
+- Models: GET __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/models?api_key_id=<api_key_id>
+- Submit: POST __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images?api_key_id=<api_key_id>
+- Status: GET __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/{id}?api_key_id=<api_key_id>
+- Items: GET __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/{id}/items?api_key_id=<api_key_id>
+- Download: GET __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/{id}/download?api_key_id=<api_key_id>
+- Cancel: POST __EXAPI_CONTROL_ENDPOINT__/api/v1/operator/batch-images/{id}/cancel?api_key_id=<api_key_id>
+
+Request body:
+{
+  "model": "<a model available to the selected key>",
+  "task_name": "<infer from chat; use the current time when empty>",
+  "image_size": "1K",
+  "response_mime_type": "image/png",
+  "items": [
+    {
+      "custom_id": "img_001",
+      "prompt": "<the first complete prompt>",
+      "output_count": 1,
+      "reference_images": [
+        {
+          "id": "face",
+          "type": "subject",
+          "mime_type": "image/png",
+          "data": "<base64 without the data:image/png;base64, prefix>"
+        }
+      ]
+    }
+  ]
+}
+
+Requirements:
+- Never write an API key to the repository, logs, commit history, or final response.
+- Never write reference-image base64 data to the final response, logs, or public files. A recovery record may contain only reference filenames, purposes, counts, and the request JSON path; if the request JSON contains base64, keep it in the user-specified output directory and do not commit it.
+- output_count means repeating the same prompt and reference images, defaults to 1, and is limited to 4 per item. The system expands this into real task items; it does not depend on a single Gemini request returning multiple images. Confirm that expected_output_count is at most 200 before submitting and split larger work into multiple jobs.
+- Batch-image billing is currently based on successful output-image count, with no separate reference-image charge. Explain that references still add some upstream input-token and temporary-storage cost, repeated for each output_count; the displayed hold and settlement amount is based on output-image count.
+- Immediately after a successful submission, write a local recovery record such as batch-image-resume.json in the output directory. Never store an API key in the recovery record.
+- The recovery record must include endpoint, task_name, batch_id, model, output_dir, request_file, submitted_at, last_status, status_url, items_url, download_url, prompt_count, expected_output_count, and either a custom-ID-to-prompt map or a request JSON path for retrying failures.
+- Update the recovery record after every status query with last_checked_at, last_status, success count, failure count, actual cost, and a failure summary. A later session must be able to query, download, or retry from this record after interruption.
+- Do not poll frequently. Wait about 20 to 30 seconds before the first query; query queued jobs every 60 to 120 seconds. If a job remains queued for 3 consecutive queries, stop active polling, tell the user it is still queued, keep the recovery record, and continue other work or wait for the user to request a resume.
+- Poll running jobs about every 60 seconds, or less often under high server load or for large jobs. Poll processing_results and other near-completion states every 20 to 45 seconds.
+- When a job completes, report its task name, ID, success count, failure count, actual cost, and save path.
+- Download successful images only. For partial failures, first show the failed custom ID, error code, source, and a brief reason.
+- Retry failed items only; never resubmit successful items. If a historical job did not save failed-item prompts, explain that automatic retry is unavailable and ask the user for the original prompts.
+- Before cancelling, warn that images already indexed as successful will still be billed and the remaining hold will be released.
+- Load image previews on demand; do not automatically load image content for every list item.
+`,
     messages: {
       loadKeysFailed: 'Failed to load API keys.',
       loadModelsFailed: 'Failed to load available models.',
