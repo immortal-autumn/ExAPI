@@ -37,6 +37,17 @@ remains available as the preceding reviewed candidate. The prior v0.2.8 tag
 remains immutable but was never published because its commit still contained
 `backend/cmd/server/VERSION=0.2.7`; it must not be retagged.
 
+## v0.2.11 release-candidate preparation
+
+The review branch is being prepared as the next candidate from the post-v0.2.10
+administrator hardening work. `backend/cmd/server/VERSION` now declares
+`0.2.11`, but no `v0.2.11` tag, OCI image, SBOM, provenance, or signature exists
+yet. The v0.2.10 image and its canary/readiness evidence must not be reused for
+this commit. Promotion remains blocked until the annotated tag passes the full
+release workflow, a digest-matched restored-data and synthetic-provider canary
+is observed, and fresh off-host readiness/alert evidence is verified immediately
+before rollout.
+
 ## Administrator hardening review branch
 
 The non-production review branch `revision/exapi-v0.2.1` has continued

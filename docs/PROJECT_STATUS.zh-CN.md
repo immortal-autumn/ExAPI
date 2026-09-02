@@ -24,6 +24,15 @@
 `gh attestation verify` 验证。生产环境只使用上述 immutable digest，不使用
 `latest` 等可变标签。GHCR 包名仍保留 `sub2api2personal` 以兼容现有部署。
 
+## v0.2.11 发布候选准备
+
+审查分支正在基于 v0.2.10 之后的管理员加固工作准备下一候选版本。
+`backend/cmd/server/VERSION` 已声明 `0.2.11`，但目前尚未创建 `v0.2.11` 标签，
+也没有对应的 OCI 镜像、SBOM、provenance 或签名。不得复用 v0.2.10 的镜像及其
+canary/readiness 证据。只有带注释标签通过完整 release workflow、与该 digest
+匹配的 restored-data 和 synthetic-provider canary 完成观察，并在部署前立即验证
+新鲜的异地 readiness/告警证据后，才允许 promotion。
+
 ## 管理员专用化审查分支
 
 非生产审查分支 `revision/exapi-v0.2.1` 截至 2026-09-01 已继续完成管理员界面加固。
