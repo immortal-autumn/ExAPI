@@ -29,6 +29,8 @@ contracts, compatibility references, and historical design evidence.
   mirror of the current status record; English remains the default.
 - [`ACCOUNT_PROBES.md`](ACCOUNT_PROBES.md) — manual probe and forced usage
   refresh semantics.
+- [`PRIVATE_PRODUCT_SURFACE.md`](PRIVATE_PRODUCT_SURFACE.md) — the supported
+  administrator-only route, settings, and API capability allowlist.
 - [`../development.md`](../development.md) — active development priorities and
   mandatory quality gates.
 - [`../deploy/README.md`](../deploy/README.md) — deployment entry point.
@@ -53,11 +55,13 @@ contracts, compatibility references, and historical design evidence.
 - [`ASYNC_IMAGE_TASKS.md`](ASYNC_IMAGE_TASKS.md)
 - [`BATCH_IMAGE_MVP.md`](BATCH_IMAGE_MVP.md)
 - [`COMPOSITE_GROUPS.md`](COMPOSITE_GROUPS.md)
-- [`PAYMENT.md`](PAYMENT.md) and [`PAYMENT_CN.md`](PAYMENT_CN.md)
-- [`ADMIN_PAYMENT_INTEGRATION_API.md`](ADMIN_PAYMENT_INTEGRATION_API.md)
+- [`PAYMENT.md`](PAYMENT.md) and [`PAYMENT_CN.md`](PAYMENT_CN.md) — archived
+  upstream reference; payment is not an ExAPI feature.
+- [`ADMIN_PAYMENT_INTEGRATION_API.md`](ADMIN_PAYMENT_INTEGRATION_API.md) —
+  archived upstream reference; customer recharge/redeem APIs are retired.
 
-Feature documents describe their named subsystem and may include optional
-multi-user capabilities that are not enabled by the private deployment.
+Feature documents describe their named subsystem. Archived upstream references
+are explicitly labelled and must not be treated as current ExAPI workflows.
 
 ## Developer and design references
 

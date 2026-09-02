@@ -2,6 +2,10 @@
 
 > [English（默认）](ADMIN_PAYMENT_INTEGRATION_API.md) | 简体中文（文末保留英文对照）
 
+> **上游历史参考，不是 ExAPI 功能。** 管理员专用产品已退役客户充值、兑换、余额和
+> 支付集成端点；在私有模式后端中访问这些路径会返回 `CUSTOMER_SURFACE_RETIRED`。
+> **不要将下方端点用于线上 ExAPI 实例。**
+
 ---
 
 ## 中文

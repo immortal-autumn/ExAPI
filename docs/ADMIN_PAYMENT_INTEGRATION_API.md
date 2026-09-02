@@ -2,6 +2,12 @@
 
 English (default) | [简体中文](ADMIN_PAYMENT_INTEGRATION_API.zh-CN.md)
 
+> **Archived upstream reference — not an ExAPI feature.** Customer recharge,
+> redeem, balance, and payment-integration endpoints are retired in the
+> administrator-only product and return `CUSTOMER_SURFACE_RETIRED` when reached
+> through the private-mode backend. **Do not call the endpoints documented
+> below against a live ExAPI instance.**
+
 ## Purpose
 
 This document describes the minimal ExAPI Admin API surface for external

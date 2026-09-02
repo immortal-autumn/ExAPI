@@ -181,6 +181,17 @@ for path in (
     forbid(path, "Wei-Shaw/sub2api")
     forbid(path, "weishaw/sub2api:latest")
 
+for path in (
+    "deploy/docker-compose.yml",
+    "deploy/docker-compose.local.yml",
+    "deploy/docker-compose.standalone.yml",
+    "deploy/docker-compose.dev.yml",
+):
+    require(path, "RUN_MODE=${RUN_MODE:-simple}")
+    forbid(path, "RUN_MODE=${RUN_MODE:-standard}")
+require("deploy/.env.example", "RUN_MODE=simple")
+require("deploy/config.example.yaml", 'run_mode: "simple"')
+
 require("deploy/install.sh", "Checksum retrieval and archive lookup fail closed.")
 require("deploy/install.sh", 'curl -fsSL "$checksum_url"')
 forbid("deploy/install.sh", 'print_warning "$(msg \'checksum_not_found\')"')

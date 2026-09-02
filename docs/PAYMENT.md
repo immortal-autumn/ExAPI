@@ -2,7 +2,16 @@
 
 English (default) | [简体中文](PAYMENT_CN.md)
 
-Sub2API has a built-in payment system that enables user self-service top-up without deploying a separate payment service.
+> **Archived upstream reference — not an ExAPI feature.** ExAPI runs in the
+> private administrator-only mode; customer payment, balance, and checkout
+> routes are retired and cannot be enabled through the supported deployment
+> templates. **Do not follow the Quick Start, provider, webhook, or payment-flow
+> instructions below for a live ExAPI instance.** Keep this page only for
+> historical schema/migration context.
+
+The upstream Sub2API release documented a built-in payment system that enabled
+customer self-service top-up. That subsystem is retained here only as a
+historical compatibility reference.
 
 ---
 

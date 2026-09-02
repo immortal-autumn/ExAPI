@@ -20,6 +20,8 @@
 - [`PROJECT_STATUS.md`](PROJECT_STATUS.md) — 当前发布、部署、验证和外部状态的标准记录。
 - [`PROJECT_STATUS.zh-CN.md`](PROJECT_STATUS.zh-CN.md) — 当前状态记录的简体中文镜像；英文仍为默认入口。
 - [`ACCOUNT_PROBES.md`](ACCOUNT_PROBES.md) — 手动探测和强制用量刷新语义。
+- [`PRIVATE_PRODUCT_SURFACE.md`](PRIVATE_PRODUCT_SURFACE.md) — 管理员专用模式支持的
+  路由、设置和 API 能力允许列表。
 - [`../development.md`](../development.md) — 当前开发优先级和强制质量门禁。
 - [`../deploy/README.md`](../deploy/README.md) — 部署入口。
 - [`../deploy/PRODUCTION_ROLLOUT.md`](../deploy/PRODUCTION_ROLLOUT.md) — 恢复、
@@ -41,10 +43,12 @@
 - [`ASYNC_IMAGE_TASKS.md`](ASYNC_IMAGE_TASKS.md)
 - [`BATCH_IMAGE_MVP.md`](BATCH_IMAGE_MVP.md)
 - [`COMPOSITE_GROUPS.md`](COMPOSITE_GROUPS.md)
-- [`PAYMENT.md`](PAYMENT.md) 和 [`PAYMENT_CN.md`](PAYMENT_CN.md)
-- [`ADMIN_PAYMENT_INTEGRATION_API.md`](ADMIN_PAYMENT_INTEGRATION_API.md)
+- [`PAYMENT.md`](PAYMENT.md) 和 [`PAYMENT_CN.md`](PAYMENT_CN.md) — 上游历史参考；支付
+  不是 ExAPI 功能。
+- [`ADMIN_PAYMENT_INTEGRATION_API.md`](ADMIN_PAYMENT_INTEGRATION_API.md) — 上游历史参考；
+  客户充值/兑换 API 已退役。
 
-这些文档描述各自子系统，可能包含私有部署默认不启用的多用户可选能力。
+功能文档描述各自子系统。上游历史参考会明确标注，不能视为当前 ExAPI 工作流。
 
 ## 开发与设计参考
 

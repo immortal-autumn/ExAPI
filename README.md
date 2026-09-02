@@ -40,8 +40,11 @@ newer review-only hardening that is not part of this deployed image.
 - Forced real-time Antigravity quota refresh, per-model quota display, and
   Google 429 classification.
 - API-key management for IDEs, agents, and automation scripts.
-- Optional upstream multi-user, subscription, payment, group, and redeem-code
-  capabilities remain available, but are not the default focus of this fork.
+- Legacy upstream customer, subscription, payment, and redeem-code modules may
+  remain in the source tree for schema and migration compatibility. They are
+  not part of the ExAPI product, are not registered in private mode, and must
+  not be enabled as an operator workflow. Routing groups remain supported
+  because they are gateway primitives used by accounts and API keys.
 
 ## Deployment modes
 
@@ -57,11 +60,17 @@ Recommended for a personal server:
 - Show quota monitoring and local integration entry points directly in the
   cockpit.
 
-### Standard multi-user mode
+### Legacy compatibility settings
 
-ExAPI retains upstream SaaS-style capabilities such as users, subscriptions,
-payments, groups, and redeem codes. They can be used for team or controlled
-deployments, but are not the default product focus.
+ExAPI has one supported product mode: the private administrator control plane.
+The upstream `standard`/`simple` setting is retained in source-compatible
+schemas. New deployments must set `RUN_MODE=simple`; the backend keeps its
+legacy `standard` fallback for compatibility and billing safety when an old or
+malformed configuration is encountered.
+Customer registration, subscriptions, payments, balances, redeem codes,
+affiliates, and customer-management routes are retired and return a stable
+retirement response. See [`docs/PRIVATE_PRODUCT_SURFACE.md`](docs/PRIVATE_PRODUCT_SURFACE.md)
+for the allowlist and compatibility policy.
 
 ## Technology stack
 
@@ -126,6 +135,16 @@ recommended, non-exhausted text model without issuing another quota request;
 an explicit model selection always wins. Probe errors expose only bounded
 reasons such as `model_unsupported` or `quota_exhausted`, never raw provider
 response bodies.
+
+## Retired upstream customer documentation
+
+The former payment and external payment-integration guides are retained as
+archived upstream references only. They do not describe an enabled ExAPI
+feature and must not be used to configure a live instance:
+
+- [`docs/PAYMENT.md`](docs/PAYMENT.md) / [`docs/PAYMENT_CN.md`](docs/PAYMENT_CN.md)
+- [`docs/ADMIN_PAYMENT_INTEGRATION_API.md`](docs/ADMIN_PAYMENT_INTEGRATION_API.md) /
+  [`docs/ADMIN_PAYMENT_INTEGRATION_API.zh-CN.md`](docs/ADMIN_PAYMENT_INTEGRATION_API.zh-CN.md)
 
 ## Security notice
 

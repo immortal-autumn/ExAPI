@@ -34,8 +34,9 @@ ExAPI 是面向个人和私有基础设施的 AI API 网关，用于把本地工
 - 手动账号探测与调度状态相互独立，失败结果可见但不会静默停用账号。
 - Antigravity 强制实时配额刷新、按模型配额展示和 Google 429 分类。
 - 面向 IDE、Agent 和自动化脚本的 API Key 管理。
-- 保留上游多用户、订阅、支付、分组和兑换码等可选能力，但不作为本 fork
-  的默认重点。
+- 源码中可能仍保留上游客户、订阅、支付和兑换码模块，用于数据库及迁移兼容。
+  这些模块不是 ExAPI 产品的一部分，在私有模式下不会注册，也不应作为管理员
+  工作流启用。分组仍然保留，因为它是账号和 API Key 使用的网关路由原语。
 
 ## 部署模式
 
@@ -48,10 +49,14 @@ ExAPI 是面向个人和私有基础设施的 AI API 网关，用于把本地工
 - 侧边栏优先展示账号、API Key、用量、代理、运维和设置；
 - 控制台直接展示配额监控和本地集成入口。
 
-### 标准多用户模式
+### 上游兼容配置
 
-ExAPI 仍保留上游的 SaaS 风格功能，例如用户、订阅、支付、分组和兑换码。
-它们适合团队或受控场景，但不是本 fork 的默认产品重点。
+ExAPI 只有一种受支持的产品模式：私有管理员控制面。上游的
+`standard`/`simple` 配置项仅为兼容 schema 和测试而保留；新部署必须设置
+`RUN_MODE=simple`。为兼容旧配置并确保计费安全，后端遇到旧的或格式错误的配置时仍
+保留 `standard` 回退。用户注册、订阅、支付、余额、兑换码、推广和客户管理路由均已
+退役，并返回稳定的退役响应。允许列表和兼容策略见
+[`docs/PRIVATE_PRODUCT_SURFACE.md`](docs/PRIVATE_PRODUCT_SURFACE.md)。
 
 ## 技术栈
 
@@ -104,6 +109,15 @@ Antigravity 的实时查询使用 `force=true` 绕过后端配额缓存。配额
 如果内存中已有新鲜配额快照，省略模型的探测会优先选择上游推荐且未耗尽的文本模型，
 不会再次发起配额查询；显式选择的模型始终优先。探测错误只暴露
 `model_unsupported`、`quota_exhausted` 等有限原因，不会返回上游原始响应正文。
+
+## 已退役的上游客户文档
+
+旧版支付和外部支付集成指南仅作为上游历史参考保留，不代表 ExAPI 已启用的功能，
+不能据此配置线上实例：
+
+- [`docs/PAYMENT.md`](docs/PAYMENT.md) / [`docs/PAYMENT_CN.md`](docs/PAYMENT_CN.md)
+- [`docs/ADMIN_PAYMENT_INTEGRATION_API.md`](docs/ADMIN_PAYMENT_INTEGRATION_API.md) /
+  [`docs/ADMIN_PAYMENT_INTEGRATION_API.zh-CN.md`](docs/ADMIN_PAYMENT_INTEGRATION_API.zh-CN.md)
 
 ## 安全声明
 
