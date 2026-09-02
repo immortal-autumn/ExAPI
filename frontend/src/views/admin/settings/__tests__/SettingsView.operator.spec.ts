@@ -12,6 +12,7 @@ const source = readFileSync(componentPath, 'utf8')
 const retainedTabs = [
   'GeneralSettingsTab',
   'EmailSettingsTab',
+  'SecuritySettingsTab',
   'BackupSettingsTab',
 ]
 
@@ -20,11 +21,10 @@ describe('SettingsView operator tab loading', () => {
     for (const tab of retainedTabs) {
       expect(source).toContain(`import ${tab} from`)
     }
-    expect(source).not.toContain('SecuritySettingsTab')
   })
 
   it('mounts retained tabs only when selected', () => {
-    for (const key of ['general', 'gateway', 'email', 'backup']) {
+    for (const key of ['general', 'gateway', 'email', 'security', 'backup']) {
       expect(source).toContain(`v-if="activeTab === '${key}'"`)
     }
   })

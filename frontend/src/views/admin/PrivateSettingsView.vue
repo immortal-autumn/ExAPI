@@ -8,9 +8,11 @@
             :key="tab"
             type="button"
             role="tab"
+            :id="`admin-settings-tab-${tab}`"
             class="btn btn-sm"
             :class="activeTab === tab ? 'btn-primary' : 'btn-secondary'"
             :aria-selected="activeTab === tab"
+            :aria-controls="`admin-settings-panel-${tab}`"
             @click="activeTab = tab"
           >
             {{ t(`admin.settings.tabs.${tab}`) }}
@@ -22,7 +24,15 @@
         <div class="h-8 w-8 animate-spin rounded-full border-b-2 border-primary-600"></div>
       </div>
 
-      <form v-else class="space-y-6" novalidate @submit.prevent="saveSettings">
+      <form
+        v-else
+        :id="`admin-settings-panel-${activeTab}`"
+        role="tabpanel"
+        :aria-labelledby="`admin-settings-tab-${activeTab}`"
+        class="space-y-6"
+        novalidate
+        @submit.prevent="saveSettings"
+      >
         <GeneralSettingsTab
           v-if="activeTab === 'general'"
           v-model:table-page-size-options-input="tablePageSizeOptionsInput"
@@ -57,28 +67,28 @@
 
           <section class="card">
             <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
-              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Operator runtime</h2>
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.privateControlPlane.runtimeTitle') }}</h2>
               <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Private gateway admission, monitoring, and routing controls.
+                {{ t('admin.settings.privateControlPlane.runtimeDescription') }}
               </p>
             </div>
             <div class="grid gap-5 p-6 md:grid-cols-2">
-              <OperatorToggle v-model="form.ops_monitoring_enabled" label="Operations monitoring" />
-              <OperatorToggle v-model="form.ops_realtime_monitoring_enabled" label="Realtime monitoring" />
-              <OperatorToggle v-model="form.channel_monitor_enabled" label="Channel monitoring" />
-              <OperatorToggle v-model="form.risk_control_enabled" label="Content risk controls" />
-              <OperatorToggle v-model="form.allow_ungrouped_key_scheduling" label="Allow ungrouped key scheduling" />
-              <OperatorToggle v-model="form.api_key_acl_trust_forwarded_ip" label="Trust forwarded IP for API-key ACLs" />
+              <OperatorToggle v-model="form.ops_monitoring_enabled" :label="t('admin.settings.privateControlPlane.monitoringEnabled')" />
+              <OperatorToggle v-model="form.ops_realtime_monitoring_enabled" :label="t('admin.settings.privateControlPlane.realtimeMonitoringEnabled')" />
+              <OperatorToggle v-model="form.channel_monitor_enabled" :label="t('admin.settings.privateControlPlane.channelMonitorEnabled')" />
+              <OperatorToggle v-model="form.risk_control_enabled" :label="t('admin.settings.privateControlPlane.riskControlEnabled')" />
+              <OperatorToggle v-model="form.allow_ungrouped_key_scheduling" :label="t('admin.settings.privateControlPlane.allowUngroupedKeyScheduling')" />
+              <OperatorToggle v-model="form.api_key_acl_trust_forwarded_ip" :label="t('admin.settings.privateControlPlane.trustForwardedIp')" />
               <label class="space-y-1 text-sm text-gray-700 dark:text-gray-300">
-                <span>Monitor interval (seconds)</span>
+                <span>{{ t('admin.settings.privateControlPlane.monitorInterval') }}</span>
                 <input v-model.number="form.channel_monitor_default_interval_seconds" type="number" min="10" class="input" />
               </label>
               <label class="space-y-1 text-sm text-gray-700 dark:text-gray-300">
-                <span>Metrics interval (seconds)</span>
+                <span>{{ t('admin.settings.privateControlPlane.metricsInterval') }}</span>
                 <input v-model.number="form.ops_metrics_interval_seconds" type="number" min="10" class="input" />
               </label>
               <label class="space-y-1 text-sm text-gray-700 dark:text-gray-300 md:col-span-2">
-                <span>Forwarded client-IP headers (one per line)</span>
+                <span>{{ t('admin.settings.privateControlPlane.forwardedHeaders') }}</span>
                 <textarea v-model="forwardedHeadersInput" rows="3" class="input font-mono text-sm"></textarea>
               </label>
             </div>
@@ -86,24 +96,24 @@
 
           <section class="card">
             <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
-              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Gateway routing</h2>
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.privateControlPlane.routingTitle') }}</h2>
               <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Provider fallbacks and request normalization for the public listener.
+                {{ t('admin.settings.privateControlPlane.routingDescription') }}
               </p>
             </div>
             <div class="grid gap-5 p-6 md:grid-cols-2">
-              <OperatorToggle v-model="form.enable_model_fallback" label="Enable model fallback" />
-              <OperatorToggle v-model="form.enable_identity_patch" label="Enable identity patch" />
-              <OperatorToggle v-model="form.enable_fingerprint_unification" label="Unify client fingerprints" />
-              <OperatorToggle v-model="form.enable_client_dateline_normalization" label="Normalize client datelines" />
-              <OperatorToggle v-model="form.enable_metadata_passthrough" label="Pass metadata upstream" />
-              <OperatorToggle v-model="form.openai_advanced_scheduler_enabled" label="OpenAI advanced scheduler" />
+              <OperatorToggle v-model="form.enable_model_fallback" :label="t('admin.settings.privateControlPlane.modelFallback')" />
+              <OperatorToggle v-model="form.enable_identity_patch" :label="t('admin.settings.privateControlPlane.identityPatch')" />
+              <OperatorToggle v-model="form.enable_fingerprint_unification" :label="t('admin.settings.privateControlPlane.fingerprintUnification')" />
+              <OperatorToggle v-model="form.enable_client_dateline_normalization" :label="t('admin.settings.privateControlPlane.clientDatelineNormalization')" />
+              <OperatorToggle v-model="form.enable_metadata_passthrough" :label="t('admin.settings.privateControlPlane.metadataPassthrough')" />
+              <OperatorToggle v-model="form.openai_advanced_scheduler_enabled" :label="t('admin.settings.privateControlPlane.openaiAdvancedScheduler')" />
               <label v-for="field in fallbackFields" :key="field.key" class="space-y-1 text-sm text-gray-700 dark:text-gray-300">
                 <span>{{ field.label }}</span>
                 <input v-model="form[field.key]" type="text" class="input font-mono text-sm" />
               </label>
               <label class="space-y-1 text-sm text-gray-700 dark:text-gray-300 md:col-span-2">
-                <span>Identity patch prompt</span>
+                <span>{{ t('admin.settings.privateControlPlane.identityPatchPrompt') }}</span>
                 <textarea v-model="form.identity_patch_prompt" rows="4" class="input font-mono text-sm"></textarea>
               </label>
             </div>
@@ -111,9 +121,9 @@
 
           <section class="card">
             <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
-              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Client compatibility</h2>
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.privateControlPlane.compatibilityTitle') }}</h2>
               <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Optional accepted-version bounds. Empty values leave a bound disabled.
+                {{ t('admin.settings.privateControlPlane.compatibilityDescription') }}
               </p>
             </div>
             <div class="grid gap-5 p-6 md:grid-cols-2">
@@ -123,7 +133,7 @@
               </label>
               <OperatorToggle
                 v-model="form.codex_cli_only_allow_app_server_clients"
-                label="Allow Codex app-server clients"
+                :label="t('admin.settings.privateControlPlane.allowCodexAppServerClients')"
               />
             </div>
           </section>
@@ -145,9 +155,11 @@
           :remove-quota-notify-email="removeQuotaNotifyEmail"
         />
 
+        <SecuritySettingsTab v-if="activeTab === 'security'" />
+
         <BackupSettingsTab v-if="activeTab === 'backup'" />
 
-        <div v-if="activeTab !== 'backup'" class="flex justify-end">
+        <div v-if="activeTab !== 'backup' && activeTab !== 'security'" class="flex justify-end">
           <button type="submit" class="btn btn-primary" :disabled="saving || loadFailed">
             {{ saving ? t('admin.settings.saving') : t('admin.settings.saveSettings') }}
           </button>
@@ -169,12 +181,13 @@ import { extractApiErrorMessage } from '@/utils/apiError'
 import { buildPrivateOperatorSettings } from './settings/privateSettingsPayload'
 import GeneralSettingsTab from './settings/tabs/GeneralSettingsTab.vue'
 import EmailSettingsTab from './settings/tabs/EmailSettingsTab.vue'
+import SecuritySettingsTab from './settings/tabs/SecuritySettingsTab.vue'
 import BackupSettingsTab from './settings/tabs/BackupSettingsTab.vue'
 import GatewayCooldownPanel from './settings/gateway/GatewayCooldownPanel.vue'
 import GatewayStreamTimeoutPanel from './settings/gateway/GatewayStreamTimeoutPanel.vue'
 import GatewayRectifierPanel from './settings/gateway/GatewayRectifierPanel.vue'
 
-type Tab = 'general' | 'gateway' | 'email' | 'backup'
+type Tab = 'general' | 'gateway' | 'email' | 'security' | 'backup'
 
 const OperatorToggle = defineComponent({
   props: { modelValue: Boolean, label: { type: String, required: true } },
@@ -193,7 +206,7 @@ const OperatorToggle = defineComponent({
 const { t } = useI18n()
 const appStore = useAppStore()
 const adminSettingsStore = useAdminSettingsStore()
-const tabs: Tab[] = ['general', 'gateway', 'email', 'backup']
+const tabs: Tab[] = ['general', 'gateway', 'email', 'security', 'backup']
 const activeTab = ref<Tab>('general')
 const loading = ref(true)
 const loadFailed = ref(false)
@@ -264,18 +277,18 @@ const form = reactive<any>({
   allow_user_view_error_requests: false,
 })
 
-const fallbackFields = [
-  { key: 'fallback_model_anthropic', label: 'Anthropic fallback model' },
-  { key: 'fallback_model_openai', label: 'OpenAI fallback model' },
-  { key: 'fallback_model_gemini', label: 'Gemini fallback model' },
-  { key: 'fallback_model_antigravity', label: 'Antigravity fallback model' },
-]
-const versionFields = [
-  { key: 'min_claude_code_version', label: 'Minimum Claude Code version' },
-  { key: 'max_claude_code_version', label: 'Maximum Claude Code version' },
-  { key: 'min_codex_version', label: 'Minimum Codex version' },
-  { key: 'max_codex_version', label: 'Maximum Codex version' },
-]
+const fallbackFields = computed(() => [
+  { key: 'fallback_model_anthropic', label: t('admin.settings.privateControlPlane.fallbackAnthropic') },
+  { key: 'fallback_model_openai', label: t('admin.settings.privateControlPlane.fallbackOpenai') },
+  { key: 'fallback_model_gemini', label: t('admin.settings.privateControlPlane.fallbackGemini') },
+  { key: 'fallback_model_antigravity', label: t('admin.settings.privateControlPlane.fallbackAntigravity') },
+])
+const versionFields = computed(() => [
+  { key: 'min_claude_code_version', label: t('admin.settings.privateControlPlane.minClaudeCodeVersion') },
+  { key: 'max_claude_code_version', label: t('admin.settings.privateControlPlane.maxClaudeCodeVersion') },
+  { key: 'min_codex_version', label: t('admin.settings.privateControlPlane.minCodexVersion') },
+  { key: 'max_codex_version', label: t('admin.settings.privateControlPlane.maxCodexVersion') },
+])
 
 const forwardedHeadersInput = computed({
   get: () => (form.forwarded_client_ip_headers || []).join('\n'),

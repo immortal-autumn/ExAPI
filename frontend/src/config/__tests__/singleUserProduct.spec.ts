@@ -31,6 +31,7 @@ describe('single-user product surface', () => {
       'general',
       'gateway',
       'email',
+      'security',
       'backup',
     ])
   })

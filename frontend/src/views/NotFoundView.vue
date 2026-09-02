@@ -47,19 +47,19 @@
           {{ t('errors.pageNotFound') }}
         </h1>
         <p class="text-gray-500 dark:text-dark-400">
-          The page you are looking for doesn't exist or has been moved.
+          {{ t('errors.pageNotFoundDescription') }}
         </p>
       </div>
 
       <!-- Action Buttons -->
       <div class="flex flex-col justify-center gap-3 sm:flex-row">
-        <button @click="goBack" class="btn btn-secondary">
+        <button type="button" @click="goBack" class="btn btn-secondary">
           <Icon name="arrowLeft" size="md" class="mr-2" />
-          Go Back
+          {{ t('errors.goBack') }}
         </button>
         <router-link to="/admin/dashboard" class="btn btn-primary">
           <Icon name="home" size="md" class="mr-2" />
-          Go to Dashboard
+          {{ t('errors.goToDashboard') }}
         </router-link>
       </div>
 

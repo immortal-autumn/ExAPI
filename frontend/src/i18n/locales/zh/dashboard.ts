@@ -884,6 +884,7 @@ export default {
     pageOf: '第 {page} / {total} 页',
     previous: '上一页',
     next: '下一页',
+    pageNavigation: '分页导航',
     perPage: '每页',
     goToPage: '跳转到第 {page} 页',
     jumpTo: '跳转页',
@@ -895,6 +896,9 @@ export default {
   errors: {
     somethingWentWrong: '出错了',
     pageNotFound: '页面未找到',
+    pageNotFoundDescription: '您访问的页面不存在或已被移动。',
+    goBack: '返回上一页',
+    goToDashboard: '前往仪表盘',
     unauthorized: '未授权',
     forbidden: '禁止访问',
     serverError: '服务器错误',

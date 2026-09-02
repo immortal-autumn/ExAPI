@@ -77,6 +77,12 @@ export default {
     saving: '保存中...',
     selectedCount: '（已选 {count} 个）',
     refresh: '刷新',
+    apply: '应用',
+    clear: '清除',
+    creating: '创建中...',
+    required: '必填',
+    sending: '发送中...',
+    tryAgain: '重试',
     autoRefresh: {
       title: '自动刷新',
       enable: '启用自动刷新',

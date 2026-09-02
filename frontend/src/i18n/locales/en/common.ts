@@ -77,6 +77,12 @@ export default {
     saving: 'Saving...',
     selectedCount: '({count} selected)',
     refresh: 'Refresh',
+    apply: 'Apply',
+    clear: 'Clear',
+    creating: 'Creating...',
+    required: 'Required',
+    sending: 'Sending...',
+    tryAgain: 'Try again',
     autoRefresh: {
       title: 'Auto Refresh',
       enable: 'Enable auto refresh',

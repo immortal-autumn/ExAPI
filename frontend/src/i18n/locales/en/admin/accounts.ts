@@ -884,6 +884,7 @@ export default {
       oauth: {
         title: 'Claude Account Authorization',
         authMethod: 'Authorization Method',
+        refreshTokenLabel: 'Refresh Token',
         manualAuth: 'Manual Authorization',
         cookieAutoAuth: 'Cookie Auto-Auth',
         cookieAutoAuthDesc:
@@ -958,6 +959,7 @@ export default {
           },
           // Refresh Token auth
           refreshTokenAuth: 'Manual RT Input',
+          refreshTokenLabel: 'Refresh Token',
           refreshTokenDesc: 'Enter your existing OpenAI Refresh Token(s). Supports batch input (one per line). The system will automatically validate and create accounts.',
           refreshTokenPlaceholder: 'Paste your OpenAI Refresh Token...\nSupports multiple, one per line',
           mobileRefreshTokenAuth: 'Manual Mobile RT Input',
@@ -1018,6 +1020,7 @@ export default {
           authCodePlaceholder: 'Paste the full callback URL, ?code=... query string, or code value',
           authCodeHint: 'Full callback URLs, query strings, and bare codes are accepted.',
           refreshTokenAuth: 'Manual RT Input',
+          refreshTokenLabel: 'Refresh Token',
           refreshTokenDesc: 'Enter existing xAI refresh token(s). Supports batch input, one per line.',
           refreshTokenPlaceholder: 'Paste your xAI refresh token...\nSupports multiple, one per line',
           buildFilesSelect: 'Choose Build File',
@@ -1142,6 +1145,7 @@ export default {
                     failedToExchangeCode: 'Failed to exchange Antigravity auth code',
                     // Refresh Token auth
                     refreshTokenAuth: 'Manual RT',
+                    refreshTokenLabel: 'Refresh Token',
                     refreshTokenDesc: 'Enter your existing Antigravity Refresh Token. Supports batch input (one per line). The system will automatically validate and create accounts.',
                     refreshTokenPlaceholder: 'Paste your Antigravity Refresh Token...\nSupports multiple tokens, one per line',
                     validating: 'Validating...',

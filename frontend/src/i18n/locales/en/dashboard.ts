@@ -879,6 +879,7 @@ export default {
     pageOf: 'Page {page} of {total}',
     previous: 'Previous',
     next: 'Next',
+    pageNavigation: 'Pagination',
     perPage: 'Per page',
     goToPage: 'Go to page {page}',
     jumpTo: 'Jump to',
@@ -890,6 +891,9 @@ export default {
   errors: {
     somethingWentWrong: 'Something went wrong',
     pageNotFound: 'Page not found',
+    pageNotFoundDescription: "The page you are looking for doesn't exist or has been moved.",
+    goBack: 'Go back',
+    goToDashboard: 'Go to dashboard',
     unauthorized: 'Unauthorized',
     forbidden: 'Forbidden',
     serverError: 'Server error',

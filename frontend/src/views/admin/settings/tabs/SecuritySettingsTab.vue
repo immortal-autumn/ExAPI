@@ -7,28 +7,29 @@
         </span>
         <div>
           <h2 id="private-security-title" class="font-semibold text-gray-900 dark:text-white">
-            Private operator boundary
+            {{ t('admin.settings.security.privateBoundaryTitle') }}
           </h2>
           <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
-            Operator identity is bound to an allowed WireGuard peer by the dedicated control listener.
-            The browser does not use passwords, passkeys, one-time codes, session tokens, OAuth login,
-            or CAPTCHA challenges.
+            {{ t('admin.settings.security.privateBoundaryDescription') }}
           </p>
         </div>
       </div>
     </div>
 
     <div class="card p-5 text-sm text-gray-600 dark:text-gray-300">
-      <h3 class="font-medium text-gray-900 dark:text-white">Request protections</h3>
+      <h3 class="font-medium text-gray-900 dark:text-white">{{ t('admin.settings.security.requestProtectionsTitle') }}</h3>
       <ul class="mt-3 list-disc space-y-1.5 pl-5">
-        <li>Every control request carries the explicit ExAPI control marker.</li>
-        <li>Host, Origin, Fetch Metadata, and operator peer address are validated server-side.</li>
-        <li>Control WebSockets negotiate the <code>exapi-control</code> subprotocol.</li>
+        <li>{{ t('admin.settings.security.controlMarker') }}</li>
+        <li>{{ t('admin.settings.security.requestValidation') }}</li>
+        <li>{{ t('admin.settings.security.controlWebSockets') }}</li>
       </ul>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
+
+const { t } = useI18n()
 </script>

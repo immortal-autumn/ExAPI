@@ -99,6 +99,7 @@ const mountView = async () => {
         AppLayout: { template: '<div><slot /></div>' },
         GeneralSettingsTab: true,
         EmailSettingsTab: EmailSettingsTabStub,
+        SecuritySettingsTab: { template: '<section data-testid="private-security-tab">security tab</section>' },
         BackupSettingsTab: true,
         GatewayCooldownPanel: true,
         GatewayStreamTimeoutPanel: true,
@@ -186,6 +187,20 @@ describe('PrivateSettingsView controller', () => {
     expect(adminSettingsFetch).toHaveBeenCalledWith(true)
     expect(publicSettingsFetch).toHaveBeenCalledWith(true)
     expect(showSuccess).toHaveBeenCalledWith('admin.settings.saved')
+  })
+
+  it('keeps the private security tab available without exposing SaaS settings', async () => {
+    const wrapper = await mountView()
+
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs).toHaveLength(5)
+    expect(tabs[3]?.text()).toBe('admin.settings.tabs.security')
+
+    await tabs[3]?.trigger('click')
+    expect(wrapper.get('[data-testid="private-security-tab"]').exists()).toBe(true)
+    expect(wrapper.find('button[type="submit"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('admin.settings.tabs.payment')
+    expect(wrapper.text()).not.toContain('admin.settings.tabs.users')
   })
 
   it('reports save failures without refreshing either settings store', async () => {

@@ -49,6 +49,7 @@ export const SINGLE_USER_SETTINGS_TABS = [
   'general',
   'gateway',
   'email',
+  'security',
   'backup',
 ] as const
 

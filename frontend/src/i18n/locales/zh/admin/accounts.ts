@@ -943,6 +943,7 @@ export default {
       oauth: {
         title: 'Claude 账号授权',
         authMethod: '授权方式',
+        refreshTokenLabel: '刷新令牌',
         manualAuth: '手动授权',
         cookieAutoAuth: 'Cookie 自动授权',
         cookieAutoAuthDesc: '使用 claude.ai sessionKey 自动完成 OAuth 授权，无需手动打开浏览器。',
@@ -1011,6 +1012,7 @@ export default {
           },
           // Refresh Token auth
           refreshTokenAuth: '手动输入 RT',
+          refreshTokenLabel: '刷新令牌',
           refreshTokenDesc: '输入您已有的 OpenAI Refresh Token，支持批量输入（每行一个），系统将自动验证并创建账号。',
           refreshTokenPlaceholder: '粘贴您的 OpenAI Refresh Token...\n支持多个，每行一个',
           mobileRefreshTokenAuth: '手动输入 Mobile RT',
@@ -1071,6 +1073,7 @@ export default {
           authCodePlaceholder: '粘贴完整 callback URL、?code=... 查询字符串或 code 值',
           authCodeHint: '支持完整 callback URL、查询字符串或裸 code。',
           refreshTokenAuth: '手动输入 RT',
+          refreshTokenLabel: '刷新令牌',
           refreshTokenDesc: '输入已有的 xAI refresh token，支持批量输入（每行一个）。',
           refreshTokenPlaceholder: '粘贴您的 xAI refresh token...\n支持多个，每行一个',
           buildFilesSelect: '选择 Build 文件',
@@ -1191,6 +1194,7 @@ export default {
           failedToExchangeCode: 'Antigravity 授权码兑换失败',
           // Refresh Token auth
           refreshTokenAuth: '手动输入 RT',
+          refreshTokenLabel: '刷新令牌',
           refreshTokenDesc: '输入您已有的 Antigravity Refresh Token，支持批量输入（每行一个），系统将自动验证并创建账号。',
           refreshTokenPlaceholder: '粘贴您的 Antigravity Refresh Token...\n支持多个，每行一个',
           validating: '验证中...',
