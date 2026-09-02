@@ -109,7 +109,7 @@ the group control is disabled until its request settles, preventing
 out-of-order updates while preserving the operator-mode `group_id: 0` unbind
 contract.
 
-### Phase 4 — Recovery and private-cutover rehearsal (current; blocked on external inputs)
+### Phase 4 — Recovery and private-cutover rehearsal (completed for v0.2.10; 2026-09-02)
 
 - Create an encrypted, versioned recovery set and restore it independently in a
   networkless disposable target.
@@ -117,11 +117,12 @@ contract.
   zero batch-image rows/provider jobs, and immutable archive evidence.
 - Run `deploy/ops/run-private-cutover.sh --dry-run` against the exact retained
   OPC Compose project and record its target digest without changing production.
-- Do not perform the destructive private-only transaction until every external
+- Keep the destructive private-only transaction gated on every external
   archive, snapshot, monitoring, and provider-cleanup adapter listed in
-  `deploy/PRODUCTION_ROLLOUT.md` is available and independently verified.
+  `deploy/PRODUCTION_ROLLOUT.md`; the v0.2.10 transaction was completed only
+  after those proofs were refreshed and is retained for audit.
 
-### Phase 5 — Immutable release and isolated canary
+### Phase 5 — Immutable release and isolated canary (completed for v0.2.10)
 
 - Tag only a commit that has passed the complete backend/frontend/deployment
   gates; build the multi-architecture OCI image by digest with SBOM and
@@ -131,7 +132,7 @@ contract.
 - Verify public/control listener separation, readiness, account/key routing, and
   rollback inputs before any production stop.
 
-### Phase 6 — Controlled production promotion and observation
+### Phase 6 — Controlled production promotion and observation (completed for v0.2.10)
 
 - Bind the real cutover to the reviewed dry-run target hash, exact image digest,
   Compose/environment files, WireGuard identities, and one-time confirmation
@@ -140,6 +141,10 @@ contract.
   with immutable retention before starting the reviewed application container.
 - Observe the stated readiness, restart, error-rate, p95, alert, topology, and
   provider smoke thresholds for the full window; retain rollback evidence.
+
+The v0.2.10 cycle completed Phases 4–6 and published a signed rollout manifest.
+Repeat the same gates for the next release; never treat this completion as a
+waiver for a future image or database change.
 
 ## Mandatory Gate Between Every Phase
 

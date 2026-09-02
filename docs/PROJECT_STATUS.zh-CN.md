@@ -10,15 +10,15 @@
 
 | 项目 | 当前值 |
 |---|---|
-| 产品版本 | `0.2.7` |
+| 产品版本 | `0.2.10`（2026-09-02 已部署到 OPC） |
 | GitHub 仓库 | `immortal-autumn/ExAPI` |
-| Git tag | `v0.2.7` |
-| 主分支 | `main`（已快进到审阅提交） |
+| Git tag | `v0.2.10` |
+| 主分支 | `main`（当前为 `f79ef301b`；发布分支保持独立） |
 | 发布分支 | `revision/exapi-v0.2.1` |
-| 审阅提交 | `a1c8bb6a7a4e49d67fbdb81aadc67de4ef12e7c1` |
-| OCI 镜像 | `ghcr.io/immortal-autumn/sub2api2personal@sha256:628dbccd43e5348989ae83c6c7c494bcbe85227824a1acfedee10f77dd7f1795` |
-| GitHub Release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.7> |
-| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33308484734> |
+| 审阅提交 | `f8cee085c3e7d815d5144659d3a92720f9aa8e95` |
+| OCI 镜像 | `ghcr.io/immortal-autumn/sub2api2personal@sha256:c56c876f70c49d3f05dffc7fc80417807b043da1d1261d1e3fc29b7a0daaeaa8` |
+| GitHub Release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.10> |
+| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33584593736> |
 
 镜像经过多架构构建、OCI 标签、SPDX SBOM、SLSA/SBOM attestations 和
 `gh attestation verify` 验证。生产环境只使用上述 immutable digest，不使用
@@ -83,41 +83,48 @@
   均通过。生产环境未修改。
 
 审查分支还包含代理部分更新契约加固：省略的生命周期和凭据字段会保留现值，显式
-null/空值则会清除对应可空设置。这部分尚未纳入上面的生产版本，也没有部署；在按
-发布流程完成单独验证并 promotion 前，生产仍保持 v0.2.7 的已审查 immutable digest。
+null/空值则会清除对应可空设置。这部分尚未纳入上面的生产版本，仍未部署到生产。
 
 ## OPC 生产部署
 
-生产部署位于 `/opt/sub2api`，Compose project 为 `sub2api`，当前输入为：
+生产部署位于 `/opt/sub2api`，Compose project 为 `sub2api`，使用：
 
-- `/opt/sub2api/.env.v0.2.6`
-- `/opt/sub2api/docker-compose.v0.2.6.yml`
+- `/opt/sub2api/.env.v0.2.10`
+- `/opt/sub2api/docker-compose.v0.2.10.yml`
 
-`/opt/sub2api/.env` 和 `docker-compose.local.yml` 保留旧的本地 provenance 及 v0.2.5
-回滚 digest；生产 promotion 明确使用上面的版本化文件。
+应用容器固定为 immutable digest
+`sha256:c56c876f70c49d3f05dffc7fc80417807b043da1d1261d1e3fc29b7a0daaeaa8`，版本
+`0.2.10`，revision 为 `f8cee085c3e7d815d5144659d3a92720f9aa8e95`。应用、PostgreSQL
+和 Redis 均为 healthy；PostgreSQL/Redis 未被重建，最终观察中三者重启次数均为 0。
 
-应用容器版本为 `0.2.7`，OCI revision 为上述提交，状态 healthy、重启次数为 0。
-PostgreSQL 和 Redis 仅作为既有依赖保留，容器 ID、启动时间、数据挂载和健康状态均
-未改变。v0.2.5 的环境、Compose 文件和 digest 仍可用于无 schema 变化的应用回滚。
+切换前刷新恢复集 `exapi-v0210-recovery-20260902e` 保存在加密、版本化的异地对象中：
+logical version `a236405f-4138-4860-8d2c-42eee5f98a0b`、snapshot ID
+`54b97de2-1731-449f-b339-11fcdead04a7`、secrets version
+`2d39e24e-f329-46fd-9254-029d68bc10af`，保留至 2027-09-03。私有切换归档已验证、加密
+且不可变，位于 OPC 的
+`tmp/rollouts/exapi-v0210-cutover-20260902a/private-cutover-resume/private-migration-archive.json`。
+restored-data canary 明确绑定独立恢复集 `exapi-v0210-recovery-20260902c`（logical
+version `13f467e3-26df-4059-ba4b-ea4dd7a9d5c3`）；e 集是紧邻切换前新建的刷新集，
+并作为回滚 snapshot/keyroot 来源。
 
 ## 发布前恢复与 canary 证据
 
-隔离的 v0.2.6 synthetic-provider canary 验证了 readiness、OpenAI-compatible provider
-gateway smoke、内部网络、禁止公共出站、账号/key 绑定和 disposable private migration。
-生产 rollout `exapi-v026-production-20260824a` 创建了加密 logical dump 和物理
-PostgreSQL snapshot；两者均在 networkless disposable target 中独立恢复并通过完整性、
-解密和基线计数校验。所有证据仅保存在 OPC checkout 的 `tmp/rollouts/` 或受保护的
-off-host 对象存储中，仓库不保存密钥、凭据或数据库内容。
+隔离的 v0.2.10 restored-data 与 synthetic-provider canary 均完成至少 30 分钟观察，
+readiness、provider smoke、内部网络/出站限制、恢复完整性和 disposable migration 均通过。
+2026-09-02 的 off-host 监控还验证了 `/ready` 从 unhealthy（503，06:06:50Z）到 healthy
+（200，06:07:12Z）的告警及恢复投递。仓库不保存密钥、凭据或数据库内容。
 
-2026-09-02 的只读前置条件审计确认受保护的归档、快照、清理、identity 和监控适配器
-路径均存在，告警投递证据检查通过。但外部 readiness 证据和 synthetic-provider 证据
-均已超过新鲜度窗口，因此 Phase 4 仍然阻塞。未执行清理、快照、归档上传、迁移、重启
-或生产文件修改；详见
-[`tmp/usability-review/current/phase-4-external-prerequisite-audit-2026-09-02.md`](../tmp/usability-review/current/phase-4-external-prerequisite-audit-2026-09-02.md)。
+最终 rollout manifest 位于 `tmp/rollout-manifest-v0.2.10.json`，SHA-256 为
+`bf4b22b86f1abf1f69840d7a639f88ce646215a51012481f84fb24ac259860fd`；已在 OPC 使用受保护
+的 cosign 密钥完成校验和签名，并以 COMPLIANCE 模式保留至 2027-09-03：
+`s3://exapi-rollout-records/exapi-v0210-production-20260902e`。对象版本为 manifest
+`a49e2e47-7cd8-498c-aa1d-e865f515044d`、checksum `544c19b0-db1e-4314-9877-a35284929e73`、
+签名包 `eaecb12c-7674-4f8c-b436-ad826455a0fa`、provenance 证明
+`7a3b55dc-c324-432b-aed6-bc16d24341a6`。
 
 ## 生产观察
 
-`exapi-v026-production-20260824-observation` 运行 60 分钟、30 秒间隔，共 120 次
+`exapi-v0210-production-observe-20260902b` 运行 60 分钟、30 秒间隔，共 120 次
 readiness probe：
 
 - readiness failures `0`，unexpected 5xx `0`，重启 `0`；
@@ -128,11 +135,19 @@ readiness probe：
 `/ready`、`/api/v1/operator/me` 和只读账号列表均返回 200；公网 `/ready` 返回 200，
 公网根路径及公网 control route 返回 404。
 
+## v0.2.10 账号探测行为
+
+手动 provider 测试会将有界、脱敏的结果写入 `account.extra.account_test_probe`；该
+结果只用于显示与诊断，不会改变调度状态。账号凭据、路由、代理或重复账号变更会清理
+旧结果；原始 provider response body 不会进入 SSE 或账号错误状态。详细契约见
+[`ACCOUNT_PROBES.md`](ACCOUNT_PROBES.md)。
+
 ## 兼容性与回滚
 
-本次 v0.2.6 与 v0.2.5 之间没有新的数据库 migration，生产 schema 仍为 migration
-218、`private_schema_version=2`、`batch_image_jobs=0`。因此允许仅替换应用镜像回滚；
-不要重建 PostgreSQL/Redis，也不要对生产使用 destructive private-only confirmation
-token。通用门禁和命令见 [`../deploy/PRODUCTION_ROLLOUT.md`](../deploy/PRODUCTION_ROLLOUT.md)。
+v0.2.10 的恢复校验记录 schema migration `246`、`private_schema_version=2` 和
+`batch_image_jobs=0`。本次已完成 ciphertext-only private cutover；回滚必须使用
+保留的 snapshot、上一版 immutable 应用 digest、上一版环境文件和匹配的 keyroots，
+禁止仅替换应用镜像，也不要重建 PostgreSQL/Redis。通用门禁和命令见
+[`../deploy/PRODUCTION_ROLLOUT.md`](../deploy/PRODUCTION_ROLLOUT.md)。
 
 返回英文标准记录：[`PROJECT_STATUS.md`](PROJECT_STATUS.md)。

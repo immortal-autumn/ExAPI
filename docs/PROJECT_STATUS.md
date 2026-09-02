@@ -11,10 +11,10 @@ Last reviewed: **2026-09-02 (Europe/London)**
 
 | Item | Current value |
 |---|---|
-| Product version | `0.2.10` (released; not yet deployed to OPC) |
+| Product version | `0.2.10` (released and deployed to OPC on 2026-09-02) |
 | GitHub repository | `immortal-autumn/ExAPI` |
 | Git tag | `v0.2.10` |
-| Main branch | `main` (currently `f79ef301b`; release branch remains separate pending rollout) |
+| Main branch | `main` (currently `f79ef301b`; release branch remains separate) |
 | Release branch | `revision/exapi-v0.2.1` |
 | Reviewed commit | `f8cee085c3e7d815d5144659d3a92720f9aa8e95` |
 | OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:c56c876f70c49d3f05dffc7fc80417807b043da1d1261d1e3fc29b7a0daaeaa8` |
@@ -129,47 +129,47 @@ security scans:
 The review branch also contains work hardening proxy partial updates: omitted
 lifecycle and credential fields are preserved, while explicit null/empty values
 clear nullable settings. This work is not part of the production release above
-and has not been deployed. Production remains on the reviewed v0.2.7 digest
-until a separately validated release is promoted under the rollout procedure.
+and has not been deployed. Those review-only changes remain excluded from the
+v0.2.10 production image.
 
 ## Production deployment
 
-Production remains on the v0.2.7 digest
-`sha256:628dbccd43e5348989ae83c6c7c494bcbe85227824a1acfedee10f77dd7f1795`
-as Docker Compose project `sub2api` from `/opt/sub2api`. The application
-container reports version `0.2.7`, the v0.2.7 reviewed commit, healthy status,
-and zero restarts at the latest read-only check. The v0.2.10 release above is a
-separately reviewed candidate and has not been deployed.
+Production is deployed as Docker Compose project `sub2api` from `/opt/sub2api`
+using the versioned inputs `/opt/sub2api/.env.v0.2.10` and
+`/opt/sub2api/docker-compose.v0.2.10.yml`. The application is pinned to
+`ghcr.io/immortal-autumn/sub2api2personal@sha256:c56c876f70c49d3f05dffc7fc80417807b043da1d1261d1e3fc29b7a0daaeaa8`,
+revision `f8cee085c3e7d815d5144659d3a92720f9aa8e95`, and reports version
+`0.2.10`. App, PostgreSQL, and Redis are healthy; PostgreSQL/Redis were not
+recreated and all three services have zero restarts in the final observation.
 
-The deployment keeps versioned promotion inputs:
+The pre-cutover recovery set `exapi-v0210-recovery-20260902e` is retained in
+encrypted, versioned off-host objects. Its logical object version is
+`a236405f-4138-4860-8d2c-42eee5f98a0b`, snapshot ID is
+`54b97de2-1731-449f-b339-11fcdead04a7`, and secrets object version is
+`2d39e24e-f329-46fd-9254-029d68bc10af`; retention is through 2027-09-03.
+The restored-data canary is explicitly bound to the independently restored
+`exapi-v0210-recovery-20260902c` volume (logical version
+`13f467e3-26df-4059-ba4b-ea4dd7a9d5c3`); the e set is the fresh refresh taken
+immediately before cutover and is the rollback snapshot/keyroot source.
+The completed private cutover archive is verified, encrypted, and immutable at
+`tmp/rollouts/exapi-v0210-cutover-20260902a/private-cutover-resume/private-migration-archive.json`
+on OPC.
 
-- `/opt/sub2api/.env.v0.2.6`
-- `/opt/sub2api/docker-compose.v0.2.6.yml`
-- `/opt/sub2api/.env` and `docker-compose.local.yml` retain the legacy local
-  provenance and v0.2.5 rollback digest; promotion uses the versioned files
-  above explicitly.
-- The v0.2.5 environment, Compose file, and digest remain available for
-  application-only rollback.
+The 2026-09-02 external prerequisite run refreshed the off-host readiness
+monitor and synthetic-provider proof. A critical `/ready` transition returned
+503 and was delivered at 06:06:50Z; recovery returned 200 and was delivered at
+06:07:12Z. No credentials or database contents are stored in this repository.
 
-PostgreSQL and Redis were preserved during the application-only promotion and
-remained healthy; their container IDs and start times did not change. The
-isolated v0.2.6 synthetic-provider canary passed readiness, provider gateway
-smoke, internal-network/egress checks, and disposable private migration before
-promotion.
-
-The v0.2.6 recovery set was created under rollout
-`exapi-v026-production-20260824a`: the encrypted logical dump and physical
-snapshot were retained off-host and independently restored into networkless
-disposable targets. Evidence is under the checkout-local `tmp/rollouts/`
-directory on OPC.
-
-The 2026-09-02 read-only prerequisite audit confirmed that the protected
-archive, snapshot, cleanup, identity, and monitoring adapter paths exist. The
-off-host readiness, alert-transition, and synthetic-provider proofs are outside
-their freshness windows (and the synthetic proof is bound to an older rollout),
-so Phase 4 remains blocked. No cleanup, snapshot, archive upload, migration,
-restart, or production file change was performed; see the detailed record in
-[`tmp/usability-review/current/phase-4-external-prerequisite-audit-2026-09-02.md`](../tmp/usability-review/current/phase-4-external-prerequisite-audit-2026-09-02.md).
+The final rollout manifest is recorded locally at
+`tmp/rollout-manifest-v0.2.10.json` (SHA-256
+`bf4b22b86f1abf1f69840d7a639f88ce646215a51012481f84fb24ac259860fd`) and was
+validated and signed on OPC with the protected cosign key. The signed record is
+retained under `s3://exapi-rollout-records/exapi-v0210-production-20260902e`
+with COMPLIANCE retention through 2027-09-03. Object versions are:
+`manifest.json` `a49e2e47-7cd8-498c-aa1d-e865f515044d`, checksum
+`544c19b0-db1e-4314-9877-a35284929e73`, signature bundle
+`eaecb12c-7674-4f8c-b436-ad826455a0fa`, and provenance evidence
+`7a3b55dc-c324-432b-aed6-bc16d24341a6`.
 
 The production observation ran for 60 minutes with 120 readiness probes:
 
@@ -208,7 +208,7 @@ See [`deploy/EDGE_SECURITY.md`](../deploy/EDGE_SECURITY.md) for the generic
 boundary and [`deploy/PRODUCTION_ROLLOUT.md`](../deploy/PRODUCTION_ROLLOUT.md)
 for promotion requirements.
 
-## v0.2.6 account-probe behavior
+## v0.2.10 account-probe behavior
 
 Manual provider tests now write a sanitized snapshot to
 `account.extra.account_test_probe`. That snapshot is display/diagnostic state,
