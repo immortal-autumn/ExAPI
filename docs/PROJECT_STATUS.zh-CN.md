@@ -211,7 +211,8 @@ null/空值则会清除对应可空设置。这部分在 v0.2.14 之前属于审
 manifest digest
 `sha256:f25727e7dce06ce62ab921027346c27e86a92dabdd0e6e7dc7791333526889b0`，报告版本 `0.2.15`，
 revision 为 `a63f68a11b08cdee6ead8e4cce41332cb4e83ac3`。最近审阅时三个服务均 healthy、
-重启次数为 0，`/ready` 返回 `{"status":"ready"}`；PostgreSQL 和 Redis 未重建。已完成的
+重启次数为 0，`/ready` 返回 `{"status":"ready"}`。如下文恢复记录所述，PostgreSQL 和 Redis
+曾因依赖协调被重建，但持久化数据得以保留。已完成的
 60 分钟 production observation 共 120/120 次 readiness 检查，失败、重启、意外 5xx 和新增
 P0/P1 告警均为 0；error rate 为 `0.0`，p95 为 `4.0 ms`（基线 `4.852 ms`）。签名 rollout
 manifest 及 provenance 证明已按上文保存在版本化异地记录中。

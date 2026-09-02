@@ -288,8 +288,9 @@ to manifest digest
 `sha256:f25727e7dce06ce62ab921027346c27e86a92dabdd0e6e7dc7791333526889b0`,
 reports `0.2.15`, and has revision `a63f68a11b08cdee6ead8e4cce41332cb4e83ac3`.
 At the last review, all three services were healthy with zero restarts and
-`/ready` returned `{"status":"ready"}`. PostgreSQL and Redis were not
-recreated. The completed 60-minute production observation recorded 120/120
+`/ready` returned `{"status":"ready"}`. PostgreSQL and Redis were recreated
+by the dependency reconciliation described below, but their persistent data
+was retained. The completed 60-minute production observation recorded 120/120
 readiness checks, zero readiness failures, restarts, unexpected 5xx, and new
 P0/P1 alerts; error rate was `0.0` and p95 was `4.0 ms` against a `4.852 ms`
 baseline. The signed rollout manifest and its provenance evidence are retained
