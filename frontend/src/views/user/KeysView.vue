@@ -1094,6 +1094,7 @@ import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 
 const { t } = useI18n()
 import { keysAPI, usageAPI, userGroupsAPI } from '@/api'
+import { apiClient } from '@/api/client'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import DataTable from '@/components/common/DataTable.vue'
@@ -1492,10 +1493,8 @@ const loadUserGroupRates = async () => {
 
 const loadPublicSettings = async () => {
   try {
-    // App bootstrap already owns this request and deduplicates concurrent callers.
-    // Reuse its cache so opening API-key management does not issue a second
-    // `/settings/public` request after the shell has mounted.
-    publicSettings.value = await appStore.fetchPublicSettings()
+    const { data } = await apiClient.get('/settings/public')
+    publicSettings.value = data
   } catch (error) {
     console.error('Failed to load public settings:', error)
   }
