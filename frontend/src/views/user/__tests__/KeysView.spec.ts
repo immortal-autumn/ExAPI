@@ -48,6 +48,9 @@ const messages: Record<string, string> = {
   'keys.createdKeySaved': 'I have saved the key',
   'keys.createdKeyTitle': 'Save your new API key',
   'keys.createdKeyWarning': 'Shown only once',
+  'keys.secretDisplayHint': 'The full API key is shown only immediately after creation.',
+  'keys.keySecretUnavailable': 'The key was created without returning its one-time secret.',
+  'keys.groupRequired': 'Please select a group',
   'keys.copied': 'Copied!',
   'keys.created': 'Created',
   'keys.expiresAt': 'Expires',
@@ -352,6 +355,33 @@ describe('user KeysView column settings', () => {
     await getButtonByText(wrapper, 'I have saved the key').trigger('click')
     expect(wrapper.find('[data-testid="created-api-key"]').exists()).toBe(false)
     expect(wrapper.html()).not.toContain('sk-created-secret')
+  })
+
+  it('shows an inline group error instead of silently skipping creation', async () => {
+    const wrapper = await mountView()
+
+    await getButtonByText(wrapper, 'Create API Key').trigger('click')
+    await wrapper.get('form#key-form').trigger('submit')
+
+    expect(wrapper.get('[data-testid="key-form-group-error"]').text()).toBe('Please select a group')
+    expect(showError).toHaveBeenCalledWith('Please select a group')
+    expect(createKey).not.toHaveBeenCalled()
+  })
+
+  it('warns when a secret-redacted create response cannot show the key', async () => {
+    getAvailableGroups.mockResolvedValue([{ id: 42, name: 'OpenAI', platform: 'openai' }])
+    createKey.mockResolvedValueOnce({ ...createApiKey(), key: '' })
+    const wrapper = await mountView()
+
+    await getButtonByText(wrapper, 'Create API Key').trigger('click')
+    await wrapper.get('input[data-testid="key-form-name"]').setValue('operator-key')
+    const formGroupSelect = wrapper.findAllComponents({ name: 'Select' })[2]
+    await formGroupSelect.vm.$emit('update:modelValue', 42)
+    await wrapper.get('form#key-form').trigger('submit')
+    await flushPromises()
+
+    expect(showError).toHaveBeenCalledWith('The key was created without returning its one-time secret.')
+    expect(wrapper.find('[data-testid="created-api-key"]').exists()).toBe(false)
   })
 
   it('prevents duplicate revocation requests while deletion is pending', async () => {

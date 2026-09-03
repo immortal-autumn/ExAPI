@@ -28,6 +28,9 @@
             :api-base-url="publicSettings?.api_base_url || ''"
             :custom-endpoints="publicSettings?.custom_endpoints || []"
           />
+          <p class="text-xs text-amber-700 dark:text-amber-300">
+            {{ t('keys.secretDisplayHint') }}
+          </p>
         </div>
       </template>
 
@@ -436,6 +439,7 @@
             :placeholder="t('keys.selectGroup')"
             :searchable="true"
             :search-placeholder="t('keys.searchGroup')"
+            :error="submitAttempted && formData.group_id === null"
             data-testid="key-form-group"
           >
             <template #selected="{ option }">
@@ -469,6 +473,13 @@
               />
             </template>
           </Select>
+          <p
+            v-if="submitAttempted && formData.group_id === null"
+            class="mt-1 text-sm text-red-500"
+            data-testid="key-form-group-error"
+          >
+            {{ t('keys.groupRequired') }}
+          </p>
         </div>
 
         <!-- Custom Key Section (only for create) -->
@@ -1278,6 +1289,7 @@ const showColumnDropdown = ref(false)
 const selectedKey = ref<ApiKey | null>(null)
 const createdKey = ref('')
 const showCreatedKeyDialog = ref(false)
+const submitAttempted = ref(false)
 const deleting = ref(false)
 
 const groupSelectorKeyId = ref<number | null>(null)
@@ -1637,6 +1649,8 @@ const confirmDelete = (key: ApiKey) => {
 }
 
 const handleSubmit = async () => {
+  submitAttempted.value = true
+
   // Validate group_id is required
   if (formData.value.group_id === null) {
     appStore.showError(t('keys.groupRequired'))
@@ -1722,8 +1736,15 @@ const handleSubmit = async () => {
         expiresInDays,
         rateLimitData
       )
-      rawCreatedKey = created.key
-      appStore.showSuccess(t('keys.keyCreatedSuccess'))
+      rawCreatedKey = typeof created.key === 'string' ? created.key.trim() : ''
+      if (rawCreatedKey) {
+        appStore.showSuccess(t('keys.keyCreatedSuccess'))
+      } else {
+        // A replayed/idempotent response is intentionally secret-redacted. Do
+        // not claim success without making it clear that this key cannot be
+        // recovered and should be replaced before use.
+        appStore.showError(t('keys.keySecretUnavailable'))
+      }
     }
     closeModals()
     if (rawCreatedKey) {
@@ -1792,6 +1813,7 @@ const closeModals = () => {
     expiration_preset: '30',
     expiration_date: ''
   }
+  submitAttempted.value = false
 }
 
 // Show reset quota confirmation dialog

@@ -14,6 +14,15 @@ plane for operating an upstream AI account pool and its API-key gateway.
   prompt auditing when configured.
 - Encrypted backup/recovery and operator security settings.
 
+### API-key secret handling
+
+The full gateway key is returned only in the successful response that creates
+it and is shown in a one-time dialog. List, detail, update, and idempotent
+replay responses intentionally contain only the key prefix (or no `key`
+field), so an existing key cannot be recovered. If the dialog was dismissed or
+the response was redacted, revoke that key and create a replacement; do not
+expect the UI or database to reveal the original secret.
+
 ## Retired customer capabilities
 
 Registration, customer login/recovery, user self-service, subscriptions,
