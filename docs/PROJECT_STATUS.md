@@ -7,19 +7,19 @@ belong in `deploy/`; this page records the currently reviewed facts.
 
 ## Current release
 
-Last reviewed: **2026-09-02 (Europe/London)**
+Last reviewed: **2026-09-03 (Europe/London)**
 
 | Item | Current value |
 |---|---|
-| Product version | `0.2.15` (released and deployed to OPC on 2026-09-02) |
+| Product version | `0.2.16` (released and deployed to OPC on 2026-09-03) |
 | GitHub repository | `immortal-autumn/ExAPI` |
-| Git tag | `v0.2.15` |
+| Git tag | `v0.2.16` |
 | Main branch | `main` (currently `f79ef301b`; release branch remains separate) |
 | Release branch | `revision/exapi-v0.2.1` |
-| Reviewed commit | `a63f68a11b08cdee6ead8e4cce41332cb4e83ac3` |
-| OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:f25727e7dce06ce62ab921027346c27e86a92dabdd0e6e7dc7791333526889b0` |
-| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.15> |
-| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33625979848> |
+| Reviewed commit | `9c14b10843b175dac8ef0546866a141504bcaed4` |
+| OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:d3b889b74dcd15c9952b409ce27f05db1898f93541eac17cf7675088d6af65b0` |
+| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.16> |
+| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33756324283> |
 | Upstream baseline | Sub2API `v0.1.171`, constrained by `upstream.lock.json` |
 
 The GitHub repository was renamed from `Sub2API2Personal` to `ExAPI` on
@@ -28,12 +28,27 @@ The GitHub repository was renamed from `Sub2API2Personal` to `ExAPI` on
 must keep that compatibility decision explicit or publish a separately
 verified package migration.
 
-The v0.2.15 release artifact is pinned to the immutable digest recorded above;
-its OCI labels match version `0.2.15` and reviewed commit
-`a63f68a11b08cdee6ead8e4cce41332cb4e83ac3`. The v0.2.14 release remains
-available as the preceding reviewed candidate. The prior v0.2.8 tag
+The v0.2.16 release artifact is pinned to the immutable digest recorded above;
+its OCI labels match version `0.2.16` and reviewed commit
+`9c14b10843b175dac8ef0546866a141504bcaed4`. The v0.2.15 release remains
+available as the preceding reviewed deployment. The prior v0.2.8 tag
 remains immutable but was never published because its commit still contained
 `backend/cmd/server/VERSION=0.2.7`; it must not be retagged.
+
+## v0.2.16 API-key usability release
+
+The v0.2.16 release is tagged from commit
+`9c14b10843b175dac8ef0546866a141504bcaed4`. It clarifies in English and
+Simplified Chinese that the complete API key secret is displayed only in the
+successful creation response, makes the required group selection error visible
+inline, and explains that a redacted existing key cannot be recovered and must
+be replaced. The release workflow (run `33756324283`) passed; frontend tests
+(267 files, 1,438 tests), typecheck, lint, and production build passed.
+
+The exact application image promoted to OPC is pinned at
+`ghcr.io/immortal-autumn/sub2api2personal@sha256:d3b889b74dcd15c9952b409ce27f05db1898f93541eac17cf7675088d6af65b0`.
+Its OCI labels report version `0.2.16` and revision
+`9c14b10843b175dac8ef0546866a141504bcaed4`.
 
 ## v0.2.11 release validation outcome
 
@@ -168,7 +183,7 @@ revertible commits have passed their local focused/full checks and GitHub CI and
 security scans:
 
 The production-status phrases in the entries below describe the state when each
-review commit was recorded. Every listed commit is an ancestor of v0.2.15 and is
+review commit was recorded. Every listed commit is an ancestor of v0.2.16 and is
 therefore included in the deployed image unless explicitly marked otherwise.
 
 - `30f5dc180`: routine proxy credential minimization;
@@ -257,7 +272,7 @@ The review branch also contains work hardening proxy partial updates: omitted
 lifecycle and credential fields are preserved, while explicit null/empty values
 clear nullable settings. This work was review-only before v0.2.14 and was not
 present in the v0.2.10 production image; it is an ancestor of and included in
-the deployed v0.2.15 image.
+the deployed v0.2.16 image.
 
 The latest review-only commits added a bilingual administrator-only product
 surface contract (`bdd4329e3`), made all supported deployment examples default
@@ -266,7 +281,7 @@ and derived OAuth/setup-token account display names from an explicit name,
 validated email, or provider fallback (`8b25ba36c`). Focused account/private-route
 tests, frontend typecheck/build, deployment bind/security/rollout contracts, and
 the release contract passed. They were not present in the v0.2.10 image, but are
-ancestors of and included in the deployed v0.2.15 image.
+ancestors of and included in the deployed v0.2.16 image.
 
 The review commit `da3e56788` exposes the retained private security
 boundary in the administrator settings view, prevents a read-only security tab
@@ -276,12 +291,31 @@ regression coverage for the security tab and retained-tab contract; the full
 frontend suite (267 files, 1,435 tests), typecheck, lint, production build,
 bundle budgets, and deployment contracts passed. This commit is on
 `revision/exapi-v0.2.1` and was not present in the v0.2.10 image; it is included
-in the deployed v0.2.15 image. GitHub CI run `33607824144` and Security Scan run
+in the deployed v0.2.16 image. GitHub CI run `33607824144` and Security Scan run
 `33607824171` completed successfully for the resulting documentation state.
 
-## v0.2.15 OPC production deployment
+## v0.2.16 OPC production deployment
 
 Production is currently deployed as Compose project `sub2api` from
+`/opt/sub2api` using `/opt/sub2api/.env.v0.2.16` and
+`/opt/sub2api/docker-compose.v0.2.16.yml`. The application container is pinned
+to manifest digest
+`sha256:d3b889b74dcd15c9952b409ce27f05db1898f93541eac17cf7675088d6af65b0`,
+reports `0.2.16`, and has revision
+`9c14b10843b175dac8ef0546866a141504bcaed4`. PostgreSQL and Redis remain on
+their existing persistent volumes; all three production services are healthy
+with zero restarts and `/ready` returns `{"status":"ready"}`.
+
+The allowlisted WireGuard operator peer reached `/api/v1/operator/me` and the
+private `/api/v1/keys` route successfully. A real API-key creation check
+returned the complete secret in the first response, and the test key was then
+deleted through `DELETE /api/v1/keys/:id`; the production list no longer
+contains the `ui-canary-key` probe record. The retained account and production
+key records were not otherwise changed.
+
+## v0.2.15 OPC production deployment (historical)
+
+Before v0.2.16 promotion, production was deployed as Compose project `sub2api` from
 `/opt/sub2api` using `/opt/sub2api/.env.v0.2.15` and
 `/opt/sub2api/docker-compose.v0.2.15.yml`. The application container is pinned
 to manifest digest

@@ -6,24 +6,36 @@
 
 ## 当前发布
 
-最后审阅：**2026-09-02（Europe/London）**
+最后审阅：**2026-09-03（Europe/London）**
 
 | 项目 | 当前值 |
 |---|---|
-| 产品版本 | `0.2.15`（2026-09-02 已部署到 OPC） |
+| 产品版本 | `0.2.16`（2026-09-03 已部署到 OPC） |
 | GitHub 仓库 | `immortal-autumn/ExAPI` |
-| Git tag | `v0.2.15` |
+| Git tag | `v0.2.16` |
 | 主分支 | `main`（当前为 `f79ef301b`；发布分支保持独立） |
 | 发布分支 | `revision/exapi-v0.2.1` |
-| 审阅提交 | `a63f68a11b08cdee6ead8e4cce41332cb4e83ac3` |
-| OCI 镜像 | `ghcr.io/immortal-autumn/sub2api2personal@sha256:f25727e7dce06ce62ab921027346c27e86a92dabdd0e6e7dc7791333526889b0` |
-| GitHub Release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.15> |
-| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33625979848> |
+| 审阅提交 | `9c14b10843b175dac8ef0546866a141504bcaed4` |
+| OCI 镜像 | `ghcr.io/immortal-autumn/sub2api2personal@sha256:d3b889b74dcd15c9952b409ce27f05db1898f93541eac17cf7675088d6af65b0` |
+| GitHub Release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.16> |
+| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33756324283> |
 
-v0.2.15 artifact 固定使用上表的 immutable digest，OCI 标签与版本 `0.2.15` 及审阅提交
-`a63f68a11b08cdee6ead8e4cce41332cb4e83ac3` 一致。v0.2.14 仍作为前一个已审阅版本保留；
+v0.2.16 artifact 固定使用上表的 immutable digest，OCI 标签与版本 `0.2.16` 及审阅提交
+`9c14b10843b175dac8ef0546866a141504bcaed4` 一致。v0.2.15 作为前一个已审阅部署版本保留；
 生产环境只使用 immutable digest，不使用 `latest` 等可变标签。GHCR 包名仍保留
 `sub2api2personal` 以兼容现有部署。
+
+## v0.2.16 API Key 易用性发布
+
+v0.2.16 从提交 `9c14b10843b175dac8ef0546866a141504bcaed4` 打 tag。中英文界面
+现在明确说明：完整 API Key 只会在创建成功响应中显示一次；未选择分组时会显示可见的
+行内错误；已有脱敏 Key 无法恢复，必须删除后重新创建。发布流程（run
+`33756324283`）通过；前端测试（267 个文件、1,438 个测试）、类型检查、lint 和生产构建
+均通过。
+
+部署到 OPC 的精确应用镜像固定为
+`ghcr.io/immortal-autumn/sub2api2personal@sha256:d3b889b74dcd15c9952b409ce27f05db1898f93541eac17cf7675088d6af65b0`，
+OCI 标签报告版本 `0.2.16` 和 revision `9c14b10843b175dac8ef0546866a141504bcaed4`。
 
 ## v0.2.11 发布验证结果
 
@@ -131,7 +143,7 @@ SHA-256 `a7e7e46f923ecfcfcd2b838fc851385280c580face53866ae173d3a5a36677e8`，并
 以下可独立回滚的提交均已通过各自的本地重点/完整检查，以及 GitHub CI 和安全扫描：
 
 以下条目中的“生产环境未修改”等状态短语，均指各审查提交记录时的状态。所有列出的
-提交都是 v0.2.15 的祖先，因此均已包含在当前部署镜像中，除非条目明确说明例外。
+提交都是 v0.2.16 的祖先，因此均已包含在当前部署镜像中，除非条目明确说明例外。
 
 - `30f5dc180`：日常代理凭据最小暴露；
 - `3453be8cf`：代理破坏性操作的界面防护；
@@ -188,25 +200,40 @@ SHA-256 `a7e7e46f923ecfcfcd2b838fc851385280c580face53866ae173d3a5a36677e8`，并
 
 审查分支还包含代理部分更新契约加固：省略的生命周期和凭据字段会保留现值，显式
 null/空值则会清除对应可空设置。这部分在 v0.2.14 之前属于审查内容，未包含在 v0.2.10
-生产镜像中；其提交是 v0.2.15 的祖先，已包含在当前部署镜像中。
+生产镜像中；其提交是 v0.2.16 的祖先，已包含在当前部署镜像中。
 
 此前的仅审查提交新增了中英文管理员专用产品范围契约（`bdd4329e3`），让所有受
 支持的部署示例默认使用 `RUN_MODE=simple`，同时保留后端传统 `standard` 回退，并
 让 OAuth/setup-token 导入按管理员名称、已验证邮箱或服务商回退值生成账号显示名称
 （`8b25ba36c`）。账号/私有路由聚焦测试、前端类型检查与构建、部署绑定/安全/发布
-契约和 release contract 均通过。这些提交未包含在 v0.2.10 镜像中，但已作为 v0.2.14
+契约和 release contract 均通过。这些提交未包含在 v0.2.10 镜像中，但已作为 v0.2.16
 祖先提交并随当前镜像部署到 OPC。
 
 审查提交 `da3e56788` 将保留的私有安全边界加入管理员设置页；安全页为只读时
 不会触发全局设置保存；并将安全、OAuth、分页和 404 文案统一本地化为英文及简体中文。
 该提交新增安全页和保留设置页签的回归覆盖；完整前端套件（267 个文件、1,435 个测试）、
 类型检查、lint、生产构建、bundle 预算和部署契约均通过。该提交仅存在于
-`revision/exapi-v0.2.1`，未包含在 v0.2.10 镜像中，但已包含在当前 v0.2.15 部署中。
+`revision/exapi-v0.2.1`，未包含在 v0.2.10 镜像中，但已包含在当前 v0.2.16 部署中。
 对应的 GitHub CI run `33607824144` 与 Security Scan run `33607824171` 均已成功完成。
 
-## v0.2.15 OPC 生产部署
+## v0.2.16 OPC 生产部署
 
-生产当前位于 `/opt/sub2api`，Compose project 为 `sub2api`，使用
+当前生产环境是 `/opt/sub2api` 下的 Compose project `sub2api`，使用
+`/opt/sub2api/.env.v0.2.16` 和 `/opt/sub2api/docker-compose.v0.2.16.yml`。应用容器固定到
+manifest digest
+`sha256:d3b889b74dcd15c9952b409ce27f05db1898f93541eac17cf7675088d6af65b0`，报告版本
+`0.2.16` 和 revision `9c14b10843b175dac8ef0546866a141504bcaed4`。PostgreSQL 和 Redis
+继续使用原有持久化卷；三个生产服务均为 healthy、重启次数为 0，`/ready` 返回
+`{"status":"ready"}`。
+
+允许的 WireGuard operator peer 已成功访问 `/api/v1/operator/me` 和私有
+`/api/v1/keys` 路由。真实 API Key 创建检查确认首次响应返回完整 secret，随后通过
+`DELETE /api/v1/keys/:id` 删除测试 Key；生产列表已不再包含 `ui-canary-key` 探测记录。
+其余生产账号和 Key 记录未修改。
+
+## v0.2.15 OPC 生产部署（历史记录）
+
+在 promotion v0.2.16 之前，生产环境位于 `/opt/sub2api`，Compose project 为 `sub2api`，使用
 `/opt/sub2api/.env.v0.2.15` 和 `/opt/sub2api/docker-compose.v0.2.15.yml`。应用容器固定为
 manifest digest
 `sha256:f25727e7dce06ce62ab921027346c27e86a92dabdd0e6e7dc7791333526889b0`，报告版本 `0.2.15`，
