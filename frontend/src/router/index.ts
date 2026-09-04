@@ -12,6 +12,7 @@ import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { resolveRouteDocumentTitle } from './title'
 import { privateRoutes } from './privateRoutes'
+import i18n from '@/i18n'
 
 const productRoutes = privateRoutes
 
@@ -96,31 +97,53 @@ export function createAppRouter(history: RouterHistory = createWebHistory(import
   /**
    * Navigation guard: dynamic import error recovery after a deployment update.
    */
-  router.onError((error) => {
-    console.error('Router error:', error)
-
-    const isChunkLoadError =
-      error.message?.includes('Failed to fetch dynamically imported module') ||
-      error.message?.includes('Loading chunk') ||
-      error.message?.includes('Loading CSS chunk') ||
-      error.name === 'ChunkLoadError'
-
-    if (isChunkLoadError) {
-      const reloadKey = 'chunk_reload_attempted'
-      const lastReload = sessionStorage.getItem(reloadKey)
-      const now = Date.now()
-
-      if (!lastReload || now - parseInt(lastReload) > 10000) {
-        sessionStorage.setItem(reloadKey, now.toString())
-        console.warn('Chunk load error detected, reloading page to fetch latest version...')
-        window.location.reload()
-      } else {
-        console.error('Chunk load error persists after reload. Please clear browser cache.')
-      }
-    }
-  })
+  router.onError(handleRouterError)
 
   return router
+}
+
+/**
+ * Identify failures caused by a stale or unavailable lazy-loaded asset.
+ * Keep this separate from the router factory so the recovery policy can be
+ * tested without relying on browser history or a mounted application.
+ */
+export function isChunkLoadError(error: unknown): boolean {
+  if (!(error instanceof Error) && (typeof error !== 'object' || error === null)) {
+    return false
+  }
+
+  const candidate = error as { message?: unknown; name?: unknown }
+  const message = typeof candidate.message === 'string' ? candidate.message : ''
+  const name = typeof candidate.name === 'string' ? candidate.name : ''
+
+  return (
+    message.includes('Failed to fetch dynamically imported module') ||
+    message.includes('Loading chunk') ||
+    message.includes('Loading CSS chunk') ||
+    name === 'ChunkLoadError'
+  )
+}
+
+/**
+ * Report router failures without forcing a destructive page reload. A reload
+ * can repeat indefinitely when a proxy/CDN serves stale HTML for a missing
+ * asset; the operator should choose when it is safe to refresh instead.
+ */
+export function handleRouterError(error: unknown): void {
+  console.error('Router error:', error)
+
+  if (!isChunkLoadError(error)) {
+    return
+  }
+
+  const appStore = useAppStore()
+  const key = 'common.privateControl.chunkLoadFailed'
+  const fallbackMessage = 'This page was updated. Refresh when it is safe to continue.'
+  const message = i18n.global.te(key) ? i18n.global.t(key) : fallbackMessage
+
+  // Keep the notice visible long enough for an operator to finish an in-flight
+  // action, while still allowing normal toast dismissal.
+  appStore.showWarning(message, 30000)
 }
 
 const router = createAppRouter()

@@ -689,6 +689,43 @@ func TestFrontendServer_Middleware(t *testing.T) {
 		assert.Equal(t, http.StatusOK, assetWriter.Code)
 		assert.Equal(t, staticAssetsCacheControl, assetWriter.Header().Get("Cache-Control"))
 	})
+
+	t.Run("returns_404_for_missing_assets_instead_of_spa_html", func(t *testing.T) {
+		provider := &mockSettingsProvider{settings: map[string]string{"test": "value"}}
+		server, err := NewFrontendServer(provider)
+		require.NoError(t, err)
+
+		router := gin.New()
+		router.Use(server.Middleware())
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/assets/does-not-exist-AbCd1234.js", nil)
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.NotContains(t, w.Header().Get("Content-Type"), "text/html")
+		assert.NotContains(t, w.Body.String(), "<!doctype html>")
+	})
+
+	t.Run("serves_missing_assets_from_local_override", func(t *testing.T) {
+		provider := &mockSettingsProvider{settings: map[string]string{"test": "value"}}
+		server, err := NewFrontendServer(provider)
+		require.NoError(t, err)
+		overrideDir := t.TempDir()
+		server.overrideDir = overrideDir
+		assetPath := filepath.Join(overrideDir, "assets", "runtime.js")
+		require.NoError(t, os.MkdirAll(filepath.Dir(assetPath), 0o755))
+		require.NoError(t, os.WriteFile(assetPath, []byte("console.log('override')"), 0o644))
+
+		router := gin.New()
+		router.Use(server.Middleware())
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/assets/runtime.js", nil)
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, "console.log('override')", w.Body.String())
+	})
 }
 
 func TestEmbeddedFrontendBypassesBareVideoAPIRoutes(t *testing.T) {
@@ -796,6 +833,20 @@ func TestServeEmbeddedFrontend(t *testing.T) {
 				assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
 			})
 		}
+	})
+
+	t.Run("returns_404_for_missing_assets_instead_of_spa_html", func(t *testing.T) {
+		middleware := ServeEmbeddedFrontend()
+		router := gin.New()
+		router.Use(middleware)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/assets/does-not-exist-AbCd1234.js", nil)
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.NotContains(t, w.Header().Get("Content-Type"), "text/html")
+		assert.NotContains(t, w.Body.String(), "<!doctype html>")
 	})
 
 	t.Run("skips_api_routes", func(t *testing.T) {

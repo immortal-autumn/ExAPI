@@ -11,6 +11,7 @@ const appStore = vi.hoisted(() => ({
   publicSettingsLoaded: false,
   cachedPublicSettings: null as Record<string, unknown> | null,
   fetchPublicSettings: vi.fn(),
+  showWarning: vi.fn(),
 }))
 
 const navigation = vi.hoisted(() => ({
@@ -46,7 +47,7 @@ vi.mock('@/router/title', () => ({
   resolveRouteDocumentTitle: vi.fn(() => 'ExAPI'),
 }))
 
-import { createAppRouter } from '@/router'
+import { createAppRouter, handleRouterError, isChunkLoadError } from '@/router'
 
 function newRouter() {
   return createAppRouter(createMemoryHistory())
@@ -60,6 +61,8 @@ describe('real private router navigation', () => {
     appStore.publicSettingsLoaded = false
     appStore.cachedPublicSettings = null
     appStore.fetchPublicSettings.mockResolvedValue(null)
+    appStore.showWarning.mockReset()
+    sessionStorage.clear()
     document.title = ''
     window.scrollTo = vi.fn()
   })
@@ -125,5 +128,22 @@ describe('real private router navigation', () => {
     expect(appStore.fetchPublicSettings).not.toHaveBeenCalled()
     expect(navigation.startNavigation).toHaveBeenCalledTimes(3)
     expect(navigation.endNavigation).toHaveBeenCalledTimes(3)
+  })
+
+  it('recognizes lazy-loaded chunk failures without treating ordinary errors as chunks', () => {
+    expect(isChunkLoadError(new Error('Failed to fetch dynamically imported module'))).toBe(true)
+    expect(isChunkLoadError(Object.assign(new Error('upstream failed'), { name: 'ChunkLoadError' }))).toBe(true)
+    expect(isChunkLoadError(new Error('request failed'))).toBe(false)
+    expect(isChunkLoadError(null)).toBe(false)
+  })
+
+  it('reports a chunk failure without reloading the page', () => {
+    handleRouterError(new Error('Failed to fetch dynamically imported module'))
+
+    expect(appStore.showWarning).toHaveBeenCalledWith(
+      'This page was updated. Refresh when it is safe to continue.',
+      30000
+    )
+    expect(sessionStorage.getItem('chunk_reload_attempted')).toBeNull()
   })
 })

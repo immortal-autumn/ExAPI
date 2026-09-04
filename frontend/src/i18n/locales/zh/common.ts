@@ -118,6 +118,7 @@ export default {
       loading: '正在连接 ExAPI 控制平面…',
       title: 'ExAPI 私有控制平面',
       retry: '重试连接',
+      chunkLoadFailed: '页面已更新，请在安全时机手动刷新后继续。',
     }
   },
 

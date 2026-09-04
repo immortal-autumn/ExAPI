@@ -101,7 +101,25 @@ func (s *FrontendServer) Middleware() gin.HandlerFunc {
 		}
 
 		// For index.html or SPA routes, serve with injected settings
-		if cleanPath == "index.html" || !s.fileExists(cleanPath) {
+		if cleanPath == "index.html" {
+			s.serveIndexHTML(c)
+			return
+		}
+		if !s.fileExists(cleanPath) {
+			// Local overrides are allowed to add or replace assets that are not in
+			// the embedded build, so check them before declaring an asset missing.
+			if s.tryServeOverride(c, cleanPath) {
+				return
+			}
+			// A missing JavaScript/CSS chunk must not receive index.html. Browsers
+			// try to parse that response as a module, fail the import, and can
+			// trigger the router's chunk-error recovery path. Return a real 404 so
+			// clients and CDNs can distinguish stale assets from SPA navigation.
+			if isEmbeddedAssetPath(cleanPath) {
+				c.String(http.StatusNotFound, "Asset not found")
+				c.Abort()
+				return
+			}
 			s.serveIndexHTML(c)
 			return
 		}
@@ -330,6 +348,16 @@ func ServeEmbeddedFrontend() gin.HandlerFunc {
 			return
 		}
 
+		if tryServeOverrideFile(c, overrideDir, cleanPath) {
+			return
+		}
+
+		if isEmbeddedAssetPath(cleanPath) {
+			c.String(http.StatusNotFound, "Asset not found")
+			c.Abort()
+			return
+		}
+
 		serveIndexHTML(c, distFS)
 	}
 }
@@ -351,6 +379,13 @@ func tryServeOverrideFile(c *gin.Context, overrideDir, cleanPath string) bool {
 
 func shouldBypassEmbeddedFrontend(path string) bool {
 	return routecontract.IsAPIPath(path)
+}
+
+// isEmbeddedAssetPath identifies paths emitted by the frontend bundler. These
+// paths are immutable build artifacts, not client-side routes, so a missing
+// file must be reported as a 404 instead of falling back to index.html.
+func isEmbeddedAssetPath(cleanPath string) bool {
+	return strings.HasPrefix(cleanPath, "assets/")
 }
 
 func serveIndexHTML(c *gin.Context, fsys fs.FS) {

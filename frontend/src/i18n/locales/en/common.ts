@@ -118,6 +118,7 @@ export default {
       loading: 'Connecting to the ExAPI control plane…',
       title: 'ExAPI private control plane',
       retry: 'Retry connection',
+      chunkLoadFailed: 'This page was updated. Refresh when it is safe to continue.',
     }
   },
 

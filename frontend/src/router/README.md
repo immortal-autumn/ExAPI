@@ -70,8 +70,9 @@ while 404 communicates that no route exists.
 3. Loads risk-control settings before risk-control routes and redirects only on an
    explicit, successfully loaded disable flag.
 4. Starts and ends navigation-loading state and prefetches the next route.
-5. Retries one dynamic chunk load after a deployment update, then reports a
-   persistent cache error without an infinite reload loop.
+5. Reports a dynamic chunk load failure with an actionable warning. The browser
+   is never reloaded automatically, so an operator can finish an in-flight
+   action and refresh when it is safe to continue.
 
 `requiresAuth` and `requiresAdmin` metadata documents the control-plane contract
 for shared components. The private listener, operator middleware, and backend
@@ -83,7 +84,8 @@ handlers enforce the actual boundary.
 2. 解析本地化页面标题。
 3. 在进入风控路由前加载风控设置，只有成功加载且明确关闭时才重定向。
 4. 管理导航加载状态，并预取下一路由。
-5. 部署更新导致动态 chunk 加载失败时最多重试一次，避免无限刷新。
+5. 部署更新导致动态 chunk 加载失败时显示可操作的警告。浏览器不会自动刷新，
+   操作员可以先完成进行中的操作，再在安全时机手动刷新。
 
 `requiresAuth` 与 `requiresAdmin` 元数据用于记录共享组件契约；真正的边界由
 私有监听器、管理员中间件和后端 handler 强制执行。
