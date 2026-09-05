@@ -53,6 +53,14 @@ OCI revision 为 `7560df6cc`，版本为 `0.2.16-chunkfix`。受保护的 Compos
 `window.location.reload()` chunk 恢复逻辑。该版本是本机使用 immutable digest 构建的部署，
 尚不是 GHCR 发布或已证明的 release artifact；在其他环境使用前，应先发布并验证签名的镜像。
 
+如需回滚且保持依赖服务不变，可恢复原环境文件，并对版本化 Compose 文件执行
+`--no-deps`：
+
+```bash
+sudo docker compose --env-file /opt/sub2api/.env.v0.2.16 \
+  -f /opt/sub2api/docker-compose.v0.2.16.yml up -d --no-deps sub2api
+```
+
 ## v0.2.11 发布验证结果
 
 带注释的 `v0.2.11` 标签已从提交 `b2a5889b4` 发布，release/security/CI 工作流均通过。

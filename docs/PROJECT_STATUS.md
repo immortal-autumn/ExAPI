@@ -333,6 +333,15 @@ immutable digest deployment and is not yet a GHCR release or attested release
 artifact; publish and verify a signed registry image before using this fix as a
 new versioned release elsewhere.
 
+To roll back only the application while leaving the dependencies untouched,
+restore the original environment file and run the versioned Compose file with
+`--no-deps`:
+
+```bash
+sudo docker compose --env-file /opt/sub2api/.env.v0.2.16 \
+  -f /opt/sub2api/docker-compose.v0.2.16.yml up -d --no-deps sub2api
+```
+
 ## v0.2.15 OPC production deployment (historical)
 
 Before v0.2.16 promotion, production was deployed as Compose project `sub2api` from
