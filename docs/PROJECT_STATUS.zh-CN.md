@@ -10,20 +10,45 @@
 
 | 项目 | 当前值 |
 |---|---|
-| 产品版本 | `0.2.16`（2026-09-03 已部署到 OPC） |
+| 产品版本 | `0.2.17`（2026-09-05 已发布；OPC 仍使用单独固定的本地 chunk 恢复镜像） |
 | GitHub 仓库 | `immortal-autumn/ExAPI` |
-| Git tag | `v0.2.16` |
+| Git tag | `v0.2.17` |
 | 主分支 | `main`（当前为 `f79ef301b`；发布分支保持独立） |
 | 发布分支 | `revision/exapi-v0.2.1` |
-| 审阅提交 | `9c14b10843b175dac8ef0546866a141504bcaed4` |
-| OCI 镜像 | `ghcr.io/immortal-autumn/sub2api2personal@sha256:d3b889b74dcd15c9952b409ce27f05db1898f93541eac17cf7675088d6af65b0` |
-| GitHub Release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.16> |
-| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33756324283> |
+| 审阅提交 | `3719a4ca20efa5d2c21521fa7eda2c1b34d41485` |
+| OCI 镜像 | `ghcr.io/immortal-autumn/sub2api2personal@sha256:0866123190924731bc7f7294d5e3c958428e0b84c58da0da13caa80c491ba0e1` |
+| GitHub Release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.17> |
+| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33962108136> |
 
-v0.2.16 artifact 固定使用上表的 immutable digest，OCI 标签与版本 `0.2.16` 及审阅提交
+v0.2.16 artifact 仍固定使用其原始 immutable digest
+`sha256:d3b889b74dcd15c9952b409ce27f05db1898f93541eac17cf7675088d6af65b0`，OCI 标签与版本 `0.2.16` 及审阅提交
 `9c14b10843b175dac8ef0546866a141504bcaed4` 一致。v0.2.15 作为前一个已审阅部署版本保留；
 生产环境只使用 immutable digest，不使用 `latest` 等可变标签。GHCR 包名仍保留
 `sub2api2personal` 以兼容现有部署。
+
+## v0.2.17 发布结果
+
+带注释的 `v0.2.17` 标签指向审阅提交
+`3719a4ca20efa5d2c21521fa7eda2c1b34d41485`。发布工作流
+`33962108136` 已通过 source/provenance 契约、后端单元与集成测试、race
+测试、前端 coverage/typecheck/build/bundle 门禁、依赖审计策略、多架构镜像
+构建、OCI 标签校验、SPDX SBOM 生成、SLSA provenance 和 SBOM attestation。
+GitHub Release 已正式发布（不是 draft 或 prerelease）：
+<https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.17>。
+
+签名 GHCR manifest 固定为
+`ghcr.io/immortal-autumn/sub2api2personal@sha256:0866123190924731bc7f7294d5e3c958428e0b84c58da0da13caa80c491ba0e1`。
+Linux amd64 和 arm64 manifest 分别为
+`sha256:4d45913c2f236f248a7cc0e633686e8df43f6091dcccacef10a379c6f9cb80a3`
+和 `sha256:b313f5464d54c4732ffff5088dcc91e7f2de6d5d80f53d5804a636ab36f591ff`。
+Release 中 `image.spdx.json` 的 SHA-256 为
+`84601b6c3b4733fcaf650703a012cedf67f73a80f14459594a1cc8d17331664c`；OCI
+标签报告版本 `0.2.17` 和上述审阅提交。生产部署应使用 immutable digest；版本
+标签仅作为发现别名。
+
+OPC 仍运行下文记录的单独构建本地 chunk 恢复镜像。该镜像的 digest 和版本字符串
+不同，因此发布 v0.2.17 不会静默替换 OPC，也不代表本地镜像等同于签名 GHCR
+artifact。只有经过标准的 digest 固定部署流程后，才可 promotion 该 release 镜像。
 
 ## v0.2.16 API Key 易用性发布
 
@@ -50,8 +75,9 @@ OCI revision 为 `7560df6cc`，版本为 `0.2.16-chunkfix`。受保护的 Compos
 部署后的 allowlisted 运维路径检查结果：`/ready={"status":"ready"}`；SPA 路由返回
 `200 text/html`；缺失的 fingerprinted asset 返回 `404 text/plain` 和 `Asset not found`，
 不再错误返回 `index.html`。实际提供的应用 bundle 已不包含旧的
-`window.location.reload()` chunk 恢复逻辑。该版本是本机使用 immutable digest 构建的部署，
-尚不是 GHCR 发布或已证明的 release artifact；在其他环境使用前，应先发布并验证签名的镜像。
+`window.location.reload()` chunk 恢复逻辑。该版本仍是本机使用 immutable digest 构建的 OPC
+恢复部署，不是上文签名的 v0.2.17 GHCR artifact；两者 digest 和版本字符串不同。发布
+v0.2.17 不会静默替换此 OPC 容器，promotion release 镜像前必须执行 digest 固定的部署流程。
 
 如需回滚且保持依赖服务不变，可恢复原环境文件，并对版本化 Compose 文件执行
 `--no-deps`：
@@ -167,7 +193,7 @@ SHA-256 `a7e7e46f923ecfcfcd2b838fc851385280c580face53866ae173d3a5a36677e8`，并
 以下可独立回滚的提交均已通过各自的本地重点/完整检查，以及 GitHub CI 和安全扫描：
 
 以下条目中的“生产环境未修改”等状态短语，均指各审查提交记录时的状态。所有列出的
-提交都是 v0.2.16 的祖先，因此均已包含在当前部署镜像中，除非条目明确说明例外。
+提交都是 v0.2.17 的祖先，因此均已包含在 release source 中；部署状态按各条目说明。
 
 - `30f5dc180`：日常代理凭据最小暴露；
 - `3453be8cf`：代理破坏性操作的界面防护；
@@ -224,25 +250,25 @@ SHA-256 `a7e7e46f923ecfcfcd2b838fc851385280c580face53866ae173d3a5a36677e8`，并
 
 审查分支还包含代理部分更新契约加固：省略的生命周期和凭据字段会保留现值，显式
 null/空值则会清除对应可空设置。这部分在 v0.2.14 之前属于审查内容，未包含在 v0.2.10
-生产镜像中；其提交是 v0.2.16 的祖先，已包含在当前部署镜像中。
+生产镜像中；其提交是 v0.2.17 的祖先，已包含在 release source 中。
 
 此前的仅审查提交新增了中英文管理员专用产品范围契约（`bdd4329e3`），让所有受
 支持的部署示例默认使用 `RUN_MODE=simple`，同时保留后端传统 `standard` 回退，并
 让 OAuth/setup-token 导入按管理员名称、已验证邮箱或服务商回退值生成账号显示名称
 （`8b25ba36c`）。账号/私有路由聚焦测试、前端类型检查与构建、部署绑定/安全/发布
-契约和 release contract 均通过。这些提交未包含在 v0.2.10 镜像中，但已作为 v0.2.16
-祖先提交并随当前镜像部署到 OPC。
+契约和 release contract 均通过。这些提交未包含在 v0.2.10 镜像中，但已作为 v0.2.17
+祖先提交并包含在 release image 中；OPC 是否部署以单独的部署记录为准。
 
 审查提交 `da3e56788` 将保留的私有安全边界加入管理员设置页；安全页为只读时
 不会触发全局设置保存；并将安全、OAuth、分页和 404 文案统一本地化为英文及简体中文。
 该提交新增安全页和保留设置页签的回归覆盖；完整前端套件（267 个文件、1,435 个测试）、
 类型检查、lint、生产构建、bundle 预算和部署契约均通过。该提交仅存在于
-`revision/exapi-v0.2.1`，未包含在 v0.2.10 镜像中，但已包含在当前 v0.2.16 部署中。
+`revision/exapi-v0.2.1`，未包含在 v0.2.10 镜像中，但已包含在 v0.2.17 release image 中。
 对应的 GitHub CI run `33607824144` 与 Security Scan run `33607824171` 均已成功完成。
 
-## v0.2.16 OPC 生产部署
+## v0.2.16 OPC 生产部署（历史）
 
-当前生产环境是 `/opt/sub2api` 下的 Compose project `sub2api`，使用
+在 2026-09-05 chunk 加载恢复部署之前，生产环境是 `/opt/sub2api` 下的 Compose project `sub2api`，使用
 `/opt/sub2api/.env.v0.2.16` 和 `/opt/sub2api/docker-compose.v0.2.16.yml`。应用容器固定到
 manifest digest
 `sha256:d3b889b74dcd15c9952b409ce27f05db1898f93541eac17cf7675088d6af65b0`，报告版本

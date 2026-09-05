@@ -11,15 +11,15 @@ Last reviewed: **2026-09-05 (Europe/London)**
 
 | Item | Current value |
 |---|---|
-| Product version | `0.2.16` (released and deployed to OPC on 2026-09-03) |
+| Product version | `0.2.17` (published 2026-09-05; OPC remains on the separately pinned local chunk-recovery image) |
 | GitHub repository | `immortal-autumn/ExAPI` |
-| Git tag | `v0.2.16` |
+| Git tag | `v0.2.17` |
 | Main branch | `main` (currently `f79ef301b`; release branch remains separate) |
 | Release branch | `revision/exapi-v0.2.1` |
-| Reviewed commit | `9c14b10843b175dac8ef0546866a141504bcaed4` |
-| OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:d3b889b74dcd15c9952b409ce27f05db1898f93541eac17cf7675088d6af65b0` |
-| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.16> |
-| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33756324283> |
+| Reviewed commit | `3719a4ca20efa5d2c21521fa7eda2c1b34d41485` |
+| OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:0866123190924731bc7f7294d5e3c958428e0b84c58da0da13caa80c491ba0e1` |
+| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.17> |
+| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33962108136> |
 | Upstream baseline | Sub2API `v0.1.171`, constrained by `upstream.lock.json` |
 
 The GitHub repository was renamed from `Sub2API2Personal` to `ExAPI` on
@@ -28,7 +28,34 @@ The GitHub repository was renamed from `Sub2API2Personal` to `ExAPI` on
 must keep that compatibility decision explicit or publish a separately
 verified package migration.
 
-The v0.2.16 release artifact is pinned to the immutable digest recorded above;
+## v0.2.17 release publication
+
+The annotated `v0.2.17` tag points to reviewed commit
+`3719a4ca20efa5d2c21521fa7eda2c1b34d41485`. Release workflow
+`33962108136` passed its source/provenance contract, backend unit and integration
+tests, race detector, frontend coverage/typecheck/build/bundle gates, dependency
+audit policy, multi-architecture image build, OCI-label checks, SPDX SBOM
+generation, SLSA provenance, and SBOM attestations. The GitHub release is
+published (not a draft or prerelease) at
+<https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.17>.
+
+The signed GHCR manifest is pinned at
+`ghcr.io/immortal-autumn/sub2api2personal@sha256:0866123190924731bc7f7294d5e3c958428e0b84c58da0da13caa80c491ba0e1`.
+Its Linux amd64 and arm64 manifests are respectively
+`sha256:4d45913c2f236f248a7cc0e633686e8df43f6091dcccacef10a379c6f9cb80a3`
+and `sha256:b313f5464d54c4732ffff5088dcc91e7f2de6d5d80f53d5804a636ab36f591ff`.
+The release SBOM asset `image.spdx.json` has SHA-256
+`84601b6c3b4733fcaf650703a012cedf67f73a80f14459594a1cc8d17331664c`; OCI
+labels report version `0.2.17` and the reviewed commit above. The immutable
+digest is the production reference; the version tag is only a discovery alias.
+
+OPC still runs the separately built local chunk-recovery image documented below.
+That image has a different digest and version string, so publishing v0.2.17 does
+not silently change OPC or make the local image equivalent to the signed GHCR
+artifact. Promote it only through the normal digest-pinned deployment procedure.
+
+The v0.2.16 release artifact remains pinned to its original immutable digest
+`sha256:d3b889b74dcd15c9952b409ce27f05db1898f93541eac17cf7675088d6af65b0`;
 its OCI labels match version `0.2.16` and reviewed commit
 `9c14b10843b175dac8ef0546866a141504bcaed4`. The v0.2.15 release remains
 available as the preceding reviewed deployment. The prior v0.2.8 tag
@@ -183,8 +210,8 @@ revertible commits have passed their local focused/full checks and GitHub CI and
 security scans:
 
 The production-status phrases in the entries below describe the state when each
-review commit was recorded. Every listed commit is an ancestor of v0.2.16 and is
-therefore included in the deployed image unless explicitly marked otherwise.
+review commit was recorded. Every listed commit is an ancestor of v0.2.17 and is
+therefore included in the release source; deployment status is stated per entry.
 
 - `30f5dc180`: routine proxy credential minimization;
 - `3453be8cf`: proxy destructive-action UI guards;
@@ -272,7 +299,7 @@ The review branch also contains work hardening proxy partial updates: omitted
 lifecycle and credential fields are preserved, while explicit null/empty values
 clear nullable settings. This work was review-only before v0.2.14 and was not
 present in the v0.2.10 production image; it is an ancestor of and included in
-the deployed v0.2.16 image.
+the v0.2.17 release image.
 
 The latest review-only commits added a bilingual administrator-only product
 surface contract (`bdd4329e3`), made all supported deployment examples default
@@ -281,7 +308,7 @@ and derived OAuth/setup-token account display names from an explicit name,
 validated email, or provider fallback (`8b25ba36c`). Focused account/private-route
 tests, frontend typecheck/build, deployment bind/security/rollout contracts, and
 the release contract passed. They were not present in the v0.2.10 image, but are
-ancestors of and included in the deployed v0.2.16 image.
+ancestors of and included in the v0.2.17 release image.
 
 The review commit `da3e56788` exposes the retained private security
 boundary in the administrator settings view, prevents a read-only security tab
@@ -291,12 +318,13 @@ regression coverage for the security tab and retained-tab contract; the full
 frontend suite (267 files, 1,435 tests), typecheck, lint, production build,
 bundle budgets, and deployment contracts passed. This commit is on
 `revision/exapi-v0.2.1` and was not present in the v0.2.10 image; it is included
-in the deployed v0.2.16 image. GitHub CI run `33607824144` and Security Scan run
+in the v0.2.17 release image. GitHub CI run `33607824144` and Security Scan run
 `33607824171` completed successfully for the resulting documentation state.
 
-## v0.2.16 OPC production deployment
+## v0.2.16 OPC production deployment (historical)
 
-Production is currently deployed as Compose project `sub2api` from
+Before the 2026-09-05 chunk-load recovery deployment, production was deployed as
+Compose project `sub2api` from
 `/opt/sub2api` using `/opt/sub2api/.env.v0.2.16` and
 `/opt/sub2api/docker-compose.v0.2.16.yml`. The application container is pinned
 to manifest digest
@@ -328,10 +356,11 @@ Post-deployment checks from the allowlisted operator path returned
 `/ready={"status":"ready"}`, SPA routes returned `200 text/html`, and a missing
 fingerprinted asset returned `404 text/plain` with `Asset not found` instead of
 `index.html`. The served application bundle no longer contains the old
-`window.location.reload()` chunk-recovery path. This is a locally built,
-immutable digest deployment and is not yet a GHCR release or attested release
-artifact; publish and verify a signed registry image before using this fix as a
-new versioned release elsewhere.
+`window.location.reload()` chunk-recovery path. This remains a locally built,
+immutable-digest OPC recovery deployment; it is not the signed v0.2.17 GHCR
+artifact above, which has a different digest and version string. Publishing
+v0.2.17 therefore did not silently replace this OPC container; use the
+digest-pinned deployment procedure before promoting the release image.
 
 To roll back only the application while leaving the dependencies untouched,
 restore the original environment file and run the versioned Compose file with
