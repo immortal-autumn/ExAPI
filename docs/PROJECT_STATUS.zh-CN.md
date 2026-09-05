@@ -6,7 +6,7 @@
 
 ## 当前发布
 
-最后审阅：**2026-09-03（Europe/London）**
+最后审阅：**2026-09-05（Europe/London）**
 
 | 项目 | 当前值 |
 |---|---|
@@ -36,6 +36,22 @@ v0.2.16 从提交 `9c14b10843b175dac8ef0546866a141504bcaed4` 打 tag。中英文
 部署到 OPC 的精确应用镜像固定为
 `ghcr.io/immortal-autumn/sub2api2personal@sha256:d3b889b74dcd15c9952b409ce27f05db1898f93541eac17cf7675088d6af65b0`，
 OCI 标签报告版本 `0.2.16` 和 revision `9c14b10843b175dac8ef0546866a141504bcaed4`。
+
+## 2026-09-05 OPC chunk 加载恢复部署
+
+应用服务已使用提交 `7560df6cc`（`fix(web): prevent stale chunks from triggering reload loops`）
+通过 `--no-deps` 安全重建。PostgreSQL 和 Redis 没有被重建，仍保持健康且重启次数为零。
+当前应用固定到本机 immutable 镜像引用
+`exapi-chunkfix@sha256:3d4a3377a690df44d5de18ba93dc8077d1e65bc2fa05fb28e0d868f6f4879875`，
+OCI revision 为 `7560df6cc`，版本为 `0.2.16-chunkfix`。受保护的 Compose 环境文件为
+`/opt/sub2api/.env.v0.2.16-chunkfix-7560df6cc`（权限 `0600`）；原 v0.2.16 环境文件保持不变，
+可用于回滚。
+
+部署后的 allowlisted 运维路径检查结果：`/ready={"status":"ready"}`；SPA 路由返回
+`200 text/html`；缺失的 fingerprinted asset 返回 `404 text/plain` 和 `Asset not found`，
+不再错误返回 `index.html`。实际提供的应用 bundle 已不包含旧的
+`window.location.reload()` chunk 恢复逻辑。该版本是本机使用 immutable digest 构建的部署，
+尚不是 GHCR 发布或已证明的 release artifact；在其他环境使用前，应先发布并验证签名的镜像。
 
 ## v0.2.11 发布验证结果
 

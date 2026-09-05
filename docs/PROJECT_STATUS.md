@@ -7,7 +7,7 @@ belong in `deploy/`; this page records the currently reviewed facts.
 
 ## Current release
 
-Last reviewed: **2026-09-03 (Europe/London)**
+Last reviewed: **2026-09-05 (Europe/London)**
 
 | Item | Current value |
 |---|---|
@@ -312,6 +312,26 @@ returned the complete secret in the first response, and the test key was then
 deleted through `DELETE /api/v1/keys/:id`; the production list no longer
 contains the `ui-canary-key` probe record. The retained account and production
 key records were not otherwise changed.
+
+## 2026-09-05 OPC chunk-load recovery deployment
+
+The application service was safely recreated with `--no-deps` from the
+committed fix `7560df6cc` (`fix(web): prevent stale chunks from triggering reload loops`).
+PostgreSQL and Redis were not recreated and remain healthy with zero restarts.
+The running application is pinned to the local immutable image reference
+`exapi-chunkfix@sha256:3d4a3377a690df44d5de18ba93dc8077d1e65bc2fa05fb28e0d868f6f4879875`,
+with OCI revision `7560df6cc` and version `0.2.16-chunkfix`. Its protected Compose
+environment is `/opt/sub2api/.env.v0.2.16-chunkfix-7560df6cc` (mode `0600`); the
+original v0.2.16 environment is retained unchanged for rollback.
+
+Post-deployment checks from the allowlisted operator path returned
+`/ready={"status":"ready"}`, SPA routes returned `200 text/html`, and a missing
+fingerprinted asset returned `404 text/plain` with `Asset not found` instead of
+`index.html`. The served application bundle no longer contains the old
+`window.location.reload()` chunk-recovery path. This is a locally built,
+immutable digest deployment and is not yet a GHCR release or attested release
+artifact; publish and verify a signed registry image before using this fix as a
+new versioned release elsewhere.
 
 ## v0.2.15 OPC production deployment (historical)
 
