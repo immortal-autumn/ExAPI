@@ -130,6 +130,8 @@ func TestWire_UnknownEventFallsBackToDefault(t *testing.T) {
 		Response: &ResponsesResponse{ID: "resp_1", Object: "response", Status: "completed"},
 	})
 	require.Contains(t, m, "response")
+	require.Contains(t, m, "sequence_number")
+	require.EqualValues(t, 0, m["sequence_number"])
 }
 
 func TestResponsesOutputUnmarshal_ToolSearchObjectArguments(t *testing.T) {

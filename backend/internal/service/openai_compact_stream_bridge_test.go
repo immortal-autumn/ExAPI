@@ -87,9 +87,21 @@ func TestBuildOpenAICompactSSEPayload_EmitsItemsAndCompleted(t *testing.T) {
 	require.Equal(t, "response.completed", events[2][0])
 	completed := events[2][1]
 	require.Equal(t, "response.completed", gjson.Get(completed, "type").String())
+	require.Equal(t, int64(0), gjson.Get(first, "sequence_number").Int())
+	require.Equal(t, int64(1), gjson.Get(events[1][1], "sequence_number").Int())
+	require.Equal(t, int64(2), gjson.Get(completed, "sequence_number").Int())
 	require.Equal(t, "resp_compact_1", gjson.Get(completed, "response.id").String())
 	require.Equal(t, int64(13), gjson.Get(completed, "response.usage.total_tokens").Int())
 	require.Len(t, gjson.Get(completed, "response.output").Array(), 2)
+}
+
+func TestWriteOpenAICompactSSEFailureMessageIncludesSequenceNumber(t *testing.T) {
+	c, rec := newCompactBridgeTestContext(t, true)
+	writeOpenAICompactSSEFailureMessage(c, http.StatusBadGateway, "upstream_error", "upstream failed")
+	events := parseCompactBridgeSSE(t, rec.Body.String())
+	require.Len(t, events, 1)
+	require.Equal(t, "response.failed", events[0][0])
+	require.Equal(t, int64(0), gjson.Get(events[0][1], "sequence_number").Int())
 }
 
 func TestBuildOpenAICompactSSEPayload_InjectsMissingResponseID(t *testing.T) {

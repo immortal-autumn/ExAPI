@@ -116,6 +116,7 @@ func TestProxyOpenAIWSHTTPBridgeTurnTransportErrorFailoverSafety(t *testing.T) {
 			require.Len(t, writes, tt.wantWrites)
 			if tt.wantWrites > 0 {
 				require.Equal(t, "error", gjson.GetBytes(writes[0], "type").String())
+				require.Equal(t, int64(0), gjson.GetBytes(writes[0], "sequence_number").Int())
 				require.Equal(t, int64(http.StatusBadGateway), gjson.GetBytes(writes[0], "status").Int())
 			}
 		})
