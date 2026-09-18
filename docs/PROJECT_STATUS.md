@@ -22,7 +22,7 @@ Last reviewed: **2026-09-18 (Europe/London)**
 | Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33962108136> |
 | Upstream baseline | Sub2API `v0.1.171`, constrained by `upstream.lock.json` |
 
-## v0.2.18 release candidate (source reviewed; not yet promoted)
+## v0.2.19 release candidate (source reviewed; not yet promoted)
 
 The candidate version is declared in `backend/cmd/server/VERSION` and is being
 prepared from `revision/exapi-v0.2.1`. It contains the following reviewed
@@ -35,6 +35,9 @@ reliability and compatibility changes:
   assigns monotonic numbers in the compact bridge. This addresses strict Grok
   Build deserializers that reject synthetic or compact frames when the field is
   absent.
+- `b9ab86e1d` fills encrypted OAuth refresh pages by continuing the ID cursor
+  after post-decryption filtering, preventing blank-token rows from starving
+  later valid accounts.
 - The preceding frontend commits `9c887d61a`, `13c10e59d`, and `a0ee5feca`
   harden SSE/API error handling and keep the initial shell English by default.
 
@@ -43,6 +46,10 @@ frontend lint/typecheck/build/bundle checks, and Go unit suites for handler,
 protocol compatibility, repository, and service packages. The release workflow,
 attested image digest, GitHub publication, and OPC promotion remain pending;
 production stays on the v0.2.17 digest until those gates pass.
+
+The immutable `v0.2.18` tag was not published or deployed: its quality gate
+correctly caught the pagination regression above during integration tests. The
+tag remains as failed audit history and must not be reused.
 
 The GitHub repository was renamed from `Sub2API2Personal` to `ExAPI` on
 2026-08-20. The existing v0.2.5 GHCR package path remains

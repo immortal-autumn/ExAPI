@@ -20,7 +20,7 @@
 | GitHub Release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.17> |
 | Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33962108136> |
 
-## v0.2.18 发布候选（源码已审阅，尚未 promotion）
+## v0.2.19 发布候选（源码已审阅，尚未 promotion）
 
 候选版本已写入 `backend/cmd/server/VERSION`，源自
 `revision/exapi-v0.2.1`。本候选包含以下可靠性与兼容性修复：
@@ -30,6 +30,8 @@
 - `1a98aea54` 让 Responses 流事件始终写出 `sequence_number`，并让 compact
   bridge 使用递增序号，解决 Grok Build 严格反序列化器因缺少该字段而拒绝
   synthetic/compact 帧的问题。
+- `b9ab86e1d` 在解密后过滤 refresh token 时继续推进 ID 游标并填满分页，
+  避免空 token 行导致后续有效账号被漏掉。
 - 前置提交 `9c887d61a`、`13c10e59d`、`a0ee5feca` 加固前端 SSE/API 错误处理，
   并让初始页面默认使用英文。
 
@@ -37,6 +39,9 @@
 handler、协议兼容、repository、service Go 单元测试。发布工作流、经 attestation
 的镜像 digest、GitHub 发布和 OPC promotion 尚待完成；在所有门禁通过前，生产继续
 运行 v0.2.17 digest。
+
+不可变的 `v0.2.18` tag 没有发布或部署：其质量门禁在集成测试中正确发现了
+上述分页回归。该 tag 仅作为失败审计历史保留，不得复用。
 
 v0.2.16 artifact 仍固定使用其原始 immutable digest
 `sha256:d3b889b74dcd15c9952b409ce27f05db1898f93541eac17cf7675088d6af65b0`，OCI 标签与版本 `0.2.16` 及审阅提交
