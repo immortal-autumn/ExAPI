@@ -1,0 +1,18 @@
+[Unit]
+Description=ExAPI off-host JSON readiness monitor (hysteresis)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -B %h/.local/lib/exapi-monitor/exapi_readiness_monitor.py
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=EXAPI_MONITOR_TARGET_URL=https://sub2api.research.for-immortal.cn/ready
+Environment=EXAPI_MONITOR_STATE_DIR=%h/.local/state/exapi-readiness-monitor
+Environment=EXAPI_MONITOR_CURL_BIN=/usr/bin/curl
+Environment=EXAPI_MONITOR_NOTIFY_SEND_BIN=/usr/bin/notify-send
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+TimeoutStartSec=30s

@@ -1,0 +1,12 @@
+[Unit]
+Description=Probe ExAPI readiness from the off-host workstation every 30 seconds
+
+[Timer]
+OnBootSec=10s
+OnUnitActiveSec=30s
+AccuracySec=1s
+Persistent=true
+Unit=exapi-readiness-monitor.service
+
+[Install]
+WantedBy=timers.target
