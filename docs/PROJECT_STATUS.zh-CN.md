@@ -13,7 +13,7 @@
 | 产品版本 | `0.2.17`（2026-09-05 已发布，2026-09-07 已 promotion 到 OPC） |
 | GitHub 仓库 | `immortal-autumn/ExAPI` |
 | Git tag | `v0.2.17` |
-| 主分支 | `main`（当前为 `f79ef301b`；发布分支保持独立） |
+| 主分支 | `main`（v0.2.19 候选；发布分支保持独立） |
 | 发布分支 | `revision/exapi-v0.2.1` |
 | 审阅提交 | `3719a4ca20efa5d2c21521fa7eda2c1b34d41485` |
 | OCI 镜像 | `ghcr.io/immortal-autumn/sub2api2personal@sha256:0866123190924731bc7f7294d5e3c958428e0b84c58da0da13caa80c491ba0e1` |

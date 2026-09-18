@@ -14,7 +14,7 @@ Last reviewed: **2026-09-18 (Europe/London)**
 | Product version | `0.2.17` (published 2026-09-05 and promoted to OPC on 2026-09-07) |
 | GitHub repository | `immortal-autumn/ExAPI` |
 | Git tag | `v0.2.17` |
-| Main branch | `main` (currently `f79ef301b`; release branch remains separate) |
+| Main branch | `main` (v0.2.19 candidate; release branch remains separate) |
 | Release branch | `revision/exapi-v0.2.1` |
 | Reviewed commit | `3719a4ca20efa5d2c21521fa7eda2c1b34d41485` |
 | OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:0866123190924731bc7f7294d5e3c958428e0b84c58da0da13caa80c491ba0e1` |
