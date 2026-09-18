@@ -424,6 +424,8 @@ export default {
         probeUpstreamBilling: 'Probe Upstream Rate',
         resetStatusSuccess: 'Successfully reset {count} account(s) status',
         refreshTokenSuccess: 'Successfully refreshed {count} account(s) token',
+        resetStatusFailed: 'Failed to reset selected account status',
+        refreshTokenFailed: 'Failed to refresh selected account tokens',
         partialSuccess: 'Partially completed: {success} succeeded, {failed} failed'
       },
       bulkEdit: {

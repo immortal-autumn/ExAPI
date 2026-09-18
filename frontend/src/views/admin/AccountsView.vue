@@ -1562,9 +1562,9 @@ const handleBulkResetStatus = async () => {
       clearSelection()
     }
     reload()
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Failed to bulk reset status:', error)
-    appStore.showError(String(error))
+    appStore.showError(extractApiErrorMessage(error, t('admin.accounts.bulkActions.resetStatusFailed')))
   }
 }
 const handleBulkRefreshToken = async () => {
@@ -1578,9 +1578,9 @@ const handleBulkRefreshToken = async () => {
       clearSelection()
     }
     reload()
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Failed to bulk refresh token:', error)
-    appStore.showError(String(error))
+    appStore.showError(extractApiErrorMessage(error, t('admin.accounts.bulkActions.refreshTokenFailed')))
   }
 }
 const handleBulkProbeUpstreamBilling = async () => {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 import AccountsView from '../AccountsView.vue'
@@ -12,6 +12,8 @@ const {
   getAllGroups,
   probeUpstreamBilling,
   probeUpstreamBillingBatch,
+  batchClearError,
+  batchRefresh,
   showError,
   showSuccess
 } = vi.hoisted(() => ({
@@ -23,6 +25,8 @@ const {
   getAllGroups: vi.fn(),
   probeUpstreamBilling: vi.fn(),
   probeUpstreamBillingBatch: vi.fn(),
+  batchClearError: vi.fn(),
+  batchRefresh: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn()
 }))
@@ -35,8 +39,8 @@ vi.mock('@/api/operator', () => ({
       getBatchTodayStats,
       getUpstreamBillingProbeSettings,
       delete: vi.fn(),
-      batchClearError: vi.fn(),
-      batchRefresh: vi.fn(),
+      batchClearError,
+      batchRefresh,
       probeUpstreamBilling,
       probeUpstreamBillingBatch,
       toggleSchedulable: vi.fn()
@@ -102,11 +106,13 @@ const ProbeDataTableStub = {
 
 const AccountBulkActionsBarStub = {
   props: ['selectedIds'],
-  emits: ['edit-filtered', 'probe-upstream-billing'],
+  emits: ['edit-filtered', 'probe-upstream-billing', 'reset-status', 'refresh-token'],
   template: `
     <div>
       <button data-test="edit-filtered" @click="$emit('edit-filtered')">edit filtered</button>
       <button data-test="probe-upstream-billing" @click="$emit('probe-upstream-billing')">probe</button>
+      <button data-test="reset-status" @click="$emit('reset-status')">reset status</button>
+      <button data-test="refresh-token" @click="$emit('refresh-token')">refresh token</button>
     </div>
   `
 }
@@ -122,6 +128,10 @@ const BulkEditAccountModalStub = {
 }
 
 describe('admin AccountsView bulk edit scope', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   beforeEach(() => {
     localStorage.clear()
 
@@ -133,6 +143,8 @@ describe('admin AccountsView bulk edit scope', () => {
     getAllGroups.mockReset()
     probeUpstreamBilling.mockReset()
     probeUpstreamBillingBatch.mockReset()
+    batchClearError.mockReset()
+    batchRefresh.mockReset()
     showError.mockReset()
     showSuccess.mockReset()
 
@@ -154,6 +166,8 @@ describe('admin AccountsView bulk edit scope', () => {
     getAllGroups.mockResolvedValue([])
     probeUpstreamBilling.mockResolvedValue({})
     probeUpstreamBillingBatch.mockResolvedValue([])
+    batchClearError.mockResolvedValue({ success: 1, failed: 0 })
+    batchRefresh.mockResolvedValue({ success: 1, failed: 0 })
   })
 
   it('opens bulk edit in filtered-results mode from the bulk actions dropdown', async () => {
@@ -200,6 +214,73 @@ describe('admin AccountsView bulk edit scope', () => {
 
     expect(wrapper.get('[data-test="bulk-edit-modal"]').attributes('data-show')).toBe('true')
     expect(wrapper.get('[data-test="bulk-edit-modal"]').attributes('data-target-mode')).toBe('filtered')
+  })
+
+  it('normalizes structured errors for bulk reset and token refresh actions', async () => {
+    listAccounts.mockResolvedValue({
+      items: [{
+        id: 7,
+        name: 'account-7',
+        platform: 'openai',
+        type: 'apikey',
+        status: 'active',
+        schedulable: true,
+        created_at: '2026-07-13T00:00:00Z',
+        updated_at: '2026-07-13T00:00:00Z'
+      }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1
+    })
+    batchClearError.mockRejectedValue({ error: { message: 'reset provider rejected' } })
+    batchRefresh.mockRejectedValue({ response: { data: { error: { detail: 'refresh provider rejected' } } } })
+    vi.stubGlobal('confirm', vi.fn(() => true))
+
+    const wrapper = mount(AccountsView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          TablePageLayout: { template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>' },
+          DataTable: DataTableStub,
+          Pagination: true,
+          ConfirmDialog: true,
+          AccountTableActions: { template: '<div><slot name="after" /></div>' },
+          AccountTableFilters: { template: '<div></div>' },
+          AccountBulkActionsBar: AccountBulkActionsBarStub,
+          AccountActionMenu: true,
+          ImportDataModal: true,
+          ReAuthAccountModal: true,
+          AccountTestModal: true,
+          AccountStatsModal: true,
+          ScheduledTestsPanel: true,
+          SyncFromCrsModal: true,
+          TempUnschedStatusModal: true,
+          ErrorPassthroughRulesModal: true,
+          TLSFingerprintProfilesModal: true,
+          CreateAccountModal: true,
+          EditAccountModal: true,
+          BulkEditAccountModal: BulkEditAccountModalStub,
+          PlatformTypeBadge: true,
+          AccountCapacityCell: true,
+          AccountStatusIndicator: true,
+          AccountTodayStatsCell: true,
+          AccountGroupsCell: true,
+          AccountUsageCell: true,
+          Icon: true
+        }
+      }
+    })
+
+    await flushPromises()
+    await wrapper.get('[data-test="select-row"] input').trigger('change')
+    await wrapper.get('[data-test="reset-status"]').trigger('click')
+    await flushPromises()
+    expect(showError).toHaveBeenCalledWith('reset provider rejected')
+
+    await wrapper.get('[data-test="refresh-token"]').trigger('click')
+    await flushPromises()
+    expect(showError).toHaveBeenCalledWith('refresh provider rejected')
   })
 
   it('renders the created_at column by default', async () => {
