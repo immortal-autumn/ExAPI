@@ -278,6 +278,36 @@ describe('AccountTestModal', () => {
     })
   })
 
+  it('renders nested SSE provider errors and flushes an unterminated final frame', async () => {
+    getAvailableModels.mockResolvedValue([
+      { id: 'grok-4.3', display_name: 'Grok 4.3' }
+    ])
+    // Deliberately omit both the optional space after `data:` and the final
+    // newline. Real proxies can produce either shape when a stream closes.
+    global.fetch = vi.fn().mockResolvedValue(
+      createStreamResponse([
+        'data:{"type":"error","error":{"message":"upstream rejected the request"}}'
+      ])
+    ) as any
+
+    const wrapper = mountModal({
+      id: 13,
+      name: 'Grok Account',
+      platform: 'grok',
+      type: 'oauth',
+      status: 'active'
+    })
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+
+    await (wrapper.vm as any).startTest()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('upstream rejected the request')
+    expect(wrapper.text()).not.toContain('[object Object]')
+    expect((wrapper.vm as any).status).toBe('error')
+  })
+
   it('OpenAI Compact 探测会携带 compact 测试模式', async () => {
     getAvailableModels.mockResolvedValue([
       { id: 'gpt-5.4', display_name: 'GPT-5.4' }

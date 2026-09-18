@@ -252,6 +252,7 @@ import { useClipboard } from '@/composables/useClipboard'
 import { buildApiUrl } from '@/api/client'
 import { ADMIN_UI_REQUEST_HEADER } from '@/api/adminUIRequest'
 import { operatorAPI as adminAPI } from '@/api/operator'
+import { extractApiErrorMessage } from '@/utils/apiError'
 import type { Account, ClaudeModel } from '@/types'
 
 const { t } = useI18n()
@@ -480,28 +481,46 @@ const startTest = async () => {
     const decoder = new TextDecoder()
     let buffer = ''
 
+    // The account-test endpoint emits regular SSE frames, but providers and
+    // reverse proxies are not consistent about whether the `data:` field has
+    // a space after the colon or whether the final frame ends with a newline.
+    // Process both forms and flush the final unterminated frame on EOF.
+    const processSSELine = (line: string) => {
+      const normalizedLine = line.endsWith('\r') ? line.slice(0, -1) : line
+      if (!normalizedLine.startsWith('data:')) return
+      const jsonStr = normalizedLine.slice('data:'.length).trim()
+      if (!jsonStr) return
+      try {
+        const event = JSON.parse(jsonStr)
+        handleEvent(event)
+      } catch (parseError) {
+        console.error('Failed to parse SSE event:', parseError)
+      }
+    }
+
+    const processBufferedLines = () => {
+      const lines = buffer.split(/\r\n|[\r\n]/)
+      buffer = lines.pop() || ''
+      for (const line of lines) processSSELine(line)
+    }
+
     while (true) {
       const { done, value } = await reader.read()
       if (generation !== streamGeneration) return
-      if (done) break
+      if (done) {
+        // Flush decoder state and parse a final frame that did not carry the
+        // usual blank line terminator.
+        buffer += decoder.decode()
+        if (buffer) {
+          const finalLine = buffer
+          buffer = ''
+          processSSELine(finalLine)
+        }
+        break
+      }
 
       buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const jsonStr = line.slice(6).trim()
-          if (jsonStr) {
-            try {
-              const event = JSON.parse(jsonStr)
-              handleEvent(event)
-            } catch (e) {
-              console.error('Failed to parse SSE event:', e)
-            }
-          }
-        }
-      }
+      processBufferedLines()
     }
   } catch (error: unknown) {
     if (generation !== streamGeneration) return
@@ -510,7 +529,7 @@ const startTest = async () => {
       return
     }
     status.value = 'error'
-    const msg = error instanceof Error ? error.message : t('common.unknownError')
+    const msg = extractApiErrorMessage(error, t('common.unknownError'))
     errorMessage.value = msg
     addLine(t('admin.accounts.testErrorLine', { message: msg }), 'text-red-400')
   } finally {
@@ -523,7 +542,7 @@ const handleEvent = (event: {
   text?: string
   model?: string
   success?: boolean
-  error?: string
+  error?: unknown
   image_url?: string
   mime_type?: string
 }) => {
@@ -576,13 +595,13 @@ const handleEvent = (event: {
         status.value = 'success'
       } else {
         status.value = 'error'
-        errorMessage.value = event.error || t('admin.accounts.testFailed')
+        errorMessage.value = extractApiErrorMessage(event.error, t('admin.accounts.testFailed'))
       }
       break
 
     case 'error':
       status.value = 'error'
-      errorMessage.value = event.error || t('common.unknownError')
+      errorMessage.value = extractApiErrorMessage(event.error, t('common.unknownError'))
       if (streamingContent.value) {
         addLine(streamingContent.value, 'text-green-300')
         streamingContent.value = ''

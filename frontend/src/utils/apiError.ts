@@ -8,17 +8,51 @@
 interface ApiErrorLike {
   status?: number
   code?: number | string
-  message?: string
-  error?: string
-  reason?: string
+  // API gateways are not completely uniform: `error`/`message` can be a
+  // string, a nested `{ message }` object, or (for a malformed upstream
+  // response) an arbitrary JSON value. Keep these fields unknown and
+  // normalize them below instead of allowing `[object Object]` into a toast.
+  message?: unknown
+  error?: unknown
+  reason?: unknown
   metadata?: Record<string, unknown>
   response?: {
     data?: {
-      detail?: string
-      message?: string
+      detail?: unknown
+      message?: unknown
+      error?: unknown
       code?: number | string
     }
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+/**
+ * Safely turn a provider/API error payload into text.
+ *
+ * A few upstreams return an object under `error` instead of a string. Using
+ * String(payload) for that shape produces `[object Object]`, which is both
+ * unhelpful to operators and a common source of misleading generic toasts.
+ * Only known message-bearing fields are traversed; arbitrary metadata is not
+ * surfaced to the UI.
+ */
+function normalizeErrorText(value: unknown, seen = new Set<object>(), depth = 0): string | undefined {
+  if (typeof value === 'string') {
+    const text = value.trim()
+    return text || undefined
+  }
+  if (value instanceof Error) return normalizeErrorText(value.message, seen, depth + 1)
+  if (!isRecord(value) || depth >= 4 || seen.has(value)) return undefined
+
+  seen.add(value)
+  for (const key of ['message', 'detail', 'error', 'description', 'title']) {
+    const nested = normalizeErrorText(value[key], seen, depth + 1)
+    if (nested) return nested
+  }
+  return undefined
 }
 
 /**
@@ -32,7 +66,9 @@ export function extractApiErrorCode(err: unknown): string | undefined {
   if (!err || typeof err !== 'object') return undefined
   const e = err as ApiErrorLike
   const code = e.reason ?? e.code ?? e.response?.data?.code
-  return code != null ? String(code) : undefined
+  if (typeof code !== 'string' && typeof code !== 'number') return undefined
+  const normalized = String(code).trim()
+  return normalized || undefined
 }
 
 /**
@@ -122,7 +158,10 @@ export function extractI18nErrorMessage(
  */
 export function extractApiErrorMessage(
   err: unknown,
-  fallback = '未知错误',
+  // Keep the utility's language-neutral default aligned with the product's
+  // default locale. Callers with a translated context should pass
+  // `t('common.error')`/`t('common.unknownError')` explicitly.
+  fallback = 'Unknown error occurred',
   i18nMap?: Record<string, string>,
 ): string {
   if (!err) return fallback
@@ -137,17 +176,24 @@ export function extractApiErrorMessage(
   if (typeof err === 'object' && err !== null) {
     const e = err as ApiErrorLike
     // Interceptor shape: { message, error }
-    if (e.message) return e.message
-    if (e.error) return e.error
+    const message = normalizeErrorText(e.message)
+    if (message) return message
+    const error = normalizeErrorText(e.error)
+    if (error) return error
     // Legacy axios shape: { response.data.detail }
-    if (e.response?.data?.detail) return e.response.data.detail
-    if (e.response?.data?.message) return e.response.data.message
+    const detail = normalizeErrorText(e.response?.data?.detail)
+    if (detail) return detail
+    const responseMessage = normalizeErrorText(e.response?.data?.message)
+    if (responseMessage) return responseMessage
+    const responseError = normalizeErrorText(e.response?.data?.error)
+    if (responseError) return responseError
   }
 
   // Standard Error
-  if (err instanceof Error) return err.message
+  const errorMessage = normalizeErrorText(err)
+  if (errorMessage) return errorMessage
 
   // Last resort
   const str = String(err)
-  return str === '[object Object]' ? fallback : str
+  return str === '[object Object]' || !str.trim() ? fallback : str
 }
