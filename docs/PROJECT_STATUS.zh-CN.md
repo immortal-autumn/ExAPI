@@ -6,7 +6,7 @@
 
 ## 当前发布
 
-最后审阅：**2026-09-07（Europe/London）**
+最后审阅：**2026-09-18（Europe/London）**
 
 | 项目 | 当前值 |
 |---|---|
@@ -19,6 +19,24 @@
 | OCI 镜像 | `ghcr.io/immortal-autumn/sub2api2personal@sha256:0866123190924731bc7f7294d5e3c958428e0b84c58da0da13caa80c491ba0e1` |
 | GitHub Release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.17> |
 | Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33962108136> |
+
+## v0.2.18 发布候选（源码已审阅，尚未 promotion）
+
+候选版本已写入 `backend/cmd/server/VERSION`，源自
+`revision/exapi-v0.2.1`。本候选包含以下可靠性与兼容性修复：
+
+- `37692d8a9` 将 Antigravity OAuth token 缓存按账号 ID 隔离，同时清理旧的
+  project-scoped 缓存键；active 但暂停调度的 OAuth 账号继续进入刷新候选集。
+- `1a98aea54` 让 Responses 流事件始终写出 `sequence_number`，并让 compact
+  bridge 使用递增序号，解决 Grok Build 严格反序列化器因缺少该字段而拒绝
+  synthetic/compact 帧的问题。
+- 前置提交 `9c887d61a`、`13c10e59d`、`a0ee5feca` 加固前端 SSE/API 错误处理，
+  并让初始页面默认使用英文。
+
+发布前本地验证已完成：前端重点回归、lint/typecheck/build/bundle 检查，以及
+handler、协议兼容、repository、service Go 单元测试。发布工作流、经 attestation
+的镜像 digest、GitHub 发布和 OPC promotion 尚待完成；在所有门禁通过前，生产继续
+运行 v0.2.17 digest。
 
 v0.2.16 artifact 仍固定使用其原始 immutable digest
 `sha256:d3b889b74dcd15c9952b409ce27f05db1898f93541eac17cf7675088d6af65b0`，OCI 标签与版本 `0.2.16` 及审阅提交
