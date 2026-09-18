@@ -19,12 +19,13 @@ describe('i18n brand copy', () => {
     expect(text).toContain('ExAPI')
   })
 
-  it('uses Chinese ExAPI copy in the initial HTML title', () => {
+  it('uses English ExAPI copy in the initial HTML shell', () => {
     const indexHtml = readFileSync(
       resolve(dirname(fileURLToPath(import.meta.url)), '../../../index.html'),
       'utf8',
     )
-    expect(indexHtml).toContain('<title>ExAPI - AI API 网关</title>')
+    expect(indexHtml).toContain('<html lang="en">')
+    expect(indexHtml).toContain('<title>ExAPI - AI API Gateway</title>')
     expect(indexHtml).not.toContain('Sub2API')
   })
 })
