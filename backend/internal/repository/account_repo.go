@@ -1205,53 +1205,75 @@ func (r *accountRepository) ListOAuthRefreshCandidatePage(ctx context.Context, o
 		ORDER BY id ASC
 		LIMIT $3`
 
-	rows, err := r.sql.QueryContext(ctx, query, postgres.Array(options.Platforms), options.AfterID, options.Limit)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
+	// Credentials are encrypted at rest, so RequireRefreshToken is necessarily
+	// checked after loading/decrypting each account. A single SQL page can
+	// therefore under-fill (for example, a legacy OAuth row with a blank refresh
+	// token can appear before a valid row). Keep scanning by ID until the caller's
+	// page is full or the database is exhausted; otherwise the cursor would skip
+	// eligible accounts and the refresh worker would silently starve them.
+	out := make([]service.Account, 0, options.Limit)
+	afterID := options.AfterID
+	hasMore := false
+	lastScannedID := afterID
+	for len(out) < options.Limit {
+		rows, err := r.sql.QueryContext(ctx, query, postgres.Array(options.Platforms), afterID, options.Limit)
+		if err != nil {
 			return nil, err
 		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if len(ids) == 0 {
-		return &service.OAuthRefreshCandidatePage{Accounts: []service.Account{}}, nil
-	}
 
-	accounts, err := r.GetByIDs(ctx, ids)
-	if err != nil {
-		return nil, err
-	}
-	accountsByID := make(map[int64]*service.Account, len(accounts))
-	for _, account := range accounts {
-		if account != nil {
-			accountsByID[account.ID] = account
+		ids := make([]int64, 0, options.Limit)
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				_ = rows.Close()
+				return nil, err
+			}
+			ids = append(ids, id)
 		}
-	}
-	out := make([]service.Account, 0, len(accounts))
-	for _, id := range ids {
-		if account := accountsByID[id]; account != nil {
+		rowsErr := rows.Err()
+		_ = rows.Close()
+		if rowsErr != nil {
+			return nil, rowsErr
+		}
+		if len(ids) == 0 {
+			break
+		}
+
+		lastScannedID = ids[len(ids)-1]
+		hasMore = len(ids) == options.Limit
+		accounts, err := r.GetByIDs(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		accountsByID := make(map[int64]*service.Account, len(accounts))
+		for _, account := range accounts {
+			if account != nil {
+				accountsByID[account.ID] = account
+			}
+		}
+		for _, id := range ids {
+			account := accountsByID[id]
+			if account == nil {
+				continue
+			}
 			refreshToken, _ := account.Credentials["refresh_token"].(string)
 			if options.RequireRefreshToken && strings.TrimSpace(refreshToken) == "" {
 				continue
 			}
 			out = append(out, *account)
+			if len(out) == options.Limit {
+				break
+			}
 		}
+		if len(out) == options.Limit || !hasMore {
+			break
+		}
+		afterID = lastScannedID
 	}
-	page := &service.OAuthRefreshCandidatePage{
-		Accounts: out,
-		HasMore:  len(ids) == options.Limit,
-	}
-	if len(ids) > 0 {
-		page.NextAfterID = ids[len(ids)-1]
+
+	page := &service.OAuthRefreshCandidatePage{Accounts: out, HasMore: hasMore}
+	if lastScannedID > options.AfterID {
+		page.NextAfterID = lastScannedID
 	}
 	return page, nil
 }
