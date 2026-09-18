@@ -88,7 +88,8 @@ func TestCompositeTokenCacheInvalidator_Antigravity(t *testing.T) {
 
 	err := invalidator.InvalidateToken(context.Background(), account)
 	require.NoError(t, err)
-	// 新行为：同时删除基于 project_id 和 account_id 的缓存键
+	// Delete the legacy project key and the current account-scoped key during
+	// migration so no shared token survives the key-isolation rollout.
 	require.Equal(t, []string{"ag:ag-project", "ag:account:99"}, cache.deletedKeys)
 }
 
@@ -106,7 +107,7 @@ func TestCompositeTokenCacheInvalidator_AntigravityWithoutProjectID(t *testing.T
 
 	err := invalidator.InvalidateToken(context.Background(), account)
 	require.NoError(t, err)
-	// 没有 project_id 时，两个 key 相同，去重后只删除一个
+	// Without a legacy project ID there is only the current account key.
 	require.Equal(t, []string{"ag:account:99"}, cache.deletedKeys)
 }
 
@@ -292,7 +293,8 @@ func TestCompositeTokenCacheInvalidator_AllPlatformsIntegration(t *testing.T) {
 		{ID: 4, Platform: PlatformAnthropic, Type: AccountTypeOAuth},
 	}
 
-	// 新行为：Gemini 和 Antigravity 会同时删除基于 project_id 和 account_id 的键
+	// Gemini removes both possible keys; Antigravity removes its legacy project
+	// key plus the current account-scoped key.
 	expectedKeys := []string{
 		"gemini:gemini-proj",
 		"gemini:account:1",

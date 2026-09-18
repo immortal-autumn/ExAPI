@@ -231,9 +231,10 @@ func (p *AntigravityTokenProvider) markBackfillAttempted(accountID int64) {
 }
 
 func AntigravityTokenCacheKey(account *Account) string {
-	projectID := strings.TrimSpace(account.GetCredential("project_id"))
-	if projectID != "" {
-		return "ag:" + projectID
-	}
+	// Antigravity project IDs can legitimately be shared by multiple OAuth
+	// accounts.  A project-scoped cache key would let one account reuse another
+	// account's access token (and makes revocation/refresh races cross-account).
+	// Keep the cache namespace account-scoped; project_id remains useful for the
+	// provider request itself and is handled independently by the backfill path.
 	return "ag:account:" + strconv.FormatInt(account.ID, 10)
 }
