@@ -47,8 +47,8 @@ protocol compatibility, repository, and service packages. Release workflow
 `35364259034` published the immutable multi-architecture manifest below; its
 attestation was verified against the existing GitHub repository and workflow.
 The local readiness-monitor commit `c329e10e6d66ee47e09c2d9fcdd2880835f25f04`
-is a documentation/operations change on the revision branch and is not part of
-this OCI image.
+is a monitor/operations change on the revision branch and is not part of this
+OCI image.
 
 The immutable `v0.2.18` tag was not published or deployed: its quality gate
 correctly caught the pagination regression above during integration tests. The

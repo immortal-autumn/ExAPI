@@ -39,7 +39,8 @@
 handler、协议兼容、repository、service Go 单元测试。发布工作流
 `35364259034` 已发布不可变多架构 manifest；该 artifact 的 attestation 已针对现有
 GitHub 仓库和工作流完成验证。revision 分支上的本地 readiness monitor 提交
-`c329e10e6d66ee47e09c2d9fcdd2880835f25f04` 属于运维/文档变更，不在该 OCI 镜像内。
+`c329e10e6d66ee47e09c2d9fcdd2880835f25f04` 属于本地 readiness monitor 运维变更，不在该 OCI
+镜像内。
 
 不可变的 `v0.2.18` tag 没有发布或部署：其质量门禁在集成测试中正确发现了
 上述分页回归。该 tag 仅作为失败审计历史保留，不得复用。
