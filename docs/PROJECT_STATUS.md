@@ -7,22 +7,22 @@ belong in `deploy/`; this page records the currently reviewed facts.
 
 ## Current release
 
-Last reviewed: **2026-09-18 (Europe/London)**
+Last reviewed: **2026-09-21 (Europe/London)**
 
 | Item | Current value |
 |---|---|
-| Product version | `0.2.17` (published 2026-09-05 and promoted to OPC on 2026-09-07) |
+| Product version | `0.2.19` (published 2026-09-18 and promoted to OPC on 2026-09-21) |
 | GitHub repository | `immortal-autumn/ExAPI` |
-| Git tag | `v0.2.17` |
-| Main branch | `main` (v0.2.19 candidate; release branch remains separate) |
+| Git tag | `v0.2.19` |
+| Main branch | `main` (v0.2.19 release line; release branch remains separate) |
 | Release branch | `revision/exapi-v0.2.1` |
-| Reviewed commit | `3719a4ca20efa5d2c21521fa7eda2c1b34d41485` |
-| OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:0866123190924731bc7f7294d5e3c958428e0b84c58da0da13caa80c491ba0e1` |
-| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.17> |
-| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33962108136> |
+| Reviewed release commit | `c7cce3749e96b3ae9cd0bf04deb8e0b82514674e` |
+| OCI image | `ghcr.io/immortal-autumn/sub2api2personal@sha256:7ded4be088c63b7d3199c825c776967d2e6c98e017c345490b39b5163aa06d52` |
+| GitHub release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.19> |
+| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/35364259034> |
 | Upstream baseline | Sub2API `v0.1.171`, constrained by `upstream.lock.json` |
 
-## v0.2.19 release candidate (source reviewed; not yet promoted)
+## v0.2.19 release (published 2026-09-18)
 
 The candidate version is declared in `backend/cmd/server/VERSION` and is being
 prepared from `revision/exapi-v0.2.1`. It contains the following reviewed
@@ -43,9 +43,12 @@ reliability and compatibility changes:
 
 Local verification completed before publication: focused frontend regression,
 frontend lint/typecheck/build/bundle checks, and Go unit suites for handler,
-protocol compatibility, repository, and service packages. The release workflow,
-attested image digest, GitHub publication, and OPC promotion remain pending;
-production stays on the v0.2.17 digest until those gates pass.
+protocol compatibility, repository, and service packages. Release workflow
+`35364259034` published the immutable multi-architecture manifest below; its
+attestation was verified against the existing GitHub repository and workflow.
+The local readiness-monitor commit `c329e10e6d66ee47e09c2d9fcdd2880835f25f04`
+is a documentation/operations change on the revision branch and is not part of
+this OCI image.
 
 The immutable `v0.2.18` tag was not published or deployed: its quality gate
 correctly caught the pagination regression above during integration tests. The
@@ -56,6 +59,54 @@ The GitHub repository was renamed from `Sub2API2Personal` to `ExAPI` on
 `sub2api2personal` for image and deployment compatibility; future release work
 must keep that compatibility decision explicit or publish a separately
 verified package migration.
+
+## v0.2.19 OPC production promotion (2026-09-21)
+
+OPC production at `/opt/sub2api` was promoted to the existing, attested
+application image
+`ghcr.io/immortal-autumn/sub2api2personal@sha256:7ded4be088c63b7d3199c825c776967d2e6c98e017c345490b39b5163aa06d52`.
+The ARM64 image pulled by OPC has OCI labels `version=0.2.19` and
+`revision=c7cce3749e96b3ae9cd0bf04deb8e0b82514674e`. The existing deployment
+base, Compose project, database, Redis service, and public hostname were
+preserved; no new project or volume was created.
+
+Before cutover, a root-only rollback snapshot was created at
+`/opt/sub2api/backups/pre-v0.2.19-20260921T172750Z/`. It contains copies of the
+v0.2.17 Compose/environment files, a PostgreSQL custom-format dump whose table
+list was validated with `pg_restore --list`, an archive of `/opt/sub2api/data`
+whose table of contents was validated, and SHA-256 records. The environment
+file remains mode `0600`; secrets and backup contents are not published here.
+
+Only the application service was recreated:
+
+```bash
+sudo docker compose -p sub2api \
+  --env-file /opt/sub2api/.env.v0.2.19 \
+  -f /opt/sub2api/docker-compose.v0.2.19.yml \
+  up -d --no-deps sub2api
+```
+
+The candidate Compose configuration resolved all three images to immutable
+digests. PostgreSQL and Redis kept their container IDs and restart count `0`;
+the new application container was healthy with restart count `0` and
+`OOMKilled=false`. The local and public `/ready` checks and public `/health`
+returned `200`; unauthenticated `/v1/models` returned the expected `401`.
+Three consecutive checks over roughly 31 seconds and three successful Docker
+health-check entries remained stable, and no critical startup error pattern was
+found in the recent application log.
+
+For an immediate application-only rollback, retain the dependencies and run:
+
+```bash
+sudo docker compose -p sub2api \
+  --env-file /opt/sub2api/.env.v0.2.17 \
+  -f /opt/sub2api/docker-compose.v0.2.17.yml \
+  up -d --no-deps sub2api
+```
+
+This promotion is intentionally recorded as an app-only release upgrade. It
+does not claim a new full synthetic/off-host canary promotion; the existing
+canary evidence and the release attestation remain separate gates.
 
 ## v0.2.17 release publication
 

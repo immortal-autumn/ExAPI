@@ -6,21 +6,21 @@
 
 ## 当前发布
 
-最后审阅：**2026-09-18（Europe/London）**
+最后审阅：**2026-09-21（Europe/London）**
 
 | 项目 | 当前值 |
 |---|---|
-| 产品版本 | `0.2.17`（2026-09-05 已发布，2026-09-07 已 promotion 到 OPC） |
+| 产品版本 | `0.2.19`（2026-09-18 已发布，2026-09-21 已 promotion 到 OPC） |
 | GitHub 仓库 | `immortal-autumn/ExAPI` |
-| Git tag | `v0.2.17` |
-| 主分支 | `main`（v0.2.19 候选；发布分支保持独立） |
+| Git tag | `v0.2.19` |
+| 主分支 | `main`（v0.2.19 发布线；发布分支保持独立） |
 | 发布分支 | `revision/exapi-v0.2.1` |
-| 审阅提交 | `3719a4ca20efa5d2c21521fa7eda2c1b34d41485` |
-| OCI 镜像 | `ghcr.io/immortal-autumn/sub2api2personal@sha256:0866123190924731bc7f7294d5e3c958428e0b84c58da0da13caa80c491ba0e1` |
-| GitHub Release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.17> |
-| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/33962108136> |
+| 审阅发布提交 | `c7cce3749e96b3ae9cd0bf04deb8e0b82514674e` |
+| OCI 镜像 | `ghcr.io/immortal-autumn/sub2api2personal@sha256:7ded4be088c63b7d3199c825c776967d2e6c98e017c345490b39b5163aa06d52` |
+| GitHub Release | <https://github.com/immortal-autumn/ExAPI/releases/tag/v0.2.19> |
+| Release workflow | <https://github.com/immortal-autumn/ExAPI/actions/runs/35364259034> |
 
-## v0.2.19 发布候选（源码已审阅，尚未 promotion）
+## v0.2.19 发布（2026-09-18 已发布）
 
 候选版本已写入 `backend/cmd/server/VERSION`，源自
 `revision/exapi-v0.2.1`。本候选包含以下可靠性与兼容性修复：
@@ -36,9 +36,10 @@
   并让初始页面默认使用英文。
 
 发布前本地验证已完成：前端重点回归、lint/typecheck/build/bundle 检查，以及
-handler、协议兼容、repository、service Go 单元测试。发布工作流、经 attestation
-的镜像 digest、GitHub 发布和 OPC promotion 尚待完成；在所有门禁通过前，生产继续
-运行 v0.2.17 digest。
+handler、协议兼容、repository、service Go 单元测试。发布工作流
+`35364259034` 已发布不可变多架构 manifest；该 artifact 的 attestation 已针对现有
+GitHub 仓库和工作流完成验证。revision 分支上的本地 readiness monitor 提交
+`c329e10e6d66ee47e09c2d9fcdd2880835f25f04` 属于运维/文档变更，不在该 OCI 镜像内。
 
 不可变的 `v0.2.18` tag 没有发布或部署：其质量门禁在集成测试中正确发现了
 上述分页回归。该 tag 仅作为失败审计历史保留，不得复用。
@@ -48,6 +49,45 @@ v0.2.16 artifact 仍固定使用其原始 immutable digest
 `9c14b10843b175dac8ef0546866a141504bcaed4` 一致。v0.2.15 作为较早的已审阅部署版本保留；
 生产环境只使用 immutable digest，不使用 `latest` 等可变标签。GHCR 包名仍保留
 `sub2api2personal` 以兼容现有部署。
+
+## v0.2.19 OPC 生产 Promotion（2026-09-21）
+
+`/opt/sub2api` 下的 OPC 生产环境已 promotion 到现有、经验证的应用镜像：
+`ghcr.io/immortal-autumn/sub2api2personal@sha256:7ded4be088c63b7d3199c825c776967d2e6c98e017c345490b39b5163aa06d52`。
+OPC 实际拉取的 ARM64 镜像 OCI 标签为 `version=0.2.19`、
+`revision=c7cce3749e96b3ae9cd0bf04deb8e0b82514674e`。现有部署目录、Compose 项目、数据库、
+Redis 和公网主机名均保留；没有创建新项目或新 volume。
+
+切换前已在 `/opt/sub2api/backups/pre-v0.2.19-20260921T172750Z/` 创建 root-only
+回滚快照，包含 v0.2.17 Compose/环境文件副本、已用 `pg_restore --list` 校验的 PostgreSQL
+custom-format dump、已校验目录内容的 `/opt/sub2api/data` 归档及 SHA-256 记录。环境文件保持
+`0600`；本文不记录密钥或备份内容。
+
+仅重建应用服务：
+
+```bash
+sudo docker compose -p sub2api \
+  --env-file /opt/sub2api/.env.v0.2.19 \
+  -f /opt/sub2api/docker-compose.v0.2.19.yml \
+  up -d --no-deps sub2api
+```
+
+候选 Compose 解析后，三个镜像均为 immutable digest。PostgreSQL 和 Redis 的容器 ID 及重启次数
+`0` 保持不变；新应用容器 healthy、重启次数 `0`、`OOMKilled=false`。本地和公网 `/ready`、
+公网 `/health` 均返回 `200`；无认证 `/v1/models` 按预期返回 `401`。约 31 秒内连续三次检查及
+三个 Docker health-check 记录均通过，近期应用日志没有发现关键启动错误模式。
+
+如需立即仅回滚应用并保持依赖服务不变，执行：
+
+```bash
+sudo docker compose -p sub2api \
+  --env-file /opt/sub2api/.env.v0.2.17 \
+  -f /opt/sub2api/docker-compose.v0.2.17.yml \
+  up -d --no-deps sub2api
+```
+
+本次明确记录为仅应用服务的 release upgrade，不宣称新增的完整 synthetic/off-host canary
+promotion；既有 canary 证据和 release attestation 仍是独立门禁。
 
 ## v0.2.17 发布结果
 
